@@ -7,7 +7,7 @@ from src.core.config import settings
 from src.core.logger import setup_logger
 
 # Importa le routes dei vari moduli (man mano che li aggiungi)
-from src.modules.auth.src.routes.oauth_google_routes import router as auth_router
+from src.modules.auth.src.routes import router as auth_router
 # from src.services.mail.src.routes.gmail_routes import router as gmail_router
 
 logger = setup_logger()
