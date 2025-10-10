@@ -53,9 +53,17 @@ async def google_callback(request: Request):
         # - expiry
 
         email = user_info["email"]
-        response = create_watch_for_user(email)
+        access_token = credentials.token
+        refresh_token = credentials.refresh_token
+        expiry = credentials.expiry
 
-        history_id = response.get("historyId")
+        #response = create_watch_for_user(email)
+        
+        # DEBUG TODO eliminare quando salviamo le cred nel DB ######
+        response = create_watch_for_user(email, access_token, refresh_token, expiry)
+        #  ###############################################
+
+        #history_id = response.get("historyId")
         # TODO SALVA history_id NEL DB ASSOCIATO al subscription service
 
         token_data = {
