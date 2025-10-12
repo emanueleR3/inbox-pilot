@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from src.modules.auth.src.controllers.oauth_google_controller import (
+from ..controllers.oauth_google_controller import (
     google_login,
     google_callback
 )

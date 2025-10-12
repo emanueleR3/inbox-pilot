@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI")
     PUBSUB_TOPIC_PATH: str = os.getenv("GOOGLE_PUBSUB_TOPIC_PATH")
     PUBSUB_SUBSCRIPTION_PATH: str = os.getenv("GOOGLE_PUBSUB_SUBSCRIPTION_PATH")
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY")
 
     class Config:
         env_file = ".env"
