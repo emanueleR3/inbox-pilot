@@ -1,8 +1,9 @@
 from supabase import Client
 from fastapi import HTTPException
 from supabase_auth.errors import AuthApiError
-from api.v1.src.modules.auth.src.models.user_model import UserReadSubscription, UserRead, UserSubscription
-from api.v1.src.modules.auth.src.models.subscription_model import SubscriptionRead
+from src.modules.auth.src.models.user_model import UserReadSubscription, UserRead, UserSubscription
+from src.core.redis_client import get_redis_client
+from src.modules.auth.src.models.subscription_model import SubscriptionRead
 
 class UserDAO:
     def __init__(self, supabase: Client):
@@ -64,13 +65,27 @@ class UserDAO:
             raise HTTPException(status_code=500, detail=f"Errore interno durante la creazione utente+subscription: {str(e)}")
 
     def get_user_by_email(self, email: str):
+        # 1) Try Redis cache first
+        r = get_redis_client()
+        cache_key = f"user:by_email:{email.lower()}"
+        cached = r.hgetall(cache_key)
+        if cached and cached.get("id") and cached.get("email"):
+            return UserRead(id=cached["id"], email=cached["email"])
+
+        # 2) Fallback to Supabase search
         users = self.supabase.auth.admin.list_users()
 
         if not isinstance(users, list):
             users = users.data.get("users", []) if hasattr(users, "data") else []
 
         for u in users:
-            if hasattr(u, "email") and u.email.lower() == email.lower():
+            if hasattr(u, "email") and u.email and u.email.lower() == email.lower():
+                # Cache user info with a TTL
+                try:
+                    r.hset(cache_key, mapping={"id": u.id, "email": u.email})
+                    r.expire(cache_key, 1200)  # 20 minutes
+                except Exception:
+                    pass # Cache failures shouldn't block main flow
                 return UserRead(id=u.id, email=u.email)
 
         raise HTTPException(status_code=404, detail=f"Utente con email {email} non trovato")

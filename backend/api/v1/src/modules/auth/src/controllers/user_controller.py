@@ -1,6 +1,6 @@
 from fastapi import HTTPException
-from api.v1.src.modules.auth.src.DAO.user_dao import UserDAO
-from  api.v1.src.modules.auth.src.models.subscription_model import Subscription
+from src.modules.auth.src.DAO.user_dao import UserDAO
+from src.modules.auth.src.models.subscription_model import Subscription
 
 class UserController:
     def __init__(self, user_dao: UserDAO):

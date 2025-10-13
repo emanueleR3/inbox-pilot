@@ -49,6 +49,7 @@ google-api-python-client==2.121.0
 flask==3.0.0
 flask-cors==4.0.0
 python-dotenv==1.0.0
+redis==5.0.7
 
 # Agentic AI POC - Python Automations API Requirements
 

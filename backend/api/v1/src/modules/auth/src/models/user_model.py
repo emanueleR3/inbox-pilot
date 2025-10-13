@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from  api.v1.src.modules.auth.src.models.subscription_model import SubscriptionRead, Subscription
+from src.modules.auth.src.models.subscription_model import SubscriptionRead, Subscription
 
 class UserCrate(BaseModel):
     email: EmailStr
