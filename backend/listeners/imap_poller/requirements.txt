@@ -1,0 +1,4 @@
+aiofiles
+asyncio
+python-dotenv
+aio-pika

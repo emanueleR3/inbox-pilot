@@ -1,6 +1,8 @@
 import asyncio
 from src.gmail_fetcher import fetch_messages_for_user
-# from src.utils.broker_client import publish_messages  # pubblicazione su message broker
+from src.broker_client import RabbitMQPublisher 
+
+publisher = RabbitMQPublisher()
 
 async def process_pubsub_message(data: dict):
     """
@@ -13,9 +15,16 @@ async def process_pubsub_message(data: dict):
     if not email or not history_id:
         print("Messaggio Pub/Sub non valido:", data)
         return
+    
+    await publisher.connect()
 
     # Fetch async dei messaggi
     messages = await fetch_messages_for_user(email, history_id)
+
+    # Se non ci sono messaggi, esci
+    if not messages:
+        print(f"[{email}] Nessun messaggio nuovo da historyId {history_id}")
+        return
 
     # TODO
     # Salvare nel DB il messaggio ricevuto all'interno della tabella "threads"
@@ -26,12 +35,34 @@ async def process_pubsub_message(data: dict):
     # prendere in considerazione di scaricare gli allegati e caricarli su uno storage esterno (es. S3, GCS)
     # aggiungre nel json del messaggio il link all'allegato "url_attachment": "https://..."
 
-    # TODO
-    # Qui invia messaggi al broker RabbitMQ
 
-    print(f"[{email}] Fetched {len(messages)} messages from historyId {history_id}")
+    # Itera sui messaggi e pubblicali
+    for msg in messages:
+        payload = _serialize_gmail_message(email, msg, history_id)
+        await publisher.publish_message(payload)
 
+    print(f"[{email}] Fetched and published {len(messages)} messages from historyId {history_id}")
 
+def _serialize_gmail_message(user_email: str, message: dict, history_id: str) -> dict:
+    """
+    Converte un messaggio Gmail API in un payload standard per il broker.
+    """
+    headers = {h["name"]: h["value"] for h in message.get("payload", {}).get("headers", [])}
+    payload = {
+        "provider": "gmail",
+        "user_email": user_email,
+        "history_id": history_id,
+        "message_id": message.get("id"),
+        "thread_id": message.get("threadId"),
+        "subject": headers.get("Subject"),
+        "from": headers.get("From"),
+        "to": headers.get("To"),
+        "snippet": message.get("snippet"),
+        "timestamp": message.get("internalDate"),
+        # eventuali placeholder per allegati
+        "attachments": [],
+    }
+    return payload
 
 # ESEMPIO DI COME SCARICARE GLI ALLEGATI E CARICARLI SU STORAGE ESTERNO
 """
