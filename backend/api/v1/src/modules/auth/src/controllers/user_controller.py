@@ -1,10 +1,8 @@
-from fastapi import HTTPException
-from src.modules.auth.src.DAO.user_dao import UserDAO
-from src.modules.auth.src.models.subscription_model import Subscription
+from src.core.DAO.user_dao import UserDAO
 
 class UserController:
-    def __init__(self, user_dao: UserDAO):
-        self.user_dao = user_dao
+    def __init__(self):
+        self.user_dao = UserDAO()
 
     def create_user_with_subscription(self, email: str, password: str, subscription):
         if not isinstance(subscription, dict):

@@ -1,13 +1,15 @@
-from supabase import Client
+from supabase import Client     
 from fastapi import HTTPException
 from supabase_auth.errors import AuthApiError
 from src.modules.auth.src.models.user_model import UserReadSubscription, UserRead, UserSubscription
 from src.core.redis_client import get_redis_client
 from src.modules.auth.src.models.subscription_model import SubscriptionRead
+from src.core.DAO.subscription_dao import SubscriptionDAO
+from src.core.database import get_supabase_client
 
 class UserDAO:
-    def __init__(self, supabase: Client):
-        self.supabase = supabase
+    def __init__(self):
+        self.supabase = get_supabase_client()
     
     def create_user(self, email: str, password: str):
         try:
@@ -17,26 +19,6 @@ class UserDAO:
             return UserRead(id=response.user.id, email=response.user.email)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Errore nella registrazione utente: {str(e)}")
-
-    def create_subscription(self, subscription_data: dict):
-        try:
-            result = self.supabase.table("subscriptions").insert({
-                "name": subscription_data.get("name"),
-                "vat_number": subscription_data.get("vat_number"),
-                "city": subscription_data.get("city"),
-                "address": subscription_data.get("address"),
-                "active": subscription_data.get("active", False),
-                "current_period_end": subscription_data.get("current_period_end").isoformat(),
-                "plan": subscription_data.get("plan"),
-            }).execute()
-
-            if not result.data:
-                raise ValueError("Nessun dato restituito da Supabase dopo l'inserimento")
-
-            sub = result.data[0]
-            return SubscriptionRead(**sub)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Errore nella creazione della subscription: {str(e)}")
 
     def link_user_subscription(self, user_id: str, subscription_id: str):
         try:
@@ -52,7 +34,7 @@ class UserDAO:
     def create_user_with_subscription(self, email: str, password: str, subscription_data: dict):
         try:
             user = self.create_user(email, password)
-            subscription = self.create_subscription(subscription_data)
+            subscription = SubscriptionDAO.create_subscription(subscription_data)
             self.link_user_subscription(user.id, subscription.subscription_id)
             return UserReadSubscription(
                 id=user.id,
