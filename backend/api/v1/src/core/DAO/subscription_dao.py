@@ -15,7 +15,7 @@ class SubscriptionDAO:
                 "city": subscription_data.get("city"),
                 "address": subscription_data.get("address"),
                 "active": subscription_data.get("active", False),
-                "current_period_end": subscription_data.get("current_period_end").isoformat(),
+                "current_period_end": subscription_data.get("current_period_end"),
                 "plan": subscription_data.get("plan"),
             }).execute()
 

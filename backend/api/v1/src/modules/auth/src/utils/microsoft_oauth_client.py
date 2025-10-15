@@ -12,7 +12,8 @@ REDIRECT_URI = os.getenv("MICROSOFT_REDIRECT_URI")
 AUTHORITY = os.getenv("MICROSOFT_AUTHORITY")
 AUTH_URL = os.getenv("MICROSOFT_AUTH_URL")
 TOKEN_URL = os.getenv("MICROSOFT_TOKEN_URL")
-SCOPES = os.getenv("MICROSOFT_SCOPES").split(" ")
+SCOPES = os.getenv("MICROSOFT_SCOPES")
+#SCOPES = os.getenv("MICROSOFT_SCOPES").split(" ")
 
 def get_auth_url(state: str):
     params = {
