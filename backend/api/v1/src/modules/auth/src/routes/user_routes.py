@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends
 from src.core.DAO.user_dao import UserDAO
 from src.modules.auth.src.controllers.user_controller import UserController
-from src.modules.auth.src.models.user_model import UserSubscription, UserCrateWithoutPassword, UserCrate
+
+#TODO disaccoppiare model con questo file
+from src.core.model.user import UserSubscription, UserCrateWithoutPassword, UserCrate
 
 router = APIRouter()
 controller = UserController()

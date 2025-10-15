@@ -1,6 +1,6 @@
 from supabase import Client
 from fastapi import HTTPException
-from src.modules.auth.src.models.subscription_model import SubscriptionRead
+from api.v1.src.core.model.subscription import SubscriptionRead
 from src.core.database import get_supabase_client
 
 class SubscriptionDAO:
