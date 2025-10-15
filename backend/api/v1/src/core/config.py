@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     PUBSUB_SUBSCRIPTION_PATH: str = os.getenv("GOOGLE_PUBSUB_SUBSCRIPTION_PATH")
     SUPABASE_URL: str = os.getenv("SUPABASE_URL")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY")
+    # Redis configuration (URL form preferred, e.g., redis://localhost:6379/0)
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", None)
 
     class Config:
         env_file = ".env"

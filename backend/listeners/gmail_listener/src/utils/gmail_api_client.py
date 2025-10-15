@@ -1,6 +1,6 @@
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from src.utils.db_client import get_user_credentials  # funzione che legge token dal DB
+from src.db_client import get_user_credentials  # funzione che legge token dal DB
 
 def get_service_for_user(email: str):
     """

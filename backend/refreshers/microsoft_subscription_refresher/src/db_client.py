@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 
+# Simulazione DB
 SUBSCRIPTIONS_DB = [
     {
         "subscription_id": "abc123",
@@ -9,7 +10,7 @@ SUBSCRIPTIONS_DB = [
         "access_token": "ACCESS_TOKEN_UTENTE",
         "expirationDateTime": "2025-10-09T15:00:00Z"
     },
-    # ... altre subscription ...
+    # ... altre subscription ... mockup
 ]
 
 async def get_subscriptions_expiring_soon(threshold_hours=12):

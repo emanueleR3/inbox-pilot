@@ -1,33 +1,43 @@
 from fastapi import APIRouter, Depends
-from api.v1.src.modules.auth.src.DAO.user_dao import UserDAO
-from api.v1.src.modules.auth.src.controllers.user_controller import UserController
-from api.v1.src.modules.auth.src.models.user_model import UserCrate, UserCrateWithoutPassword
-from api.v1.src.core.database import get_supabase_client
+from src.core.DAO.user_dao import UserDAO
+from src.modules.auth.src.controllers.user_controller import UserController
+
+#TODO disaccoppiare model con questo file
+from src.core.model.user import UserSubscription, UserCrateWithoutPassword, UserCrate
 
 router = APIRouter()
+controller = UserController()
+
 @router.post("/createAccount")
-async def create_user(user: UserCrate, supabase=Depends(get_supabase_client)):
-    controller = UserController(UserDAO(supabase))
-    user = controller.create_user(user.email, user.password)
+def create_user_with_subscription(user: UserSubscription):
+    user = controller.create_user_with_subscription(user.email, user.password, user.subscription)
     return {"message": "Registrazione completata", "user": user}
 
 @router.post("/login")
-async def login_user(user: UserCrate, supabase=Depends(get_supabase_client)):
-    controller = UserController(UserDAO(supabase))
+def login_user(user: UserCrate):
     session = controller.login_user(user.email, user.password)
     return {"message": "Login effettuato", "session": session}
 
-@router.post("/magic-link")
-async def magic_link_login(user: UserCrateWithoutPassword, supabase=Depends(get_supabase_client)):
-    controller = UserController(UserDAO(supabase))
+@router.get("/getUser/{email}")
+def get_user_by_email(email: str):
+    return controller.get_user_by_email(email)
+
+@router.post("/magicLink")
+def magic_link_login(user: UserCrateWithoutPassword):
     return controller.send_magic_link(user.email)
 
 @router.delete("/delete/{user_id}")
-async def delete_user(user_id: str, supabase=Depends(get_supabase_client)):
-    controller = UserController(UserDAO(supabase))
+def delete_user(user_id: str):
     return controller.delete_account(user_id)
 
-@router.post("/reset-password")
-async def reset_password(user: UserCrateWithoutPassword, supabase=Depends(get_supabase_client)):
-    controller = UserController(UserDAO(supabase))
+@router.post("/resetPassword")
+def reset_password(user: UserCrateWithoutPassword):
     return controller.reset_password(user.email)
+
+@router.post("/updatePassword")
+def update_password(new_password: str, access_token: str):
+    return controller.update_password(new_password)
+
+@router.post("/logout")
+def logout():
+    return controller.logout()

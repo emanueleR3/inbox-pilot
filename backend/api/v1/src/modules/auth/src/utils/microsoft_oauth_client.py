@@ -7,12 +7,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 CLIENT_ID = os.getenv("MICROSOFT_APPLICATION_ID_CLIENT")
-CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_VALUE")
+CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET_VALUE")
 REDIRECT_URI = os.getenv("MICROSOFT_REDIRECT_URI")
 AUTHORITY = os.getenv("MICROSOFT_AUTHORITY")
 AUTH_URL = os.getenv("MICROSOFT_AUTH_URL")
 TOKEN_URL = os.getenv("MICROSOFT_TOKEN_URL")
-SCOPES = "openid profile email offline_access User.Read Mail.Send Mail.ReadWrite Calendars.ReadWrite".split()
+SCOPES = os.getenv("MICROSOFT_SCOPES").split(" ")
 
 def get_auth_url(state: str):
     params = {

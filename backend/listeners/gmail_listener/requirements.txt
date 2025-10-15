@@ -6,3 +6,4 @@ python-dotenv
 httpx
 asyncio
 requests
+aio-pika
