@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr
-from src.modules.auth.src.models.subscription_model import SubscriptionRead, Subscription
+
+# TODO, passare il payload e poi il DAO si preoccupa di convertirlo in model
+from src.core.model.subscription import SubscriptionRead, Subscription  
 
 class UserCrate(BaseModel):
     email: EmailStr
