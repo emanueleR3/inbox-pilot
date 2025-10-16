@@ -102,6 +102,7 @@ class UserDAO:
 
     def delete_user(self, user_id: str):
         try:
+            #TODO: FIXARE NON FUNZIONA
             self.supabase.auth.delete_user(user_id)
             return {"message": f"Utente eliminato"}
         except AuthApiError as e:
