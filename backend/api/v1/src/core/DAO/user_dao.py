@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 from supabase_auth.errors import AuthApiError
-from api.v1.src.core.model.user import UserReadSubscription, UserRead
+from api.v1.src.core.model.user import UserReadSubConf, UserRead
 from src.core.redis_client import get_redis_client
 from api.v1.src.core.model.subscription_service import SubscriptionServiceCrate
 from src.core.DAO.subscription_dao import SubscriptionDAO
@@ -35,24 +35,21 @@ class UserDAO:
         try:
             user = self.create_user(email, password)
             subscription = SubscriptionDAO().create_subscription(subscription_data)
+
             self.link_user_subscription(user.id, subscription.subscription_id)
 
             configuration_data["subscription_id"] = subscription.subscription_id
             configuration_data["email"] = email
 
+            #TODO: DA SPEZZARE 
             configuration = SubscriptionServiceDAO().create_configuration(configuration_data)
-            
-            return {
-                "user": user,
-                "subscription": subscription,
-                "configuration": configuration
-            }
 
-            #return UserReadSubscription(
-            #    id=user.id,
-            #   email=user.email,
-            #    subscription=subscription
-            #)
+            return UserReadSubConf.model_construct(
+                id=user.id,
+                email=user.email,
+                subscription=subscription,
+                configuration=configuration
+            )
         except HTTPException:
             raise
         except Exception as e:

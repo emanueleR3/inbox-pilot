@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from supabase_auth.errors import AuthApiError
 from datetime import datetime
 from src.core.database import get_supabase_client
-from src.core.model.subscription_service import SubscriptionServiceCrate, SubscriptionServiceConfigCrate
+from src.core.model.subscription_service import SubscriptionServiceCrate, SubscriptionServiceConfigCrate, SubscriptionServiceRead
 from pydantic import ValidationError
 
 
@@ -22,7 +22,7 @@ class SubscriptionServiceDAO:
             if not result.data:
                 raise ValueError("Nessun dato restituito da Supabase dopo l'inserimento")
 
-            return result.data[0]
+            return SubscriptionServiceRead.model_validate(result.data[0])
 
         except HTTPException:
             raise
