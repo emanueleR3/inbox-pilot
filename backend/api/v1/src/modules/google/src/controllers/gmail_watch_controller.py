@@ -34,9 +34,9 @@ def create_watch_for_user(user_email: str):
     '''
     # ###############################################
 
+    # TODO controllare se le credenziali sono valide come tipo di dato Credentials wrapped
     service = build("gmail", "v1", credentials=credentials)
 
-    # TODO controllare 
     request = {
         "labelIds": ["INBOX"],
         "topicName": settings.PUBSUB_TOPIC_PATH

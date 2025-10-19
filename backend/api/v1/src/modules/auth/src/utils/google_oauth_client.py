@@ -1,5 +1,9 @@
 from google_auth_oauthlib.flow import Flow
 from src.core.config import settings
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 def create_google_flow():
     """
@@ -15,6 +19,13 @@ def create_google_flow():
                 "token_uri": "https://oauth2.googleapis.com/token",
             }
         },
+        scopes=os.getenv("GOOGLE_SCOPES", "").split(),
+    )
+
+    flow.redirect_uri = settings.GOOGLE_REDIRECT_URI
+    return flow
+
+    '''
         scopes=[
             "https://www.googleapis.com/auth/gmail.modify",
             "https://www.googleapis.com/auth/gmail.readonly",
@@ -27,7 +38,4 @@ def create_google_flow():
             "https://www.googleapis.com/auth/userinfo.profile",
             "openid"
         ],
-    )
-
-    flow.redirect_uri = settings.GOOGLE_REDIRECT_URI
-    return flow
+    '''

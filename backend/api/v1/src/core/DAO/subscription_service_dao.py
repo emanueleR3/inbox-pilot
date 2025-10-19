@@ -317,6 +317,9 @@ class SubscriptionServiceDAO:
         """
         Aggiorna lo history_id per l'utente specificato.
         """
+
+        # TODO sevo salvare qualche expiration date di google?
+
         try:
             data = {
                 "history_id": history_id
