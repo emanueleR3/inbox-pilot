@@ -1,9 +1,8 @@
-from supabase import Client     
 from fastapi import HTTPException
 from supabase_auth.errors import AuthApiError
-from api.v1.src.core.model.user import UserReadSubscription, UserRead, UserSubscription
+from src.core.model.user import UserReadSubscription, UserRead, UserSubscription
 from src.core.redis_client import get_redis_client
-from api.v1.src.core.model.subscription import SubscriptionRead
+from src.core.model.subscription import SubscriptionRead
 from src.core.DAO.subscription_dao import SubscriptionDAO
 from src.core.database import get_supabase_client
 

@@ -31,7 +31,3 @@ def create_google_flow():
 
     flow.redirect_uri = settings.GOOGLE_REDIRECT_URI
     return flow
-
-def get_credentials_for_user(user_email: str):
-    # TODO recupera le credenziali salvate per l'utente dal DB
-    pass

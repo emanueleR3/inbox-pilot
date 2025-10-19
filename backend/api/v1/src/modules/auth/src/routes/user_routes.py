@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends
-from src.core.DAO.user_dao import UserDAO
 from src.modules.auth.src.controllers.user_controller import UserController
 
 #TODO disaccoppiare model con questo file
