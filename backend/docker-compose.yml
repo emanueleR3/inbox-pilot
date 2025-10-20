@@ -1,0 +1,25 @@
+services:
+  broker-worker:
+    image: ghcr.io/correttoai/backend/broker:latest
+    container_name: broker-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+
+  listeners:
+    image: ghcr.io/correttoai/backend/listeners:latest
+    container_name: listeners
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8001:8001" # Microsoft webhook
+
+  refreshers:
+    image: ghcr.io/correttoai/backend/refreshers:latest
+    container_name: refreshers
+    restart: unless-stopped
+    env_file:
+      - .env
+
+

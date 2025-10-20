@@ -1,6 +1,6 @@
 from supabase import Client
 from fastapi import HTTPException
-from src.core.model.subscription import SubscriptionRead
+from src.core.model.subscription import SubscriptionRead, Subscription
 from src.core.database import get_supabase_client
 
 class SubscriptionDAO:
@@ -9,20 +9,15 @@ class SubscriptionDAO:
 
     def create_subscription(self, subscription_data: dict):
         try:
-            result = self.supabase.table("subscriptions").insert({
-                "name": subscription_data.get("name"),
-                "vat_number": subscription_data.get("vat_number"),
-                "city": subscription_data.get("city"),
-                "address": subscription_data.get("address"),
-                "active": subscription_data.get("active", False),
-                "current_period_end": subscription_data.get("current_period_end").isoformat(),
-                "plan": subscription_data.get("plan"),
-            }).execute()
+            sub = Subscription.model_validate(subscription_data)
+
+            sub_dict = sub.model_dump(mode="json")
+
+            result = self.supabase.table("subscriptions").insert(sub_dict).execute()
 
             if not result.data:
                 raise ValueError("Nessun dato restituito da Supabase dopo l'inserimento")
 
-            sub = result.data[0]
-            return SubscriptionRead(**sub)
+            return SubscriptionRead.model_validate(result.data[0])
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Errore nella creazione della subscription: {str(e)}")

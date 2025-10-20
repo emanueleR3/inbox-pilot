@@ -1,0 +1,19 @@
+services:
+  refreshers:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: refreshers
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      # Fallbacks if not defined in env file
+      - REFRESH_INTERVAL_MINUTES_TOKENS=15
+      - REFRESH_INTERVAL_HOURS_SUBSCRIPTIONS=3
+    # networks:
+    #   - backend
+
+# networks:
+#   backend:
+#     external: true

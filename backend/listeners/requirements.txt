@@ -1,0 +1,15 @@
+# Shared dependencies for all listeners
+python-dotenv
+asyncio
+requests
+httpx
+uvicorn
+fastapi
+aio-pika
+# Gmail listener
+google-cloud-pubsub
+google-auth
+google-auth-oauthlib
+google-api-python-client
+# IMAP poller
+aiofiles
