@@ -16,8 +16,8 @@ services:
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
-      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json
+      - ./rabbitmq/rabbitmq.conf:/app/rabbitmq/rabbitmq.conf
+      - ./rabbitmq/definitions.json:/app/rabbitmq/definitions.json
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -30,35 +30,23 @@ services:
   broker-worker:
     image: ghcr.io/correttoai/backend/broker:latest
     container_name: broker-worker
-    restart: on-failure
+    restart: unless-stopped
     env_file:
       - .env
     depends_on:
       rabbitmq:
         condition: service_healthy
-    deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 15s
-        max_attempts: 10
     networks:
       - broker_net
 
   listeners:
     image: ghcr.io/correttoai/backend/listeners:latest
     container_name: listeners
-    restart: on-failure
+    restart: unless-stopped
     env_file:
       - .env
-    environment:
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account-key.json
-    volumes:
-      - ./listeners/service-account-key.json:/app/credentials/service-account-key.json:ro
     ports:
       - "8001:8001" # Microsoft webhook
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
     networks:
       - broker_net
 
@@ -68,11 +56,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - broker_net
 
 volumes:
   rabbitmq_data:
