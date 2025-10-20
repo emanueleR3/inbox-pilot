@@ -25,6 +25,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    networks:
+      - broker_net
 
   listeners:
     image: ghcr.io/correttoai/backend/listeners:latest
@@ -43,5 +45,12 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  broker_net:
+    driver: bridge
 
 

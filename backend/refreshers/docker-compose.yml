@@ -6,7 +6,7 @@ services:
     container_name: refreshers
     restart: unless-stopped
     env_file:
-      - ../.env
+      - ./.env
     environment:
       # Fallbacks if not defined in env file
       - REFRESH_INTERVAL_MINUTES_TOKENS=15
