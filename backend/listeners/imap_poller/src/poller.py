@@ -8,8 +8,8 @@ from src.broker_client import RabbitMQPublisher
 
 load_dotenv()
 
-MAX_CONCURRENT_CONNECTIONS = os.getenv("MAX_CONCURRENT_CONNECTIONS_IMAP", 10)   # Limite per scalabilità
-POLL_INTERVAL_MINUTES = os.getenv("POLL_INTERVAL_MINUTES_IMAP", 2)              # Ogni quanti minuti controllare le mail
+MAX_CONCURRENT_CONNECTIONS = int(os.getenv("MAX_CONCURRENT_CONNECTIONS_IMAP", 10))   # Limite per scalabilità
+POLL_INTERVAL_MINUTES = int(os.getenv("POLL_INTERVAL_MINUTES_IMAP", 2))              # Ogni quanti minuti controllare le mail
 
 publisher = RabbitMQPublisher()
 
