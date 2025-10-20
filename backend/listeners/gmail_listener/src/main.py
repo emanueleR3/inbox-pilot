@@ -45,7 +45,7 @@ async def main():
         subscriber = pubsub_v1.SubscriberClient()
 
     streaming_pull_future = subscriber.subscribe(SUBSCRIPTION_PATH, callback=callback)
-    print(f"Listening for messages on {SUBSCRIPTION_PATH}...")
+    print(f"G📧 Listening for messages on {SUBSCRIPTION_PATH}...")
 
     # Mantieni vivo il listener
     try:
