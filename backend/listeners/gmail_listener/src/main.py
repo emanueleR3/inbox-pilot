@@ -14,14 +14,17 @@ GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or \
                           os.getenv("GOOGLE_CLOUD_CREDENTIALS") or \
                           os.getenv("GOOGLE_CREDENTIALS_PATH")
 
-async def callback(message):
+def callback(message):
     """
-    Callback async chiamata per ogni messaggio Pub/Sub
+    Callback chiamata per ogni messaggio Pub/Sub
     """
     try:
         data = json.loads(message.data)
-        # Lancia task async, così il loop non blocca altri messaggi
-        asyncio.create_task(process_pubsub_message(data))
+        # Crea un task async nel loop corrente
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(process_pubsub_message(data))
+        loop.close()
         message.ack()
     except Exception as e:
         print(f"Errore callback Pub/Sub: {e}")

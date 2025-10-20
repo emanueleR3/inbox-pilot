@@ -55,5 +55,5 @@ async def receive_microsoft_notification(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
+    print("🚀 Starting Microsoft listener on port 8001...")
     uvicorn.run(app, host="0.0.0.0", port=8001)
-    print("M📧 Microsoft listener started on port 8001")
