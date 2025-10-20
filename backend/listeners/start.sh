@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 set -e
 
+sleep 15
+
 # Forward SIGTERM/SIGINT to children so docker stop exits cleanly
 term_handler() {
   echo "Caught termination signal, stopping children..."

@@ -17,5 +17,7 @@ COPY worker/src ./src
 
 ENV PYTHONUNBUFFERED=1
 
+RUN sleep 15
+
 # Run the async worker
 CMD ["python", "-m", "src.main"]
