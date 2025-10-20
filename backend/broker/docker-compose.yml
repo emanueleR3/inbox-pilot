@@ -1,26 +1,23 @@
 version: "3.9"
 
-# Load environment variables from external file
-env_file:
-  - ../.env
-
-
 services:
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: rabbitmq
     restart: always
     ports:
-      - "5672:5672"      # porta AMQP (per listener e worker)
-      - "15672:15672"    # pannello admin web
+      - "5672:5672"
+      - "15672:15672"
+    env_file:
+      - ../.env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-      - ../rabbitmq/rabbitmq.conf:/app/rabbitmq/rabbitmq.conf
-      - ../rabbitmq/definitions.json:/app/rabbitmq/definitions.json
+      - ./rabbitmq/rabbitmq.conf:/app/rabbitmq/rabbitmq.conf
+      - ./rabbitmq/definitions.json:/app/rabbitmq/definitions.json
     networks:
       - broker_net
 
@@ -31,6 +28,8 @@ services:
     container_name: broker-worker
     depends_on:
       - rabbitmq
+    env_file:
+      - ../.env
     environment:
       RABBITMQ_URL: "amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/"
       RABBITMQ_QUEUE: "emails_queue"

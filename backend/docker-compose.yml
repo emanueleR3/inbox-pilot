@@ -1,4 +1,24 @@
 services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/app/rabbitmq/rabbitmq.conf
+      - ./rabbitmq/definitions.json:/app/rabbitmq/definitions.json
+    networks:
+      - broker_net
+
   broker-worker:
     image: ghcr.io/correttoai/backend/broker:latest
     container_name: broker-worker
@@ -14,6 +34,8 @@ services:
       - .env
     ports:
       - "8001:8001" # Microsoft webhook
+    networks:
+      - broker_net
 
   refreshers:
     image: ghcr.io/correttoai/backend/refreshers:latest
