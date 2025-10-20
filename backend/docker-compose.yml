@@ -36,6 +36,11 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 15s
+    command: sh -c "sleep 15 && python -m src.main"
     networks:
       - broker_net
 
@@ -45,6 +50,14 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 15s
+    command: sh -c "sleep 15 && /app/start.sh"
     ports:
       - "8001:8001" # Microsoft webhook
     networks:
