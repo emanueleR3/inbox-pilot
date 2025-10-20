@@ -2,7 +2,7 @@ version: "3.9"
 
 # Load environment variables from external file
 env_file:
-  - ../../../../opt/corretto/.env
+  - ../.env
 
 
 services:
@@ -19,8 +19,8 @@ services:
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-      - ../../../../opt/corretto/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
-      - ../../../../opt/corretto/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json
+      - ../rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - ../rabbitmq/definitions.json:/etc/rabbitmq/definitions.json
     networks:
       - broker_net
 
