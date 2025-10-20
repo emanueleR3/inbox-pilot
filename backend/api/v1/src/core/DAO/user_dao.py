@@ -1,10 +1,10 @@
 from fastapi import HTTPException
 from supabase_auth.errors import AuthApiError
-from src.core.model.user import UserReadSubConf, UserRead
+from src.core.model.user import UserRead, UserReadSub
 from src.core.redis_client import get_redis_client
-from src.core.model.subscription_service import SubscriptionServiceCrate
+#from src.core.model.subscription_service import SubscriptionServiceCrate
 from src.core.DAO.subscription_dao import SubscriptionDAO
-from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
+#from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 from src.core.database import get_supabase_client
 
 class UserDAO:
@@ -31,24 +31,24 @@ class UserDAO:
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Errore nella creazione della relazione user-subscription: {str(e)}")
 
-    def create_user_with_sub_and_conf(self, email: str, password: str, subscription_data: dict, configuration_data: dict):
+    def create_user_with_sub(self, email: str, password: str, subscription_data: dict):
         try:
             user = self.create_user(email, password)
             subscription = SubscriptionDAO().create_subscription(subscription_data)
 
             self.link_user_subscription(user.id, subscription.subscription_id)
 
-            configuration_data["subscription_id"] = subscription.subscription_id
-            configuration_data["email"] = email
+            #configuration_data["subscription_id"] = subscription.subscription_id
+            #configuration_data["email"] = email
 
             #TODO: DA SPEZZARE 
-            configuration = SubscriptionServiceDAO().create_configuration(configuration_data)
+            #configuration = SubscriptionServiceDAO().create_configuration(configuration_data)
 
-            return UserReadSubConf.model_construct(
+            return UserReadSub.model_construct(
                 id=user.id,
                 email=user.email,
                 subscription=subscription,
-                configuration=configuration
+                #configuration=configuration
             )
         except HTTPException:
             raise

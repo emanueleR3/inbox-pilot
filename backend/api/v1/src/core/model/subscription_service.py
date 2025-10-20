@@ -4,6 +4,7 @@ from google.oauth2.credentials import Credentials
 from datetime import datetime
 
 class SubscriptionServiceCrate(BaseModel):
+    subscription_id: str
     email: str
     calendar_provider: str
     calendar_names: list[str]

@@ -4,13 +4,12 @@ class UserController:
     def __init__(self):
         self.user_dao = UserDAO()
 
-    def create_user_with_sub_and_conf(self, payload: dict):
+    def create_user_with_sub(self, payload: dict):
         email = payload.get("email")
         password = payload.get("password")
         subscription_data = payload.get("subscription")
-        configuration_data = payload.get("configuration")
 
-        return self.user_dao.create_user_with_sub_and_conf(email, password, subscription_data, configuration_data)
+        return self.user_dao.create_user_with_sub(email, password, subscription_data)
 
     def login_user(self, payload: dict):
         email = payload.get("email")

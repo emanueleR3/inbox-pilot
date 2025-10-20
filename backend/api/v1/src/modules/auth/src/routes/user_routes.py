@@ -5,8 +5,8 @@ router = APIRouter()
 controller = UserController()
 
 @router.post("/createAccount")
-def create_user_with_sub_and_conf(payload: dict):
-    result = controller.create_user_with_sub_and_conf(payload)
+def create_user_with_sub(payload: dict):
+    result = controller.create_user_with_sub(payload)
     return {"message": "Registrazione completata", "result": result}
 
 @router.post("/login")
