@@ -8,6 +8,7 @@ from src.modules.auth.src.utils.microsoft_oauth_client import (
 from src.modules.microsoft.src.controllers.graph_subscription_controller import (
     create_subscription_for_user
 )
+from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 
 import httpx
 
@@ -59,13 +60,23 @@ async def microsoft_callback(request: Request):
 
         logger.info(f"Microsoft subscription created for {email}: {subscription.get('id')}")
 
-        # 4️⃣ TODO: salva nel DB:
-        # - user_id (dalla tua app)
-        # - email
-        # - access_token
-        # - refresh_token
-        # - expiry
-        # - subscription.id e expirationDateTime
+        #TODO recuperare la subscription_id che si sta gestendo
+        subscription_id = "TODO_SUBSCRIPTION_ID"
+
+        result = SubscriptionServiceDAO.save_microsoft_credentials(
+            email, 
+            subscription_id,
+            access_token,
+            refresh_token,
+            expiry,
+            subscription.get("id"),
+            subscription.get("expirationDateTime")
+        )
+
+        if result is False:
+            logger.error("Errore nel salvataggio delle credenziali Microsoft")
+            raise HTTPException(status_code=500, detail="Errore nel salvataggio delle credenziali Microsoft")
+
 
         token_data = {
             "email": email,

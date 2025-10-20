@@ -3,7 +3,7 @@ from src.core.config import settings
 from threading import Lock
 
 _supabase_client: Client | None = None
-_client_lock = Lock()
+_client_lock = Lock()   #TODO funziona questo lock? 
 
 def get_supabase_client() -> Client:
     global _supabase_client

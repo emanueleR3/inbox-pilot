@@ -1,25 +1,40 @@
+version: "3.9"
+
 services:
-  # rabbitmq:
-  #   image: rabbitmq:3.13-management
-  #   container_name: broker-rabbitmq
-  #   ports:
-  #     - "5672:5672"
-  #     - "15672:15672"
-  #   environment:
-  #     RABBITMQ_DEFAULT_USER: "user"
-  #     RABBITMQ_DEFAULT_PASS: "password"
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"      # porta AMQP (per listener e worker)
+      - "15672:15672"    # pannello admin web
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-changeme}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+    networks:
+      - broker_net
 
   worker:
     build:
       context: .
       dockerfile: worker/Dockerfile
     container_name: broker-worker
-    # depends_on:
-    #   - rabbitmq
-    # environment:
-    #   RABBITMQ_URL: "amqp://user:password@rabbitmq:5672/"
+    depends_on:
+      - rabbitmq
+    environment:
+      RABBITMQ_URL: "amqp://admin_mq:FeRd!n4cch10%vyu4C-7Vf7c7-rt8s!%fuy&-ddw!%D4-26D@rabbitmq:5672/"
+      RABBITMQ_QUEUE: "emails_queue"
     restart: unless-stopped
+    networks:
+      - broker_net
 
-# networks:
-#   default:
-#     name: broker_net
+volumes:
+  rabbitmq_data:
+
+networks:
+  broker_net:
+    driver: bridge

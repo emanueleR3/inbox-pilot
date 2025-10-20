@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from src.modules.auth.src.utils.google_oauth_client import create_google_flow
 from src.core.logger import setup_logger
 from src.modules.google.src.controllers.gmail_watch_controller import create_watch_for_user
+from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 
 import requests
 
@@ -45,26 +46,26 @@ async def google_callback(request: Request):
 
         logger.info(f"Authenticated Google user: {user_info}")
 
-        # TODO QUI SALVO NEL DB:
-        # - user_id (dalla tua app)
-        # - email
-        # - access_token
-        # - refresh_token
-        # - expiry
+        # TODO recuperare la subscription_id che si sta gestendo
+        subscription_id = "TODO_SUBSCRIPTION_ID"
 
+        # Salva le credenziali nel database
         email = user_info["email"]
         access_token = credentials.token
         refresh_token = credentials.refresh_token
         expiry = credentials.expiry
 
-        #response = create_watch_for_user(email)
-        
-        # DEBUG TODO eliminare quando salviamo le cred nel DB ######
-        response = create_watch_for_user(email, access_token, refresh_token, expiry)
-        #  ###############################################
+        result = SubscriptionServiceDAO.save_google_credentials(email, subscription_id, access_token, refresh_token, expiry)
+        if result is False:
+            logger.error("Errore nel salvataggio delle credenziali Google")
+            raise HTTPException(status_code=500, detail="Errore nel salvataggio delle credenziali Google")
 
-        #history_id = response.get("historyId")
-        # TODO SALVA history_id NEL DB ASSOCIATO al subscription service
+        # Crea la watch Gmail
+        response = create_watch_for_user(email)
+        
+        # Salva history_id della watch Gmail
+        history_id = response.get("historyId")
+        result = SubscriptionServiceDAO.update_history_id(email, history_id)
 
         token_data = {
             "email": user_info["email"],
