@@ -2,12 +2,14 @@ import os
 import json
 import asyncio
 from google.cloud import pubsub_v1
+from google.oauth2 import service_account
 from dotenv import load_dotenv
 from src.utils.pubsub_handler import process_pubsub_message
 
 load_dotenv()
 
 SUBSCRIPTION_PATH = os.getenv("GOOGLE_PUBSUB_SUBSCRIPTION_PATH")
+GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 async def callback(message):
     """
@@ -24,7 +26,14 @@ async def callback(message):
 
 
 async def main():
-    subscriber = pubsub_v1.SubscriberClient()
+    # Initialize Pub/Sub client with service account credentials
+    if GOOGLE_CREDENTIALS_PATH and os.path.exists(GOOGLE_CREDENTIALS_PATH):
+        credentials = service_account.Credentials.from_service_account_file(GOOGLE_CREDENTIALS_PATH)
+        subscriber = pubsub_v1.SubscriberClient(credentials=credentials)
+    else:
+        # Fallback to default credentials (Application Default Credentials)
+        print("Warning: Using default credentials. Make sure Application Default Credentials are set up.")
+        subscriber = pubsub_v1.SubscriberClient()
 
     streaming_pull_future = subscriber.subscribe(SUBSCRIPTION_PATH, callback=callback)
     print(f"Listening for messages on {SUBSCRIPTION_PATH}...")

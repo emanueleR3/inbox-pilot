@@ -12,6 +12,8 @@ services:
       - MICROSOFT_WEBHOOK_PORT=8001
     ports:
       - "8001:8001"  # Microsoft webhook
+    volumes:
+      - ../listeners/service-account-key.json:/app/credentials/service-account-key.json:ro  # Mount Google credentials from .env path
     # networks:
     #   - backend
 
