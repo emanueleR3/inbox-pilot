@@ -6,7 +6,7 @@ services:
     container_name: listeners
     restart: unless-stopped
     env_file:
-      - ../.env
+      - ../../../../opt/corretto/.env
     environment:
       - POLL_INTERVAL_MINUTES_IMAP=2
       - MICROSOFT_WEBHOOK_PORT=8001
