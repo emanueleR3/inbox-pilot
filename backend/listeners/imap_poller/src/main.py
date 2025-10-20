@@ -6,7 +6,7 @@ from src.utils.logger import log_info
 
 load_dotenv()
 
-POLL_INTERVAL_MINUTES = os.getenv("POLL_INTERVAL_MINUTES_IMAP", 2)
+POLL_INTERVAL_MINUTES = int(os.getenv("POLL_INTERVAL_MINUTES_IMAP", 2))
 
 async def main():
     await publisher.connect()  # connessione RabbitMQ globale
