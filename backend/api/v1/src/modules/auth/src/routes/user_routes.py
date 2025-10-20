@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from src.core.dependecy import get_current_user
 from src.modules.auth.src.controllers.user_controller import UserController
 
 router = APIRouter()
@@ -23,7 +24,7 @@ def magic_link_login(payload: dict):
     return controller.send_magic_link(payload)
 
 @router.delete("/delete/{user_id}")
-def delete_user(user_id: str):
+def delete_user(user_id: str, current_user=Depends(get_current_user)):
     return controller.delete_account(user_id)
 
 @router.post("/resetPassword")
@@ -35,5 +36,5 @@ def update_password(payload: dict):
     return controller.update_password(payload)
 
 @router.post("/logout")
-def logout():
+def logout(current_user=Depends(get_current_user)):
     return controller.logout()

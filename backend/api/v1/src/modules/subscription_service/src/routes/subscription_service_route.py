@@ -1,8 +1,8 @@
-from fastapi import APIRouter
-from src.core.database import get_supabase_client
+from fastapi import APIRouter, Depends
+from src.core.dependecy import get_current_user
 from src.modules.subscription_service.src.controllers.subscription_service_controller import SubscriptionServiceController
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 controller = SubscriptionServiceController()
 
 @router.post("/createConfig")
