@@ -2,3 +2,6 @@ aiofiles
 asyncio
 python-dotenv
 aio-pika
+supabase
+postgrest
+cryptography

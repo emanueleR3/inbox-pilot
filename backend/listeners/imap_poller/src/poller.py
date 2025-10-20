@@ -18,7 +18,7 @@ async def poll_account(account):
         client = ImapClient(
             host=account["imap_host"],
             port=account["imap_port"],
-            username=account["username"],
+            username=account["email"],
             password=account["password"],
             use_ssl=account["use_ssl"]
         )
@@ -26,12 +26,12 @@ async def poll_account(account):
         new_mails = client.fetch_unseen_messages()
 
         for mail in new_mails:
-            log_info(f"📩 Nuova mail da {mail['from']} per {account['username']} | {mail['subject']}")
+            log_info(f"📩 Nuova mail da {mail['from']} per {account['email']} | {mail['subject']}")
             
             message_payload = {
                 "provider": "imap",
-                "user_id": account["user_id"],
-                "account": account["username"],
+                #"user_id": account["user_id"],
+                "account": account["email"],
                 "mail_id": mail["id"],
                 "from": mail["from"],
                 "subject": mail["subject"],
@@ -45,7 +45,7 @@ async def poll_account(account):
         client.close()
 
     except Exception as e:
-        log_error(f"Errore nel polling IMAP per {account['username']}: {e}")
+        log_error(f"Errore nel polling IMAP per {account['email']}: {e}")
 
 async def poll_all_accounts():
     accounts = await get_all_imap_accounts()

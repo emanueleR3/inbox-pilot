@@ -1,0 +1,9 @@
+python-dotenv
+httpx
+asyncio
+requests
+aio-pika
+supabase
+postgrest
+cryptography
+msal
