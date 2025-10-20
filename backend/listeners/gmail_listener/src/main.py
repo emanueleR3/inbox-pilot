@@ -9,7 +9,10 @@ from src.utils.pubsub_handler import process_pubsub_message
 load_dotenv()
 
 SUBSCRIPTION_PATH = os.getenv("GOOGLE_PUBSUB_SUBSCRIPTION_PATH")
-GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+# Allow overriding via GOOGLE_CREDENTIALS_JSON as well, but prefer file path if provided
+GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or \
+                          os.getenv("GOOGLE_CLOUD_CREDENTIALS") or \
+                          os.getenv("GOOGLE_CREDENTIALS_PATH")
 
 async def callback(message):
     """
@@ -27,12 +30,18 @@ async def callback(message):
 
 async def main():
     # Initialize Pub/Sub client with service account credentials
-    if GOOGLE_CREDENTIALS_PATH and os.path.exists(GOOGLE_CREDENTIALS_PATH):
-        credentials = service_account.Credentials.from_service_account_file(GOOGLE_CREDENTIALS_PATH)
-        subscriber = pubsub_v1.SubscriberClient(credentials=credentials)
+    if GOOGLE_CREDENTIALS_PATH:
+        if os.path.exists(GOOGLE_CREDENTIALS_PATH):
+            credentials = service_account.Credentials.from_service_account_file(GOOGLE_CREDENTIALS_PATH)
+            subscriber = pubsub_v1.SubscriberClient(credentials=credentials)
+        else:
+            raise FileNotFoundError(
+                f"Google credentials file not found at {GOOGLE_CREDENTIALS_PATH}. "
+                f"Mount it into the container and set GOOGLE_APPLICATION_CREDENTIALS to that path."
+            )
     else:
         # Fallback to default credentials (Application Default Credentials)
-        print("Warning: Using default credentials. Make sure Application Default Credentials are set up.")
+        print("Warning: Using default credentials. Set GOOGLE_APPLICATION_CREDENTIALS to a mounted service account file for production.")
         subscriber = pubsub_v1.SubscriberClient()
 
     streaming_pull_future = subscriber.subscribe(SUBSCRIPTION_PATH, callback=callback)
