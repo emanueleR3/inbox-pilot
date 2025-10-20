@@ -14,9 +14,9 @@ services:
       - "8001:8001"  # Microsoft webhook
     volumes:
       - ../listeners/service-account-key.json:/app/credentials/service-account-key.json:ro  # Mount Google credentials from .env path
-    # networks:
-    #   - backend
+    networks:
+      - broker_net
 
-# networks:
-#   backend:
-#     external: true
+networks:
+  broker_net:
+    external: true
