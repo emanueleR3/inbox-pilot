@@ -2,13 +2,15 @@ from googleapiclient.discovery import build
 from src.core.config import settings
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 
+subscription_service_dao = SubscriptionServiceDAO()
+
 #def create_watch_for_user(user_email: str):
 # TODO DEBUG eliminare ########################### usare la firma di sopra
 def create_watch_for_user(user_email: str):
     """
     Attiva watch Gmail per un utente
     """
-    credentials = SubscriptionServiceDAO.get_google_credentials(user_email)
+    credentials = subscription_service_dao.get_google_credentials(user_email)
 
     # TODO DEBUG eliminare ###########################
     '''

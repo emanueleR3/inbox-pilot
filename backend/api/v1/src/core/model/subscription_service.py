@@ -58,7 +58,7 @@ class SubscriptionServiceConfigCrate(BaseModel):
     urgent_meeting_threshold: float | None 
 
 class OAuthGoogleCredentials(Credentials):
-    def __init__(self, email: str, access_token: str, refresh_token: str, expiry: str, **kwargs):
+    def __init__(self, email: str, access_token: str, refresh_token: str, expiry: datetime, **kwargs):
         self.email = email
         super().__init__(
             token=access_token,

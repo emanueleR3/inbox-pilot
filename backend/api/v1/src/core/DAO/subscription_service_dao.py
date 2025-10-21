@@ -11,6 +11,7 @@ from datetime import datetime
 from supabase import Client # TODO controllare se eliminare
 from supabase_auth.errors import AuthApiError
 from pydantic import ValidationError
+from uuid import UUID
 
 load_dotenv()
 
@@ -109,10 +110,6 @@ class SubscriptionServiceDAO:
                     "microsoft_expiration_datetime": microsoft_expiration_dt.isoformat() if microsoft_expiration_dt else None
                 }
                 response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
-                
-                if response.error:
-                    logging.info(f"Errore nell'aggiornamento delle credenziali Microsoft: {response.error}")
-                    return False
                     
                 if not response.data:
                     logging.info(f"Nessun record aggiornato per email: {email}")
@@ -121,7 +118,7 @@ class SubscriptionServiceDAO:
                 # Crea un nuovo record
                 response = self.create_subscription_service(
                     email=email,
-                    subscription_id=subscription_id,
+                    subscription_id=str(subscription_id),
                     hashed_access_token=encrypted_access_token,
                     hashed_refresh_token=encrypted_refresh_token,
                     expiry_token=expiry_datetime,
@@ -161,10 +158,6 @@ class SubscriptionServiceDAO:
                     "expiry_token": expiry.isoformat() if expiry else None
                 }
                 response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
-                
-                if response.error:
-                    logging.info(f"Errore nell'aggiornamento delle credenziali Google: {response.error}")
-                    return False
                     
                 if not response.data:
                     logging.info(f"Nessun record aggiornato per email: {email}")
@@ -197,8 +190,6 @@ class SubscriptionServiceDAO:
         """
         try:
             response = self.supabase.table("subscription_services").select("email").eq("email", email).execute()
-            if response.error:
-                return False
             return len(response.data) > 0
         except Exception as e:
             print(f"Errore nel controllo dell'esistenza della mail: {e}")
@@ -210,7 +201,7 @@ class SubscriptionServiceDAO:
         """
         try:
             response = self.supabase.table("subscription_services").select("*").eq("email", email).execute()
-            if response.error or not response.data:
+            if not response.data:
                 return None
                 
             credential = response.data[0]
@@ -219,11 +210,22 @@ class SubscriptionServiceDAO:
             decrypted_access_token = self._decrypt_token(credential["hashed_access_token"])
             decrypted_refresh_token = self._decrypt_token(credential["hashed_refresh_token"])
             
+            # Converti expiry_token da string a datetime se necessario
+            expiry_datetime = credential["expiry_token"]
+            if isinstance(expiry_datetime, str):
+                # Parse the datetime and convert to naive datetime (remove timezone info)
+                # Google OAuth library expects naive datetimes
+                if expiry_datetime.endswith('Z'):
+                    expiry_datetime = expiry_datetime[:-1]  # Remove 'Z'
+                elif '+' in expiry_datetime:
+                    expiry_datetime = expiry_datetime.split('+')[0]  # Remove timezone offset
+                expiry_datetime = datetime.fromisoformat(expiry_datetime)
+            
             cred = OAuthGoogleCredentials(
                 email=email,
                 access_token=decrypted_access_token,
                 refresh_token=decrypted_refresh_token,
-                expiry=credential["expiry_token"],
+                expiry=expiry_datetime,
                 token_uri="https://oauth2.googleapis.com/token",
                 client_id=os.getenv("GOOGLE_CLIENT_ID"),
                 client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
@@ -274,7 +276,7 @@ class SubscriptionServiceDAO:
             # Prepara i dati per l'inserimento
             data = {
                 "email": email,
-                "subscription_id": subscription_id,
+                "subscription_id": str(subscription_id) if subscription_id else None,
                 "calendar_provider": calendar_provider,
                 "calendar_names": calendar_names,
                 "information": information,
@@ -304,10 +306,6 @@ class SubscriptionServiceDAO:
             
             # Inserisce il record nel database
             response = self.supabase.table("subscription_services").insert(data).execute()
-            
-            if response.error:
-                print(f"Errore nell'inserimento del subscription_service: {response.error}")
-                return None
                 
             return response.data[0] if response.data else None
             
@@ -328,9 +326,6 @@ class SubscriptionServiceDAO:
             }
             response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
             
-            if response.error:
-                print(f"Errore nell'aggiornamento dello history_id: {response.error}")
-                return False
             if not response.data:
                 print(f"Nessun record aggiornato per email: {email}")
                 return False

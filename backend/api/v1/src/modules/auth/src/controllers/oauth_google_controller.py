@@ -4,11 +4,12 @@ from src.modules.auth.src.utils.google_oauth_client import create_google_flow
 from src.core.logger import setup_logger
 from src.modules.google.src.controllers.gmail_watch_controller import create_watch_for_user
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
+from uuid import UUID
 
 import requests
 
 logger = setup_logger()
-
+subscription_service_dao = SubscriptionServiceDAO()
 
 async def google_login():
     """
@@ -47,7 +48,7 @@ async def google_callback(request: Request):
         logger.info(f"Authenticated Google user: {user_info}")
 
         # TODO recuperare la subscription_id che si sta gestendo
-        subscription_id = "TODO_SUBSCRIPTION_ID"
+        subscription_id = "104216c2-2086-4136-9b18-745c5e682ee4"    # HARDCODED PER ORA 
 
         # Salva le credenziali nel database
         email = user_info["email"]
@@ -55,17 +56,17 @@ async def google_callback(request: Request):
         refresh_token = credentials.refresh_token
         expiry = credentials.expiry
 
-        result = SubscriptionServiceDAO.save_google_credentials(email, subscription_id, access_token, refresh_token, expiry)
+        result = subscription_service_dao.save_google_credentials(email, subscription_id, access_token, refresh_token, expiry) # <-- err:TODO non sta salvando
         if result is False:
             logger.error("Errore nel salvataggio delle credenziali Google")
             raise HTTPException(status_code=500, detail="Errore nel salvataggio delle credenziali Google")
 
         # Crea la watch Gmail
-        response = create_watch_for_user(email)
+        response = create_watch_for_user(email) # err:TODO <-- se questo non lo commento va in errore
         
         # Salva history_id della watch Gmail
         history_id = response.get("historyId")
-        result = SubscriptionServiceDAO.update_history_id(email, history_id)
+        result = subscription_service_dao.update_history_id(email, history_id)
 
         token_data = {
             "email": user_info["email"],
