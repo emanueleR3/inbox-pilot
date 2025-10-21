@@ -69,6 +69,20 @@ services:
     env_file:
       - .env
 
+  api:
+    image: ghcr.io/correttoai/backend/api:latest
+    container_name: api
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "8000:8000"
+    networks:
+      - broker_net
+
 volumes:
   rabbitmq_data:
 
