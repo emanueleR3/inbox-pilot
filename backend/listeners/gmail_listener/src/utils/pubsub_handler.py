@@ -1,30 +1,36 @@
 import asyncio
+import json
 from src.gmail_fetcher import fetch_messages_for_user
-from src.broker_client import RabbitMQPublisher 
+# from src.broker_client import RabbitMQPublisher 
 
-publisher = RabbitMQPublisher()
+# publisher = RabbitMQPublisher()
 
 async def process_pubsub_message(data: dict):
     """
     Funzione async che riceve notifiche Pub/Sub
-    e fa fetch dei messaggi Gmail per l’utente
+    e fa fetch dei messaggi Gmail per l'utente
     """
     email = data.get("emailAddress")
     history_id = data.get("historyId")
 
     if not email or not history_id:
-        print("Messaggio Pub/Sub non valido:", data)
+        print("❌ Messaggio Pub/Sub non valido:", data)
         return
     
-    await publisher.connect()
+    print(f"🔔 NOTIFICA RICEVUTA per {email} - historyId: {history_id}")
+    
+    # Non connettiamo più a RabbitMQ in modalità test
+    # await publisher.connect()
 
     # Fetch async dei messaggi
     messages = await fetch_messages_for_user(email, history_id)
 
     # Se non ci sono messaggi, esci
     if not messages:
-        print(f"[{email}] Nessun messaggio nuovo da historyId {history_id}")
+        print(f"📭 [{email}] Nessun messaggio nuovo da historyId {history_id}")
         return
+
+    print(f"📧 [{email}] Trovati {len(messages)} nuovi messaggi!")
 
     # TODO
     # Salvare nel DB il messaggio ricevuto all'interno della tabella "threads"
@@ -35,13 +41,26 @@ async def process_pubsub_message(data: dict):
     # prendere in considerazione di scaricare gli allegati e caricarli su uno storage esterno (es. S3, GCS)
     # aggiungre nel json del messaggio il link all'allegato "url_attachment": "https://..."
 
-
-    # Itera sui messaggi e pubblicali
-    for msg in messages:
+    # Modalità TEST: stampiamo i messaggi invece di inviarli a RabbitMQ
+    for i, msg in enumerate(messages, 1):
         payload = _serialize_gmail_message(email, msg, history_id)
-        await publisher.publish_message(payload)
+        
+        print(f"\n📨 MESSAGGIO #{i} ricevuto:")
+        print("=" * 50)
+        print(f"📧 Da: {payload.get('from', 'N/A')}")
+        print(f"📧 A: {payload.get('to', 'N/A')}")
+        print(f"📧 Oggetto: {payload.get('subject', 'N/A')}")
+        print(f"📧 Thread ID: {payload.get('thread_id', 'N/A')}")
+        print(f"📧 Message ID: {payload.get('message_id', 'N/A')}")
+        print(f"📧 Snippet: {payload.get('snippet', 'N/A')}")
+        print(f"📧 Timestamp: {payload.get('timestamp', 'N/A')}")
+        print("\n🔍 PAYLOAD COMPLETO:")
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        print("=" * 50)
+        
+        # await publisher.publish_message(payload)  # Commentato per il test
 
-    print(f"[{email}] Fetched and published {len(messages)} messages from historyId {history_id}")
+    print(f"✅ [{email}] Processati {len(messages)} messaggi (MODALITÀ TEST - non inviati a RabbitMQ)")
 
 def _serialize_gmail_message(user_email: str, message: dict, history_id: str) -> dict:
     """
