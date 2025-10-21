@@ -48,7 +48,13 @@ async def google_callback(request: Request):
         logger.info(f"Authenticated Google user: {user_info}")
 
         # TODO recuperare la subscription_id che si sta gestendo
-        subscription_id = "104216c2-2086-4136-9b18-745c5e682ee4"    # HARDCODED PER ORA 
+        subscription_id = ""
+        if email == "dev1@example.com":
+            subscription_id = "104216c2-2086-4136-9b18-745c5e682ee4"    # HARDCODED PER ORA 
+        elif email == "dev3@example.com":
+            subscription_id = "05fd6e28-ba5a-44cf-9fe6-027f0f3b94a8"
+        elif email == "dev2@example.com":
+            subscription_id = "9a6f91f7-6ea6-466d-b091-9652a117fd34"
 
         # Salva le credenziali nel database
         email = user_info["email"]

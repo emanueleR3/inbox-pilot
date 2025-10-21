@@ -64,14 +64,28 @@ def _fetch_messages_sync(email: str, start_history_id: str):
                 msg_id = msg_record.get('message', {}).get('id') or msg_record.get('id')
                 if msg_id:
                     try:
-                        # Ottieni il messaggio completo con format=full per avere il body
-                        msg_data = service.users().messages().get(
-                            userId='me', 
-                            id=msg_id,
-                            format='full'
-                        ).execute()
+                        # Prima prova con format=full per avere il body completo
+                        try:
+                            msg_data = service.users().messages().get(
+                                userId='me', 
+                                id=msg_id,
+                                format='full'
+                            ).execute()
+                            print(f"✅ Recuperato messaggio ID: {msg_id} (formato FULL)")
+                        except Exception as full_error:
+                            # Se format=full fallisce per problemi di scope, usa format=metadata
+                            if "Metadata scope doesn't allow format FULL" in str(full_error):
+                                print(f"⚠️ Scope limitato, uso formato METADATA per messaggio {msg_id}")
+                                msg_data = service.users().messages().get(
+                                    userId='me', 
+                                    id=msg_id,
+                                    format='metadata'
+                                ).execute()
+                                print(f"✅ Recuperato messaggio ID: {msg_id} (formato METADATA)")
+                            else:
+                                raise full_error
+                        
                         messages.append(msg_data)
-                        print(f"✅ Recuperato messaggio ID: {msg_id}")
                     except Exception as e:
                         print(f"❌ Errore recupero messaggio {msg_id}: {e}")
 

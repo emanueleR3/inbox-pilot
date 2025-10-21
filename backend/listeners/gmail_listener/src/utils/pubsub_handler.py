@@ -76,9 +76,16 @@ async def process_pubsub_message(data: dict):
         print(f"📧 Message ID: {payload.get('message_id', 'N/A')}")
         print(f"📧 Labels: {', '.join(payload.get('labels', []))}")
         print(f"📧 Snippet: {payload.get('snippet', 'N/A')}")
-        print("\n� CORPO DEL MESSAGGIO:")
+        print("\n📄 CORPO DEL MESSAGGIO:")
         print("-" * 40)
         body = payload.get('body_text', 'N/A')
+        has_full_body = payload.get('has_full_body', False)
+        
+        if not has_full_body:
+            print("⚠️ SCOPE GMAIL LIMITATO - Solo metadata disponibili")
+            print("💡 Per il corpo completo, configura scope 'gmail.modify' o 'gmail.readonly' completo")
+            print()
+        
         # Mostra massimo 1000 caratteri per non intasare i log
         if len(body) > 1000:
             print(f"{body[:1000]}...")
@@ -103,6 +110,9 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     # Estrai il corpo del messaggio
     body_text = _extract_message_body(message.get("payload", {}))
     
+    # Controlla se siamo in modalità metadata-only
+    has_body = "parts" in message.get("payload", {}) or message.get("payload", {}).get("body", {}).get("data")
+    
     payload = {
         "provider": "gmail",
         "user_email": user_email,
@@ -119,6 +129,7 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "body_text": body_text,
         "timestamp": message.get("internalDate"),
         "labels": message.get("labelIds", []),
+        "has_full_body": has_body,  # Indica se abbiamo il corpo completo
         # eventuali placeholder per allegati
         "attachments": [],
     }
@@ -161,8 +172,8 @@ def _extract_message_body(payload: dict) -> str:
         except Exception as e:
             print(f"⚠️ Errore decodifica body semplice: {e}")
     
-    # Fallback: usa solo lo snippet
-    return "Corpo del messaggio non disponibile"
+    # Se non abbiamo il body (formato metadata), restituisci info
+    return "[Corpo non disponibile - scope Gmail limitato. Solo metadata accessibili.]"
 
 # ESEMPIO DI COME SCARICARE GLI ALLEGATI E CARICARLI SU STORAGE ESTERNO
 """
