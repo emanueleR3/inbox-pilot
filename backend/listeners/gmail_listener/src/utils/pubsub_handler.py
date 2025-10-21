@@ -19,7 +19,7 @@ async def process_pubsub_message(data: dict):
     
     print(f"🔔 NOTIFICA RICEVUTA per {email} - historyId: {history_id}")
     
-    # Non connettiamo più a RabbitMQ in modalità test
+    # Non connettiamo più a RabbitMQ in modalità test TODO
     # await publisher.connect()
 
     # Fetch async dei messaggi
@@ -46,19 +46,30 @@ async def process_pubsub_message(data: dict):
         payload = _serialize_gmail_message(email, msg, history_id)
         
         print(f"\n📨 MESSAGGIO #{i} ricevuto:")
-        print("=" * 50)
+        print("=" * 80)
         print(f"📧 Da: {payload.get('from', 'N/A')}")
         print(f"📧 A: {payload.get('to', 'N/A')}")
         print(f"📧 Oggetto: {payload.get('subject', 'N/A')}")
+        print(f"📧 Data: {payload.get('date', 'N/A')}")
         print(f"📧 Thread ID: {payload.get('thread_id', 'N/A')}")
         print(f"📧 Message ID: {payload.get('message_id', 'N/A')}")
+        print(f"📧 Labels: {', '.join(payload.get('labels', []))}")
         print(f"📧 Snippet: {payload.get('snippet', 'N/A')}")
-        print(f"📧 Timestamp: {payload.get('timestamp', 'N/A')}")
-        print("\n🔍 PAYLOAD COMPLETO:")
-        print(json.dumps(payload, indent=2, ensure_ascii=False))
-        print("=" * 50)
+        print("\n� CORPO DEL MESSAGGIO:")
+        print("-" * 40)
+        body = payload.get('body_text', 'N/A')
+        # Mostra massimo 1000 caratteri per non intasare i log
+        if len(body) > 1000:
+            print(f"{body[:1000]}...")
+            print(f"[... troncato - lunghezza totale: {len(body)} caratteri]")
+        else:
+            print(body)
+        print("-" * 40)
         
-        # await publisher.publish_message(payload)  # Commentato per il test
+        print(f"📧 Timestamp: {payload.get('timestamp', 'N/A')}")
+        print("=" * 80)
+        
+        # await publisher.publish_message(payload)  # Commentato per il test TODO
 
     print(f"✅ [{email}] Processati {len(messages)} messaggi (MODALITÀ TEST - non inviati a RabbitMQ)")
 
@@ -67,6 +78,10 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     Converte un messaggio Gmail API in un payload standard per il broker.
     """
     headers = {h["name"]: h["value"] for h in message.get("payload", {}).get("headers", [])}
+    
+    # Estrai il corpo del messaggio
+    body_text = _extract_message_body(message.get("payload", {}))
+    
     payload = {
         "provider": "gmail",
         "user_email": user_email,
@@ -76,12 +91,57 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "subject": headers.get("Subject"),
         "from": headers.get("From"),
         "to": headers.get("To"),
+        "cc": headers.get("Cc"),
+        "bcc": headers.get("Bcc"),
+        "date": headers.get("Date"),
         "snippet": message.get("snippet"),
+        "body_text": body_text,
         "timestamp": message.get("internalDate"),
+        "labels": message.get("labelIds", []),
         # eventuali placeholder per allegati
         "attachments": [],
     }
     return payload
+
+def _extract_message_body(payload: dict) -> str:
+    """
+    Estrae il corpo del messaggio dal payload Gmail.
+    """
+    import base64
+    
+    # Se il messaggio ha parts multiple (multipart)
+    if "parts" in payload:
+        for part in payload["parts"]:
+            # Cerca la parte text/plain
+            if part.get("mimeType") == "text/plain" and part.get("body", {}).get("data"):
+                try:
+                    body_data = part["body"]["data"]
+                    # Decodifica da base64url
+                    decoded = base64.urlsafe_b64decode(body_data + '==').decode('utf-8')
+                    return decoded
+                except Exception as e:
+                    print(f"⚠️ Errore decodifica body text/plain: {e}")
+            
+            # Se non trova text/plain, prova text/html
+            elif part.get("mimeType") == "text/html" and part.get("body", {}).get("data"):
+                try:
+                    body_data = part["body"]["data"]
+                    decoded = base64.urlsafe_b64decode(body_data + '==').decode('utf-8')
+                    return f"[HTML] {decoded[:500]}..."  # Tronca l'HTML
+                except Exception as e:
+                    print(f"⚠️ Errore decodifica body text/html: {e}")
+    
+    # Se il messaggio è semplice (non multipart)
+    elif payload.get("body", {}).get("data"):
+        try:
+            body_data = payload["body"]["data"]
+            decoded = base64.urlsafe_b64decode(body_data + '==').decode('utf-8')
+            return decoded
+        except Exception as e:
+            print(f"⚠️ Errore decodifica body semplice: {e}")
+    
+    # Fallback: usa solo lo snippet
+    return "Corpo del messaggio non disponibile"
 
 # ESEMPIO DI COME SCARICARE GLI ALLEGATI E CARICARLI SU STORAGE ESTERNO
 """

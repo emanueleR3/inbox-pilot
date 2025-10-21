@@ -18,27 +18,42 @@ def _fetch_messages_sync(email: str, start_history_id: str):
     
     messages = []
     try:
+        print(f"🔍 Richiesta Gmail API - startHistoryId: {start_history_id}")
+        
         response = service.users().history().list(
             userId='me',
             startHistoryId=start_history_id,
             historyTypes=['messageAdded']
         ).execute()
 
-        for history_record in response.get('history', []):
-            for msg in history_record.get('messages', []):
-                msg_data = service.users().messages().get(userId='me', id=msg['id']).execute()
-                messages.append(msg_data)
+        print(f"📊 Risposta Gmail API: {len(response.get('history', []))} record di history")
 
-        # Aggiorna lo historyId nel database
+        for history_record in response.get('history', []):
+            print(f"📝 History record: {len(history_record.get('messages', []))} messaggi")
+            for msg in history_record.get('messages', []):
+                # Ottieni il messaggio completo con format=full per avere il body
+                msg_data = service.users().messages().get(
+                    userId='me', 
+                    id=msg['id'],
+                    format='full'
+                ).execute()
+                messages.append(msg_data)
+                print(f"✅ Recuperato messaggio ID: {msg['id']}")
+
+        # Aggiorna lo historyId nel database SOLO se ci sono messaggi da processare
         new_history_id = response.get('historyId')
-        result = update_history_id(email, new_history_id)
-        if result is False:
-            log_error(f"Errore nell'aggiornamento dello historyId per {email}")
+        if messages:
+            result = update_history_id(email, new_history_id)
+            if result is False:
+                log_error(f"Errore nell'aggiornamento dello historyId per {email}")
+            else:
+                log_info(f"HistoryId aggiornato per {email} a {new_history_id}")
         else:
-            log_info(f"HistoryId aggiornato per {email} a {new_history_id}")
-        
+            print(f"📭 Nessun messaggio nuovo, historyId non aggiornato")
 
     except Exception as e:
-        print(f"Errore fetch Gmail per {email}: {e}")
+        print(f"❌ Errore fetch Gmail per {email}: {e}")
+        import traceback
+        traceback.print_exc()
 
     return messages
