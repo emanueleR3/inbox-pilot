@@ -19,6 +19,17 @@ async def process_pubsub_message(data: dict):
     
     print(f"🔔 NOTIFICA RICEVUTA per {email} - historyId: {history_id}")
     
+    # Debug: controlla l'historyId salvato nel database
+    try:
+        from src.db_client import get_user_credentials
+        user_creds = get_user_credentials(email)
+        saved_history_id = user_creds.get('history_id')
+        print(f"💾 HistoryId salvato nel DB: {saved_history_id}")
+        if saved_history_id and saved_history_id != history_id:
+            print(f"⚠️ ATTENZIONE: HistoryId della notifica ({history_id}) diverso da quello del DB ({saved_history_id})")
+    except Exception as e:
+        print(f"⚠️ Errore verifica historyId DB: {e}")
+    
     # Non connettiamo più a RabbitMQ in modalità test TODO
     # await publisher.connect()
 

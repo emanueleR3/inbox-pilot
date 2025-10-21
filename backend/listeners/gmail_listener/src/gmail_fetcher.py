@@ -20,36 +20,78 @@ def _fetch_messages_sync(email: str, start_history_id: str):
     try:
         print(f"🔍 Richiesta Gmail API - startHistoryId: {start_history_id}")
         
+        # Prima verifica: ottieni l'historyId corrente della mailbox
+        try:
+            profile = service.users().getProfile(userId='me').execute()
+            current_history_id = profile.get('historyId')
+            print(f"📮 HistoryId corrente mailbox: {current_history_id}")
+            print(f"📊 Differenza: {int(current_history_id) - int(start_history_id) if current_history_id and start_history_id else 'N/A'}")
+        except Exception as e:
+            print(f"⚠️ Errore ottenimento profile: {e}")
+        
+        # Proviamo con tutti i tipi di history per debugging
         response = service.users().history().list(
             userId='me',
             startHistoryId=start_history_id,
-            historyTypes=['messageAdded']
+            # Temporaneamente rimuoviamo il filtro per vedere tutti gli eventi
+            # historyTypes=['messageAdded']
         ).execute()
 
         print(f"📊 Risposta Gmail API: {len(response.get('history', []))} record di history")
+        
+        # Debug: mostra tutti gli eventi history per capire cosa succede
+        for i, history_record in enumerate(response.get('history', []), 1):
+            print(f"📝 History record #{i}:")
+            if 'messages' in history_record:
+                print(f"   📧 {len(history_record['messages'])} messaggi")
+            if 'messagesAdded' in history_record:
+                print(f"   ➕ {len(history_record['messagesAdded'])} messaggi aggiunti")
+            if 'messagesDeleted' in history_record:
+                print(f"   ➖ {len(history_record['messagesDeleted'])} messaggi eliminati")
+            if 'labelsAdded' in history_record:
+                print(f"   🏷️➕ {len(history_record['labelsAdded'])} labels aggiunte")
+            if 'labelsRemoved' in history_record:
+                print(f"   🏷️➖ {len(history_record['labelsRemoved'])} labels rimosse")
 
+        # Processa i messaggi aggiunti
         for history_record in response.get('history', []):
-            print(f"📝 History record: {len(history_record.get('messages', []))} messaggi")
-            for msg in history_record.get('messages', []):
-                # Ottieni il messaggio completo con format=full per avere il body
-                msg_data = service.users().messages().get(
-                    userId='me', 
-                    id=msg['id'],
-                    format='full'
-                ).execute()
-                messages.append(msg_data)
-                print(f"✅ Recuperato messaggio ID: {msg['id']}")
+            # Cerca in messagesAdded (più preciso) o fallback su messages
+            added_messages = history_record.get('messagesAdded', [])
+            if not added_messages:
+                added_messages = history_record.get('messages', [])
+                
+            for msg_record in added_messages:
+                msg_id = msg_record.get('message', {}).get('id') or msg_record.get('id')
+                if msg_id:
+                    try:
+                        # Ottieni il messaggio completo con format=full per avere il body
+                        msg_data = service.users().messages().get(
+                            userId='me', 
+                            id=msg_id,
+                            format='full'
+                        ).execute()
+                        messages.append(msg_data)
+                        print(f"✅ Recuperato messaggio ID: {msg_id}")
+                    except Exception as e:
+                        print(f"❌ Errore recupero messaggio {msg_id}: {e}")
 
-        # Aggiorna lo historyId nel database SOLO se ci sono messaggi da processare
+        # Aggiorna SEMPRE l'historyId al valore corrente della risposta
         new_history_id = response.get('historyId')
-        if messages:
+        if new_history_id:
             result = update_history_id(email, new_history_id)
             if result is False:
                 log_error(f"Errore nell'aggiornamento dello historyId per {email}")
             else:
-                log_info(f"HistoryId aggiornato per {email} a {new_history_id}")
+                log_info(f"HistoryId aggiornato per {email} da {start_history_id} a {new_history_id}")
+                
+            # Se non abbiamo trovato messaggi ma l'historyId è cambiato molto,
+            # potrebbe esserci una desincronizzazione
+            if not messages and new_history_id != start_history_id:
+                id_diff = int(new_history_id) - int(start_history_id) if new_history_id.isdigit() and start_history_id.isdigit() else 0
+                if id_diff > 100:  # Se la differenza è significativa
+                    print(f"🔄 Possibile desincronizzazione rilevata (diff: {id_diff}). HistoryId sincronizzato automaticamente.")
         else:
-            print(f"📭 Nessun messaggio nuovo, historyId non aggiornato")
+            print(f"⚠️ Nessun historyId nella risposta API")
 
     except Exception as e:
         print(f"❌ Errore fetch Gmail per {email}: {e}")

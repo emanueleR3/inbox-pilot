@@ -154,3 +154,34 @@ def update_history_id(email: str, history_id: str) -> bool:
     except Exception as e:
         print(f"Errore nell'aggiornamento dell'history_id per {email}: {str(e)}")
         return False
+
+def get_current_gmail_history_id(email: str):
+    """
+    Ottiene l'historyId corrente direttamente da Gmail API.
+    Utile per sincronizzare quando ci sono problemi.
+    """
+    try:
+        from src.utils.gmail_api_client import get_service_for_user
+        service = get_service_for_user(email)
+        profile = service.users().getProfile(userId='me').execute()
+        return profile.get('historyId')
+    except Exception as e:
+        print(f"Errore ottenimento historyId corrente per {email}: {e}")
+        return None
+
+def sync_history_id_with_gmail(email: str) -> bool:
+    """
+    Sincronizza l'historyId del database con quello corrente di Gmail.
+    Utile quando ci sono desincronizzazioni.
+    """
+    try:
+        current_history_id = get_current_gmail_history_id(email)
+        if current_history_id:
+            result = update_history_id(email, current_history_id)
+            if result:
+                print(f"🔄 HistoryId sincronizzato per {email}: {current_history_id}")
+                return True
+        return False
+    except Exception as e:
+        print(f"Errore sincronizzazione historyId per {email}: {e}")
+        return False
