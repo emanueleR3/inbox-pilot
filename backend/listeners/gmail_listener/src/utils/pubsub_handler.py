@@ -20,21 +20,31 @@ async def process_pubsub_message(data: dict):
     print(f"🔔 NOTIFICA RICEVUTA per {email} - historyId: {history_id}")
     
     # Debug: controlla l'historyId salvato nel database
+    start_history_id = history_id  # Default: usa quello della notifica
     try:
         from src.db_client import get_user_credentials
         user_creds = get_user_credentials(email)
         saved_history_id = user_creds.get('history_id')
         print(f"💾 HistoryId salvato nel DB: {saved_history_id}")
-        if saved_history_id and saved_history_id != history_id:
-            print(f"⚠️ ATTENZIONE: HistoryId della notifica ({history_id}) diverso da quello del DB ({saved_history_id})")
+        
+        if saved_history_id:
+            if str(saved_history_id) != str(history_id):
+                print(f"⚠️ ATTENZIONE: HistoryId della notifica ({history_id}) diverso da quello del DB ({saved_history_id})")
+                print(f"🔧 Userò l'historyId del DB ({saved_history_id}) come punto di partenza")
+                start_history_id = saved_history_id
+            else:
+                print(f"✅ HistoryId notifica e DB sono sincronizzati")
+        else:
+            print(f"⚠️ Nessun historyId salvato nel DB, uso quello della notifica")
+            
     except Exception as e:
         print(f"⚠️ Errore verifica historyId DB: {e}")
     
     # Non connettiamo più a RabbitMQ in modalità test TODO
     # await publisher.connect()
 
-    # Fetch async dei messaggi
-    messages = await fetch_messages_for_user(email, history_id)
+    # Fetch async dei messaggi usando l'historyId corretto
+    messages = await fetch_messages_for_user(email, start_history_id)
 
     # Se non ci sono messaggi, esci
     if not messages:

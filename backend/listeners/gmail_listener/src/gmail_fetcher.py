@@ -86,10 +86,18 @@ def _fetch_messages_sync(email: str, start_history_id: str):
                 
             # Se non abbiamo trovato messaggi ma l'historyId è cambiato molto,
             # potrebbe esserci una desincronizzazione
-            if not messages and new_history_id != start_history_id:
-                id_diff = int(new_history_id) - int(start_history_id) if new_history_id.isdigit() and start_history_id.isdigit() else 0
-                if id_diff > 100:  # Se la differenza è significativa
-                    print(f"🔄 Possibile desincronizzazione rilevata (diff: {id_diff}). HistoryId sincronizzato automaticamente.")
+            if not messages and str(new_history_id) != str(start_history_id):
+                try:
+                    # Converti entrambi a stringa per il controllo isdigit()
+                    new_id_str = str(new_history_id)
+                    start_id_str = str(start_history_id)
+                    
+                    if new_id_str.isdigit() and start_id_str.isdigit():
+                        id_diff = int(new_id_str) - int(start_id_str)
+                        if id_diff > 100:  # Se la differenza è significativa
+                            print(f"🔄 Possibile desincronizzazione rilevata (diff: {id_diff}). HistoryId sincronizzato automaticamente.")
+                except Exception as e:
+                    print(f"⚠️ Errore calcolo differenza historyId: {e}")
         else:
             print(f"⚠️ Nessun historyId nella risposta API")
 
