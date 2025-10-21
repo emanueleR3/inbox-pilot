@@ -13,21 +13,6 @@ SUBSCRIPTION_PATH = os.getenv("GOOGLE_PUBSUB_SUBSCRIPTION_PATH")
 GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or \
                           os.getenv("GOOGLE_CLOUD_CREDENTIALS") or \
                           os.getenv("GOOGLE_CREDENTIALS_PATH")
-
-async def callback(message):
-    """
-    Callback async chiamata per ogni messaggio Pub/Sub
-    """
-    try:
-        data = json.loads(message.data)
-        asyncio.create_task(process_pubsub_message(data))
-
-        message.ack()
-    except Exception as e:
-        print(f"Errore callback Pub/Sub: {e}")
-        message.nack()
-
-
 async def main():
     # Initialize Pub/Sub client with service account credentials
     if GOOGLE_CREDENTIALS_PATH:
@@ -44,12 +29,29 @@ async def main():
         print("Warning: Using default credentials. Set GOOGLE_APPLICATION_CREDENTIALS to a mounted service account file for production.")
         subscriber = pubsub_v1.SubscriberClient()
 
+    # Get the running event loop
+    loop = asyncio.get_running_loop()
+
+    # Pub/Sub requires a synchronous callback; schedule async processing on the loop
+    def callback(message):
+        """
+        Callback sincrona chiamata per ogni messaggio Pub/Sub. Pianifica l'elaborazione async.
+        """
+        try:
+            data = json.loads(message.data)
+            # Schedule the coroutine on the main loop in a thread-safe way
+            loop.call_soon_threadsafe(asyncio.create_task, process_pubsub_message(data))
+            message.ack()
+        except Exception as e:
+            print(f"Errore callback Pub/Sub: {e}")
+            message.nack()
+
     streaming_pull_future = subscriber.subscribe(SUBSCRIPTION_PATH, callback=callback)
-    print(f"G📧 Listening for messages on {SUBSCRIPTION_PATH}...")
+    print(f"### GOOGLE 📧 Listening for messages on {SUBSCRIPTION_PATH}...")
 
     # Mantieni vivo il listener
     try:
-        await asyncio.get_event_loop().run_in_executor(None, streaming_pull_future.result)
+        await loop.run_in_executor(None, streaming_pull_future.result)
     except KeyboardInterrupt:
         streaming_pull_future.cancel()
 
