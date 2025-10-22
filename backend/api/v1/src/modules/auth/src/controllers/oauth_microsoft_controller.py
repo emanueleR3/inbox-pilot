@@ -84,6 +84,8 @@ async def microsoft_callback(request: Request):
             subscription_id = "05fd6e28-ba5a-44cf-9fe6-027f0f3b94a8"
         elif email == "dev2@example.com":
             subscription_id = "9a6f91f7-6ea6-466d-b091-9652a117fd34"
+        elif email == "contact.outlook@example.com":
+            subscription_id = "8bb90df3-d906-46cd-935d-3a377da546a6"
         else:
             logger.warning(f"No subscription_id configured for email: {email}")
             raise HTTPException(status_code=400, detail="Email non autorizzato")
