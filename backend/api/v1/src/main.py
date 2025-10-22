@@ -1,6 +1,6 @@
-# api/v1/src/main.py
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
 import uvicorn
 
 from src.core.config import settings
@@ -13,6 +13,8 @@ from src.modules.subscription_service.src.routes import router as subscription_s
 
 logger = setup_logger()
 app = FastAPI(title="AI Mail Automation API", version="1.0.0")
+
+app.add_middleware(ProxyHeadersMiddleware)
 
 # Middleware per Content Security Policy
 @app.middleware("http")
