@@ -12,8 +12,25 @@ REDIRECT_URI = os.getenv("MICROSOFT_REDIRECT_URI")
 AUTHORITY = os.getenv("MICROSOFT_AUTHORITY")
 AUTH_URL = os.getenv("MICROSOFT_AUTH_URL")
 TOKEN_URL = os.getenv("MICROSOFT_TOKEN_URL")
-SCOPES = os.getenv("MICROSOFT_SCOPES")
-#SCOPES = os.getenv("MICROSOFT_SCOPES").split(" ")
+SCOPES_STRING = os.getenv("MICROSOFT_SCOPES", "")
+# Converti la stringa degli scope in una lista
+if SCOPES_STRING:
+    SCOPES = SCOPES_STRING.split(" ")
+else:
+    # Scope di default per Microsoft Graph
+    SCOPES = [
+        #"https://graph.microsoft.com/Mail.Read",
+        #"https://graph.microsoft.com/Mail.Send", 
+        #"https://graph.microsoft.com/User.Read",
+        "openid",
+        "profile", 
+        "email", 
+        "offline_access",
+        "User.Read",
+        "Mail.Send",
+        "Mail.ReadWrite",
+        "Calendars.ReadWrite"
+    ]
 
 def get_auth_url(state: str):
     params = {
@@ -58,5 +75,14 @@ def create_microsoft_auth_url():
     Restituisce l'URL di login Microsoft pronto per il redirect.
     Genera uno state casuale per protezione CSRF.
     """
+    from src.core.logger import setup_logger
+    logger = setup_logger()
+    
     state = secrets.token_urlsafe(16)  # genera uno state sicuro
-    return get_auth_url(state)
+    auth_url = get_auth_url(state)
+    
+    # Log per debug
+    logger.info(f"Microsoft scopes: {SCOPES}")
+    logger.info(f"Microsoft auth URL: {auth_url}")
+    
+    return auth_url

@@ -29,9 +29,25 @@ async def microsoft_callback(request: Request):
     Gestisce il callback dopo il login Microsoft.
     """
     try:
+        # Log completo della richiesta per debug
+        logger.info(f"Microsoft callback URL: {request.url}")
+        logger.info(f"Query params: {dict(request.query_params)}")
+        
+        # Controlla se c'è un errore da Microsoft
+        error = request.query_params.get("error")
+        error_description = request.query_params.get("error_description")
+        
+        if error:
+            logger.error(f"Microsoft OAuth error: {error}")
+            logger.error(f"Error description: {error_description}")
+            raise HTTPException(status_code=400, detail=f"Microsoft OAuth error: {error} - {error_description}")
+        
         code = request.query_params.get("code")
         if not code:
+            logger.error("No authorization code in callback")
             raise HTTPException(status_code=400, detail="Missing authorization code")
+
+        logger.info(f"Authorization code received: {code[:20]}...")
 
         # 1️⃣ Scambio del codice con i token
         tokens = await exchange_code_for_tokens(code)
@@ -61,7 +77,16 @@ async def microsoft_callback(request: Request):
         logger.info(f"Microsoft subscription created for {email}: {subscription.get('id')}")
 
         #TODO recuperare la subscription_id che si sta gestendo
-        subscription_id = "TODO_SUBSCRIPTION_ID"
+        subscription_id = ""
+        if email == "dev1@example.com":
+            subscription_id = "104216c2-2086-4136-9b18-745c5e682ee4"    # HARDCODED PER ORA 
+        elif email == "dev3@example.com":
+            subscription_id = "05fd6e28-ba5a-44cf-9fe6-027f0f3b94a8"
+        elif email == "dev2@example.com":
+            subscription_id = "9a6f91f7-6ea6-466d-b091-9652a117fd34"
+        else:
+            logger.warning(f"No subscription_id configured for email: {email}")
+            raise HTTPException(status_code=400, detail="Email non autorizzato")
 
         result = SubscriptionServiceDAO.save_microsoft_credentials(
             email, 
