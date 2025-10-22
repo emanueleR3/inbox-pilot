@@ -35,7 +35,16 @@ async def google_callback(request: Request):
     try:
         state = request.cookies.get("oauth_state")
         flow = create_google_flow()
-        flow.fetch_token(authorization_response=str(request.url))
+        
+        # Costruisci l'URL di callback con lo scheme HTTPS per il reverse proxy
+        callback_url = str(request.url)
+        if callback_url.startswith("http://") and "X-Forwarded-Proto" in request.headers:
+            callback_url = callback_url.replace("http://", "https://", 1)
+        
+        logger.info(f"Processing Google callback with URL: {callback_url}")
+        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Request scheme: {request.url.scheme}")
+        flow.fetch_token(authorization_response=callback_url)
 
         credentials = flow.credentials
 

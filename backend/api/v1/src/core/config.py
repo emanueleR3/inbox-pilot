@@ -7,7 +7,7 @@ load_dotenv()  # Carica le variabili d'ambiente dal file .env
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Corretto MVP2"
-    ENV: str = "development"
+    ENV: str = os.getenv("ENV", "development")
     PORT: int = 8000
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET")

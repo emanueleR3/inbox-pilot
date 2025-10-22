@@ -25,6 +25,9 @@ async def forwarded_proto_scheme(request: Request, call_next):
     x_forwarded_proto = request.headers.get("x-forwarded-proto")
     if x_forwarded_proto == "https":
         request.scope["scheme"] = "https"
+        # Imposta anche l'header per la port se necessario
+        if "host" in request.scope and ":8000" not in request.scope["host"]:
+            request.scope["server"] = (request.scope["server"][0], 443)
     return await call_next(request)
 
 # Middleware per Content Security Policy

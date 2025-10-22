@@ -42,6 +42,13 @@ def create_google_flow():
     )
 
     flow.redirect_uri = settings.GOOGLE_REDIRECT_URI
+    
+    # Disabilita il controllo HTTPS quando si è dietro un reverse proxy (produzione)
+    # Questo è necessario perché nginx termina SSL e inoltra richieste HTTP a FastAPI
+    env = os.getenv("ENV", "development")
+    if env == "production":
+        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+    
     return flow
 
     '''
