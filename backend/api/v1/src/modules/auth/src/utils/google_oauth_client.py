@@ -5,6 +5,9 @@ import os
 
 load_dotenv()
 
+# Imposta sempre per risolvere il problema del reverse proxy
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
 def create_google_flow():
     """
     Crea un flusso OAuth2 per Google.
@@ -46,8 +49,16 @@ def create_google_flow():
     # Disabilita il controllo HTTPS quando si è dietro un reverse proxy (produzione)
     # Questo è necessario perché nginx termina SSL e inoltra richieste HTTP a FastAPI
     env = os.getenv("ENV", "development")
-    if env == "production":
-        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+    
+    # Per ora impostiamo sempre per risolvere il problema del reverse proxy
+    # TODO: rimuovere in development quando non necessario
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+    
+    # Log per debug
+    from src.core.logger import setup_logger
+    logger = setup_logger()
+    logger.info(f"Environment: {env}")
+    logger.info(f"OAUTHLIB_INSECURE_TRANSPORT set to: {os.environ.get('OAUTHLIB_INSECURE_TRANSPORT')}")
     
     return flow
 

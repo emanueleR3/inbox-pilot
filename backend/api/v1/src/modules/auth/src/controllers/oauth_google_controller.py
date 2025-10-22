@@ -5,8 +5,12 @@ from src.core.logger import setup_logger
 from src.modules.google.src.controllers.gmail_watch_controller import create_watch_for_user
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 from uuid import UUID
+import os
 
 import requests
+
+# Assicurati che la variabile sia impostata anche qui
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 logger = setup_logger()
 subscription_service_dao = SubscriptionServiceDAO()
@@ -33,6 +37,10 @@ async def google_callback(request: Request):
     Gestisce il callback dopo il login Google.
     """
     try:
+        # Assicurati che la variabile sia impostata prima di qualsiasi operazione OAuth
+        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+        logger.info(f"OAUTHLIB_INSECURE_TRANSPORT at callback start: {os.environ.get('OAUTHLIB_INSECURE_TRANSPORT')}")
+        
         state = request.cookies.get("oauth_state")
         flow = create_google_flow()
         
@@ -44,6 +52,8 @@ async def google_callback(request: Request):
         logger.info(f"Processing Google callback with URL: {callback_url}")
         logger.info(f"Request headers: {dict(request.headers)}")
         logger.info(f"Request scheme: {request.url.scheme}")
+        logger.info(f"OAUTHLIB_INSECURE_TRANSPORT before fetch_token: {os.environ.get('OAUTHLIB_INSECURE_TRANSPORT')}")
+        
         flow.fetch_token(authorization_response=callback_url)
 
         credentials = flow.credentials
