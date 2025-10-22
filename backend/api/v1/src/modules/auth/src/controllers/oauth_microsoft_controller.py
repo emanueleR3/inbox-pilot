@@ -13,6 +13,7 @@ from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 import httpx
 
 logger = setup_logger()
+subscription_service_dao = SubscriptionServiceDAO()
 
 
 async def microsoft_login():
@@ -90,7 +91,7 @@ async def microsoft_callback(request: Request):
             logger.warning(f"No subscription_id configured for email: {email}")
             raise HTTPException(status_code=400, detail="Email non autorizzato")
 
-        result = SubscriptionServiceDAO.save_microsoft_credentials(
+        result = subscription_service_dao.save_microsoft_credentials(
             email, 
             subscription_id,
             access_token,
