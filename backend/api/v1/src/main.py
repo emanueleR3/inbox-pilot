@@ -19,18 +19,17 @@ app = FastAPI(title="AI Mail Automation API", version="1.0.0")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     
-    # CSP permissiva per OAuth endpoints
+    # Disabilita completamente CSP per OAuth endpoints (test temporaneo)
     if request.url.path.startswith("/auth/"):
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://login.microsoftonline.com https://graph.microsoft.com; "
-            "form-action 'self' https://accounts.google.com https://login.microsoftonline.com; "
-            "frame-ancestors 'none'; "
-            "base-uri 'self' https://accounts.google.com https://login.microsoftonline.com"
-        )
-        logger.info(f"Applied OAuth CSP for path: {request.url.path}")
+        # Rimuovi qualsiasi CSP esistente per OAuth
+        response.headers.pop("Content-Security-Policy", None)
+        response.headers.pop("Content-Security-Policy-Report-Only", None)
+        
+        # Aggiungi header di debug
+        response.headers["X-Debug-Path"] = request.url.path
+        response.headers["X-Debug-CSP"] = "disabled"
+        
+        logger.info(f"Disabled CSP for OAuth endpoint: {request.url.path}")
     else:
         # CSP normale per altre route
         response.headers["Content-Security-Policy"] = (
@@ -41,6 +40,7 @@ async def add_security_headers(request: Request, call_next):
             "frame-ancestors 'none'; "
             "base-uri 'self'"
         )
+        response.headers["X-Debug-CSP"] = "enabled"
     
     return response
 
