@@ -8,6 +8,8 @@ from src.utils.pubsub_handler import process_pubsub_message
 
 load_dotenv()
 
+# TODO quando leggo una mail forse devo aggiornare lo historyId nel DB?
+
 SUBSCRIPTION_PATH = os.getenv("GOOGLE_PUBSUB_SUBSCRIPTION_PATH")
 # Allow overriding via GOOGLE_CREDENTIALS_JSON as well, but prefer file path if provided
 GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or \

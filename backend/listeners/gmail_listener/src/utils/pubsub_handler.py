@@ -45,21 +45,40 @@ async def process_pubsub_message(data: dict):
 
     print(f"📧 [{email}] Trovati {len(messages)} nuovi messaggi!")
 
-    # TODO
-    # Salvare nel DB il messaggio ricevuto all'interno della tabella "threads"
-    # Vedere tutta la logica per controllare se la mail sta rispondendo a un thread esistente
-    # Vedere se sono presenti allegati e salvare il message id nel record del DB
-
-    # TODO (per scalabilità)
-    # prendere in considerazione di scaricare gli allegati e caricarli su uno storage esterno (es. S3, GCS)
-    # aggiungre nel json del messaggio il link all'allegato "url_attachment": "https://..."
-
-    # Modalità TEST: stampiamo i messaggi invece di inviarli a RabbitMQ
-    for i, msg in enumerate(messages, 1):
+    # Filtra i messaggi per escludere quelli inviati dalla stessa email
+    filtered_messages = []
+    for msg in messages:
         payload = _serialize_gmail_message(email, msg, history_id)
+        sender_email = _extract_email_from_header(payload.get('from', ''))
+        labels = payload.get('labels', [])
+        
+        # Se il mittente è la stessa email dell'account, salta questo messaggio
+        if sender_email and sender_email.lower() == email.lower():
+            print(f"🚫 Messaggio saltato - inviato dalla stessa email ({sender_email}): {payload.get('subject', 'N/A')}")
+            continue
+        
+        # Salta anche i messaggi con label SENT (email inviate)
+        if 'SENT' in labels:
+            print(f"🚫 Messaggio saltato - ha label SENT: {payload.get('subject', 'N/A')}")
+            continue
+            
+        # Salta i messaggi con label DRAFT (bozze)
+        if 'DRAFT' in labels:
+            print(f"🚫 Messaggio saltato - ha label DRAFT: {payload.get('subject', 'N/A')}")
+            continue
+            
+        filtered_messages.append(payload)
+
+    # Se non ci sono messaggi da processare dopo il filtro
+    if not filtered_messages:
+        print(f"📭 [{email}] Nessun messaggio da processare dopo il filtro (tutti erano dalla stessa email)")
+        return
+
+    # Invia solo i messaggi filtrati a RabbitMQ
+    for payload in filtered_messages:
         await publisher.publish_message(payload)
 
-    print(f"✅ [{email}] Processati {len(messages)} messaggi → inviati a RabbitMQ")
+    print(f"✅ [{email}] Processati {len(filtered_messages)}/{len(messages)} messaggi → inviati a RabbitMQ (saltati {len(messages) - len(filtered_messages)} messaggi dalla stessa email)")
 
 def _serialize_gmail_message(user_email: str, message: dict, history_id: str) -> dict:
     """
@@ -89,6 +108,24 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "attachments": [],
     }
     return payload
+
+def _extract_email_from_header(from_header: str) -> str:
+    """
+    Estrae l'indirizzo email dall'header 'From'.
+    Esempi:
+    - "Emanuele Romano <dev1@example.com>" -> "dev1@example.com"
+    - "dev1@example.com" -> "dev1@example.com"
+    """
+    if not from_header:
+        return ""
+    
+    import re
+    # Regex per estrarre l'email tra < > o l'email diretta
+    email_match = re.search(r'<([^>]+)>|([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', from_header)
+    if email_match:
+        return email_match.group(1) or email_match.group(2)
+    
+    return ""
 
 def _extract_message_body(payload: dict) -> str:
     """
