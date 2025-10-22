@@ -2,3 +2,4 @@ aio-pika
 python-dotenv
 requests
 asyncio
+aiohttp

@@ -5,7 +5,8 @@ from src.token_refresher import refresh_google_tokens
 
 load_dotenv()
 
-REFRESH_INTERVAL_MINUTES = os.getenv("REFRESH_INTERVAL_MINUTES_TOKENS", 15)
+# Ensure numeric interval (env vars are strings)
+REFRESH_INTERVAL_MINUTES = int(os.getenv("REFRESH_INTERVAL_MINUTES_TOKENS", 15))
 
 async def main():
     while True:

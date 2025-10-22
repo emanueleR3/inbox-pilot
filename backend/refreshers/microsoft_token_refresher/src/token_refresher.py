@@ -12,7 +12,7 @@ async def refresh_microsoft_tokens():
             new_refresh_token = refreshed.get("refresh_token")  # Microsoft può ruotarlo
 
             await update_user_tokens(
-                token["user_id"],
+                token["email"],
                 access_token,
                 expires_in,
                 new_refresh_token

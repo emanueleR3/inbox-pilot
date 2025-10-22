@@ -1,5 +1,8 @@
 import asyncio
 from src.utils.gmail_api_client import get_service_for_user
+from src.db_client import update_history_id
+from src.utils.logger import log_error, log_info
+
 
 async def fetch_messages_for_user(email: str, start_history_id: str):
     """
@@ -15,22 +18,40 @@ def _fetch_messages_sync(email: str, start_history_id: str):
     
     messages = []
     try:
+        # Recupera i messaggi dalla history Gmail
         response = service.users().history().list(
             userId='me',
             startHistoryId=start_history_id,
             historyTypes=['messageAdded']
         ).execute()
 
+        # Processa i messaggi aggiunti
         for history_record in response.get('history', []):
-            for msg in history_record.get('messages', []):
-                msg_data = service.users().messages().get(userId='me', id=msg['id']).execute()
-                messages.append(msg_data)
+            added_messages = history_record.get('messagesAdded', [])
+                
+            for msg_record in added_messages:
+                msg_id = msg_record.get('message', {}).get('id')
+                if msg_id:
+                    try:
+                        msg_data = service.users().messages().get(
+                            userId='me', 
+                            id=msg_id,
+                            format='full'
+                        ).execute()
+                        messages.append(msg_data)
+                    except Exception as e:
+                        log_error(f"Errore recupero messaggio {msg_id}: {e}")
 
-        # TODO
-        # Aggiorna historyId nel DB con l’ultimo
+        # Aggiorna l'historyId al valore corrente della risposta
         new_history_id = response.get('historyId')
+        if new_history_id:
+            result = update_history_id(email, new_history_id)
+            if result is False:
+                log_error(f"Errore nell'aggiornamento dello historyId per {email}")
+            else:
+                log_info(f"HistoryId aggiornato per {email} da {start_history_id} a {new_history_id}")
 
     except Exception as e:
-        print(f"Errore fetch Gmail per {email}: {e}")
+        log_error(f"Errore fetch Gmail per {email}: {e}")
 
     return messages

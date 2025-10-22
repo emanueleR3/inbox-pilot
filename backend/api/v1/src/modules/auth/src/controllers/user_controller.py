@@ -4,33 +4,38 @@ class UserController:
     def __init__(self):
         self.user_dao = UserDAO()
 
-    def create_user_with_subscription(self, email: str, password: str, subscription):
-        if not isinstance(subscription, dict):
-            if hasattr(subscription, "model_dump"):
-                subscription_data = subscription.model_dump()
-            else:
-                subscription_data = subscription.dict()
-        else:
-            subscription_data = subscription
+    def create_user_with_sub(self, payload: dict):
+        email = payload.get("email")
+        password = payload.get("password")
+        subscription_data = payload.get("subscription")
 
-        return self.user_dao.create_user_with_subscription(email, password, subscription_data)
+        return self.user_dao.create_user_with_sub(email, password, subscription_data)
 
-    def login_user(self, email: str, password: str):
+    def login_user(self, payload: dict):
+        email = payload.get("email")
+        password = payload.get("password")
+        
         return self.user_dao.login_with_password(email, password)
     
     def get_user_by_email(self, email: str):
         return self.user_dao.get_user_by_email(email)
 
-    def send_magic_link(self, email: str):
+    def send_magic_link(self, payload: dict):
+        email = payload.get("email")
+
         return self.user_dao.login_with_magic_link(email)
 
     def delete_account(self, user_id: str):
         return self.user_dao.delete_user(user_id)
 
-    def reset_password(self, email: str):
+    def reset_password(self, payload: dict):
+        email = payload.get("email")
+
         return self.user_dao.send_password_reset(email)
     
-    def update_password(self, new_password: str):
+    def update_password(self, payload: dict):
+        new_password = payload.get("new_password")
+
         return self.user_dao.update_password(new_password)
     
     def logout(self):

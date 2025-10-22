@@ -1,0 +1,23 @@
+# Shared dependencies for all listeners
+python-dotenv
+asyncio
+requests
+httpx
+uvicorn
+fastapi
+aio-pika
+supabase
+postgrest
+cryptography
+
+# Gmail listener specific
+google-cloud-pubsub
+google-auth
+google-auth-oauthlib
+google-api-python-client
+
+# IMAP poller specific
+aiofiles
+
+# Microsoft listener specific
+msal

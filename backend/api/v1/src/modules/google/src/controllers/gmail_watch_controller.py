@@ -1,18 +1,19 @@
 from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
 from src.core.config import settings
-from src.modules.auth.src.utils.google_oauth_client import get_credentials_for_user
+from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
+
+subscription_service_dao = SubscriptionServiceDAO()
 
 #def create_watch_for_user(user_email: str):
 # TODO DEBUG eliminare ########################### usare la firma di sopra
-def create_watch_for_user(user_email: str, access_token: str, refresh_token: str, expiry):
+def create_watch_for_user(user_email: str):
     """
     Attiva watch Gmail per un utente
     """
-    #credentials = get_credentials_for_user(user_email)
+    credentials = subscription_service_dao.get_google_credentials(user_email)
 
     # TODO DEBUG eliminare ###########################
-    # Crea un oggetto Credentials corretto invece di un dizionario
+    '''
     credentials = Credentials(
         token=access_token,
         refresh_token=refresh_token,
@@ -23,7 +24,7 @@ def create_watch_for_user(user_email: str, access_token: str, refresh_token: str
             "https://www.googleapis.com/auth/gmail.modify",
             "https://www.googleapis.com/auth/gmail.readonly",
             "https://www.googleapis.com/auth/gmail.send",
-            "https://www.googleapis.com/auth/gmail.metadata",
+            #"https://www.googleapis.com/auth/gmail.metadata",
             "https://www.googleapis.com/auth/calendar",
             "https://www.googleapis.com/auth/calendar.events",
             "https://www.googleapis.com/auth/calendar.readonly",
@@ -32,11 +33,12 @@ def create_watch_for_user(user_email: str, access_token: str, refresh_token: str
             "openid"
         ]
     )
+    '''
     # ###############################################
 
+    # TODO controllare se le credenziali sono valide come tipo di dato Credentials wrapped
     service = build("gmail", "v1", credentials=credentials)
 
-    # TODO controllare 
     request = {
         "labelIds": ["INBOX"],
         "topicName": settings.PUBSUB_TOPIC_PATH

@@ -7,3 +7,6 @@ httpx
 asyncio
 requests
 aio-pika
+supabase
+postgrest
+cryptography

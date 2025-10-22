@@ -10,7 +10,7 @@ async def refresh_google_tokens():
             access_token = refreshed["access_token"]
             expires_in = refreshed.get("expires_in", 3600)
 
-            await update_user_tokens(token["user_id"], access_token, expires_in)
+            await update_user_tokens(token["email"], access_token, expires_in)
 
             print(f"✅ Token rinnovato per utente {token['user_id']}")
         except Exception as e:

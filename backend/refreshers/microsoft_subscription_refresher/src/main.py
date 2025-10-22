@@ -5,7 +5,7 @@ import os
 
 load_dotenv()
 
-REFRESH_INTERVAL_HOURS = os.getenv("REFRESH_INTERVAL_HOURS_SUBSCRIPTIONS", 3)
+REFRESH_INTERVAL_HOURS = int(os.getenv("REFRESH_INTERVAL_HOURS_SUBSCRIPTIONS", 3))
 
 async def main():
     while True:

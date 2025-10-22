@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/app/rabbitmq/rabbitmq.conf
+      - ./rabbitmq/definitions.json:/app/rabbitmq/definitions.json
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - broker_net
+
+  broker-worker:
+    image: ghcr.io/correttoai/backend/broker:latest
+    container_name: broker-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 15s
+    command: sh -c "sleep 15 && python -m src.main"
+    networks:
+      - broker_net
+
+  listeners:
+    image: ghcr.io/correttoai/backend/listeners:latest
+    container_name: listeners
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account-key.json
+    volumes:
+      - ./listeners/service-account-key.json:/app/credentials/service-account-key.json:ro
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8001:8001" # Microsoft webhook
+    networks:
+      - broker_net
+
+  refreshers:
+    image: ghcr.io/correttoai/backend/refreshers:latest
+    container_name: refreshers
+    restart: unless-stopped
+    env_file:
+      - .env
+
+  api:
+    image: ghcr.io/correttoai/backend/api:latest
+    container_name: api
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "8000:8000"
+    networks:
+      - broker_net
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  broker_net:
+    driver: bridge
+
+
