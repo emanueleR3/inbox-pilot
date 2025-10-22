@@ -41,23 +41,38 @@ async def receive_microsoft_notification(request: Request):
     notifications = data.get("value", [])
     log_info(f"🔔 MICROSOFT - Ricevute {len(notifications)} notifiche webhook")
     
+    # Log del payload completo per debug
+    log_info(f"🔍 MICROSOFT - Payload completo ricevuto: {data}")
+    
     if not notifications:
         log_info("ℹ️ MICROSOFT - Nessuna notifica nel payload")
         return {"status": "ok"}
 
     tasks = []
     for i, notif in enumerate(notifications):
+        # Log completo della notifica per capire la struttura
+        log_info(f"🔍 MICROSOFT - Notifica {i+1} completa: {notif}")
+        
         user_id = notif.get("userId")
         resource_data = notif.get("resourceData", {})
         message_id = resource_data.get("id")
         
-        log_info(f"📬 MICROSOFT - Notifica {i+1}/{len(notifications)}: userId={user_id}, messageId={message_id}")
+        # Prova altri possibili campi per userId
+        if not user_id:
+            # Microsoft potrebbe usare altri campi per l'user ID
+            user_id = notif.get("user_id") or notif.get("userPrincipalName") or notif.get("subscriptionId")
+            log_info(f"� MICROSOFT - Tentativo alternativo userId: {user_id}")
+        
+        log_info(f"�📬 MICROSOFT - Notifica {i+1}/{len(notifications)}: userId={user_id}, messageId={message_id}")
+        log_info(f"🔍 MICROSOFT - Tutti i campi disponibili: {list(notif.keys())}")
+        log_info(f"🔍 MICROSOFT - ResourceData: {resource_data}")
 
         if message_id and user_id:
             # Recupera il messaggio completo via Graph API (async)
             tasks.append(asyncio.create_task(fetch_new_message(user_id, message_id)))
         else:
             log_error(f"❌ MICROSOFT - Notifica {i+1} incompleta: userId={user_id}, messageId={message_id}")
+            log_error(f"❌ MICROSOFT - Campi mancanti - userId presente: {bool(user_id)}, messageId presente: {bool(message_id)}")
 
     if not tasks:
         log_info("⚠️ MICROSOFT - Nessun messaggio valido da recuperare")
