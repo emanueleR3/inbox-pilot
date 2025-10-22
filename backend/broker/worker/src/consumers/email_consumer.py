@@ -10,19 +10,40 @@ AUTOMATION_API_URL = "http://automations:8000/api/v1/process_email"  # TODO esem
 
 async def process_email(email_data):
     """
-    Processa una singola email chiamando il backend AI.
+    Processa una singola email - MODALITÀ DEBUG: stampa il messaggio.
     """
     async with SEM:
-        async with aiohttp.ClientSession() as session:
-            try:
-                # TODO chiamare il backend AI - all'interno di email_data c'è anche l'id dell'allegato eventualmente da prendere con una get di google
-                async with session.post(AUTOMATION_API_URL, json=email_data, timeout=120) as resp:
-                    if resp.status == 200:
-                        print(f"✅ Elaborata email {email_data.get('id')}")
-                    else:
-                        print(f"⚠️ Errore nell'elaborazione {email_data.get('id')}: {resp.status}")
-            except Exception as e:
-                print(f"❌ Errore durante il processamento: {e}")
+        try:
+            print(f"\n🎯 RABBITMQ - Messaggio ricevuto e processato:")
+            print("=" * 80)
+            print(f"📧 Provider: {email_data.get('provider', 'N/A')}")
+            print(f"📧 User: {email_data.get('user_email', 'N/A')}")
+            print(f"📧 Da: {email_data.get('from', 'N/A')}")
+            print(f"📧 A: {email_data.get('to', 'N/A')}")
+            print(f"📧 Oggetto: {email_data.get('subject', 'N/A')}")
+            print(f"📧 Data: {email_data.get('date', 'N/A')}")
+            print(f"📧 Thread ID: {email_data.get('thread_id', 'N/A')}")
+            print(f"📧 Message ID: {email_data.get('message_id', 'N/A')}")
+            print(f"📧 Labels: {', '.join(email_data.get('labels', []))}")
+            
+            body = email_data.get('body_text', '')
+            if body:
+                print("\n📄 CORPO DEL MESSAGGIO:")
+                print("-" * 40)
+                # Mostra massimo 500 caratteri per non intasare i log
+                if len(body) > 500:
+                    print(f"{body[:500]}...")
+                    print(f"[... troncato - lunghezza totale: {len(body)} caratteri]")
+                else:
+                    print(body)
+                print("-" * 40)
+            
+            print(f"📧 Timestamp: {email_data.get('timestamp', 'N/A')}")
+            print("=" * 80)
+            print(f"✅ [RabbitMQ] Email processata con successo!")
+            
+        except Exception as e:
+            print(f"❌ Errore durante il processamento: {e}")
 
 async def start_email_consumer():
     """

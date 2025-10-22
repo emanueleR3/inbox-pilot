@@ -28,8 +28,6 @@ def create_google_flow():
             "openid"
         ]
     
-    print(f"🔧 Scope richiesti: {scopes}")
-    
     flow = Flow.from_client_config(
         {
             "web": {

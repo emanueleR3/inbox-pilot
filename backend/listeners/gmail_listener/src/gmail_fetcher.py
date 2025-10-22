@@ -16,97 +16,33 @@ def _fetch_messages_sync(email: str, start_history_id: str):
     """
     service = get_service_for_user(email)
     
-    # Test per verificare gli scope del token
-    try:
-        # Prova a fare una chiamata che richiede scope completi
-        test_response = service.users().getProfile(userId='me').execute()
-        print(f"✅ Token valido per {email}, profile ottenuto")
-        
-        # Prova anche a testare una chiamata per verificare scope gmail.readonly
-        try:
-            # Questa chiamata dovrebbe funzionare solo con scope completi
-            test_msg_list = service.users().messages().list(userId='me', maxResults=1).execute()
-            print(f"✅ Scope gmail.readonly confermato per {email}")
-        except Exception as scope_error:
-            print(f"❌ Errore scope test per {email}: {scope_error}")
-            
-    except Exception as e:
-        print(f"❌ Token non valido per {email}: {e}")
-    
     messages = []
     try:
-        print(f"🔍 Richiesta Gmail API - startHistoryId: {start_history_id}")
-        
-        # Prima verifica: ottieni l'historyId corrente della mailbox
-        try:
-            profile = service.users().getProfile(userId='me').execute()
-            current_history_id = profile.get('historyId')
-            print(f"📮 HistoryId corrente mailbox: {current_history_id}")
-            print(f"📊 Differenza: {int(current_history_id) - int(start_history_id) if current_history_id and start_history_id else 'N/A'}")
-        except Exception as e:
-            print(f"⚠️ Errore ottenimento profile: {e}")
-        
-        # Proviamo con tutti i tipi di history per debugging
+        # Recupera i messaggi dalla history Gmail
         response = service.users().history().list(
             userId='me',
             startHistoryId=start_history_id,
-            # Temporaneamente rimuoviamo il filtro per vedere tutti gli eventi
-            # historyTypes=['messageAdded']
+            historyTypes=['messageAdded']
         ).execute()
-
-        print(f"📊 Risposta Gmail API: {len(response.get('history', []))} record di history")
-        
-        # Debug: mostra tutti gli eventi history per capire cosa succede
-        for i, history_record in enumerate(response.get('history', []), 1):
-            print(f"📝 History record #{i}:")
-            if 'messages' in history_record:
-                print(f"   📧 {len(history_record['messages'])} messaggi")
-            if 'messagesAdded' in history_record:
-                print(f"   ➕ {len(history_record['messagesAdded'])} messaggi aggiunti")
-            if 'messagesDeleted' in history_record:
-                print(f"   ➖ {len(history_record['messagesDeleted'])} messaggi eliminati")
-            if 'labelsAdded' in history_record:
-                print(f"   🏷️➕ {len(history_record['labelsAdded'])} labels aggiunte")
-            if 'labelsRemoved' in history_record:
-                print(f"   🏷️➖ {len(history_record['labelsRemoved'])} labels rimosse")
 
         # Processa i messaggi aggiunti
         for history_record in response.get('history', []):
-            # Cerca in messagesAdded (più preciso) o fallback su messages
             added_messages = history_record.get('messagesAdded', [])
-            if not added_messages:
-                added_messages = history_record.get('messages', [])
                 
             for msg_record in added_messages:
-                msg_id = msg_record.get('message', {}).get('id') or msg_record.get('id')
+                msg_id = msg_record.get('message', {}).get('id')
                 if msg_id:
                     try:
-                        # Prima prova con format=full per avere il body completo
-                        try:
-                            msg_data = service.users().messages().get(
-                                userId='me', 
-                                id=msg_id,
-                                format='full'
-                            ).execute()
-                            print(f"✅ Recuperato messaggio ID: {msg_id} (formato FULL)")
-                        except Exception as full_error:
-                            # Se format=full fallisce per problemi di scope, usa format=metadata
-                            if "Metadata scope doesn't allow format FULL" in str(full_error):
-                                print(f"⚠️ Scope limitato, uso formato METADATA per messaggio {msg_id}")
-                                msg_data = service.users().messages().get(
-                                    userId='me', 
-                                    id=msg_id,
-                                    format='metadata'
-                                ).execute()
-                                print(f"✅ Recuperato messaggio ID: {msg_id} (formato METADATA)")
-                            else:
-                                raise full_error
-                        
+                        msg_data = service.users().messages().get(
+                            userId='me', 
+                            id=msg_id,
+                            format='full'
+                        ).execute()
                         messages.append(msg_data)
                     except Exception as e:
-                        print(f"❌ Errore recupero messaggio {msg_id}: {e}")
+                        log_error(f"Errore recupero messaggio {msg_id}: {e}")
 
-        # Aggiorna SEMPRE l'historyId al valore corrente della risposta
+        # Aggiorna l'historyId al valore corrente della risposta
         new_history_id = response.get('historyId')
         if new_history_id:
             result = update_history_id(email, new_history_id)
@@ -114,27 +50,8 @@ def _fetch_messages_sync(email: str, start_history_id: str):
                 log_error(f"Errore nell'aggiornamento dello historyId per {email}")
             else:
                 log_info(f"HistoryId aggiornato per {email} da {start_history_id} a {new_history_id}")
-                
-            # Se non abbiamo trovato messaggi ma l'historyId è cambiato molto,
-            # potrebbe esserci una desincronizzazione
-            if not messages and str(new_history_id) != str(start_history_id):
-                try:
-                    # Converti entrambi a stringa per il controllo isdigit()
-                    new_id_str = str(new_history_id)
-                    start_id_str = str(start_history_id)
-                    
-                    if new_id_str.isdigit() and start_id_str.isdigit():
-                        id_diff = int(new_id_str) - int(start_id_str)
-                        if id_diff > 100:  # Se la differenza è significativa
-                            print(f"🔄 Possibile desincronizzazione rilevata (diff: {id_diff}). HistoryId sincronizzato automaticamente.")
-                except Exception as e:
-                    print(f"⚠️ Errore calcolo differenza historyId: {e}")
-        else:
-            print(f"⚠️ Nessun historyId nella risposta API")
 
     except Exception as e:
-        print(f"❌ Errore fetch Gmail per {email}: {e}")
-        import traceback
-        traceback.print_exc()
+        log_error(f"Errore fetch Gmail per {email}: {e}")
 
     return messages

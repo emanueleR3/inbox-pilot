@@ -22,7 +22,6 @@ def get_service_for_user(email: str):
             "https://www.googleapis.com/auth/gmail.modify",
             "https://www.googleapis.com/auth/gmail.readonly", 
             "https://www.googleapis.com/auth/gmail.send",
-            #"https://www.googleapis.com/auth/gmail.metadata",
             "https://www.googleapis.com/auth/calendar",
             "https://www.googleapis.com/auth/calendar.events", 
             "https://www.googleapis.com/auth/calendar.readonly",
@@ -30,9 +29,6 @@ def get_service_for_user(email: str):
             "https://www.googleapis.com/auth/userinfo.profile",
             "openid"
         ]
-    
-    print(f"🔍 Scope utilizzati per {email}: {scopes}")
-    print(f"🔑 Access token (primi 20 char): {creds_data['access_token'][:20]}...")
     
     creds = Credentials(
         token=creds_data['access_token'],
