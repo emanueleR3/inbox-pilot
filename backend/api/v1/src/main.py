@@ -1,5 +1,5 @@
 # api/v1/src/main.py
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -13,6 +13,36 @@ from src.modules.subscription_service.src.routes import router as subscription_s
 
 logger = setup_logger()
 app = FastAPI(title="AI Mail Automation API", version="1.0.0")
+
+# Middleware per Content Security Policy
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    
+    # CSP permissiva per OAuth endpoints
+    if request.url.path.startswith("/auth/"):
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://login.microsoftonline.com https://graph.microsoft.com; "
+            "form-action 'self' https://accounts.google.com https://login.microsoftonline.com; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self' https://accounts.google.com https://login.microsoftonline.com"
+        )
+        logger.info(f"Applied OAuth CSP for path: {request.url.path}")
+    else:
+        # CSP normale per altre route
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'"
+        )
+    
+    return response
 
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 app.include_router(subscription_service_router, prefix="/subscriptionServiceRouter", tags=["SubscriptionServiceRouter"])
@@ -30,8 +60,7 @@ app.add_middleware(
 async def health_check():
     return {"status": "ok"}
 
-# Registra le route modulari
-app.include_router(auth_router, prefix="/auth", tags=["Auth"])
+# Note: Routes già registrate sopra, rimuovo duplicati
 # app.include_router(gmail_router, prefix="/mail", tags=["Gmail"])
 
 if __name__ == "__main__":
