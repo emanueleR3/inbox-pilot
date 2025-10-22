@@ -11,13 +11,36 @@ def get_service_for_user(email: str):
     Restituisce un oggetto Gmail API per un utente
     """
     creds_data = get_user_credentials(email)
+    
+    # Parse degli scope dalla variabile d'ambiente
+    scopes_env = os.getenv("GOOGLE_SCOPES", "")
+    if scopes_env:
+        scopes = [scope.strip() for scope in scopes_env.split() if scope.strip()]
+    else:
+        # Fallback agli scope hardcoded
+        scopes = [
+            "https://www.googleapis.com/auth/gmail.modify",
+            "https://www.googleapis.com/auth/gmail.readonly", 
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.metadata",
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/calendar.events", 
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "openid"
+        ]
+    
+    print(f"🔍 Scope utilizzati per {email}: {scopes}")
+    print(f"🔑 Access token (primi 20 char): {creds_data['access_token'][:20]}...")
+    
     creds = Credentials(
         token=creds_data['access_token'],
         refresh_token=creds_data['refresh_token'],
         token_uri="https://oauth2.googleapis.com/token",
         client_id=os.getenv("GOOGLE_CLIENT_ID"),
         client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-        scopes=os.getenv("GOOGLE_SCOPES").split(" ")
+        scopes=scopes
     )
 
     service = build('gmail', 'v1', credentials=creds)

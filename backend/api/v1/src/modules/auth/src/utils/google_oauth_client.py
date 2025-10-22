@@ -9,6 +9,27 @@ def create_google_flow():
     """
     Crea un flusso OAuth2 per Google.
     """
+    # Parse degli scope dalla variabile d'ambiente
+    scopes_env = os.getenv("GOOGLE_SCOPES", "")
+    if scopes_env:
+        scopes = [scope.strip() for scope in scopes_env.split() if scope.strip()]
+    else:
+        # Fallback agli scope hardcoded
+        scopes = [
+            "https://www.googleapis.com/auth/gmail.modify",
+            "https://www.googleapis.com/auth/gmail.readonly", 
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.metadata",
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/calendar.events", 
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "openid"
+        ]
+    
+    print(f"🔧 Scope richiesti: {scopes}")
+    
     flow = Flow.from_client_config(
         {
             "web": {
@@ -19,7 +40,7 @@ def create_google_flow():
                 "token_uri": "https://oauth2.googleapis.com/token",
             }
         },
-        scopes=os.getenv("GOOGLE_SCOPES", "").split(),
+        scopes=scopes,
     )
 
     flow.redirect_uri = settings.GOOGLE_REDIRECT_URI

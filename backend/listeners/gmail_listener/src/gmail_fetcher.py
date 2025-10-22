@@ -16,6 +16,23 @@ def _fetch_messages_sync(email: str, start_history_id: str):
     """
     service = get_service_for_user(email)
     
+    # Test per verificare gli scope del token
+    try:
+        # Prova a fare una chiamata che richiede scope completi
+        test_response = service.users().getProfile(userId='me').execute()
+        print(f"✅ Token valido per {email}, profile ottenuto")
+        
+        # Prova anche a testare una chiamata per verificare scope gmail.readonly
+        try:
+            # Questa chiamata dovrebbe funzionare solo con scope completi
+            test_msg_list = service.users().messages().list(userId='me', maxResults=1).execute()
+            print(f"✅ Scope gmail.readonly confermato per {email}")
+        except Exception as scope_error:
+            print(f"❌ Errore scope test per {email}: {scope_error}")
+            
+    except Exception as e:
+        print(f"❌ Token non valido per {email}: {e}")
+    
     messages = []
     try:
         print(f"🔍 Richiesta Gmail API - startHistoryId: {start_history_id}")

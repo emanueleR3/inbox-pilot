@@ -39,13 +39,28 @@ async def google_callback(request: Request):
 
         credentials = flow.credentials
 
-        # Recupera info utente dal token
-        user_info = requests.get(
-            "https://www.googleapis.com/oauth2/v1/userinfo",
-            headers={"Authorization": f"Bearer {credentials.token}"}
-        ).json()
+        # Log degli scope per debug
+        if hasattr(credentials, 'scopes'):
+            logger.info(f"Granted scopes: {credentials.scopes}")
+        else:
+            logger.warning("No scopes information available in credentials")
+
+        # Verifica che il token sia valido testando una chiamata API
+        try:
+            user_info_response = requests.get(
+                "https://www.googleapis.com/oauth2/v1/userinfo",
+                headers={"Authorization": f"Bearer {credentials.token}"}
+            )
+            user_info_response.raise_for_status()
+            user_info = user_info_response.json()
+        except requests.RequestException as e:
+            logger.error(f"Failed to fetch user info: {e}")
+            raise HTTPException(status_code=400, detail="Invalid Google token")
 
         logger.info(f"Authenticated Google user: {user_info}")
+        
+        # Get email from user_info first
+        email = user_info["email"]
 
         # TODO recuperare la subscription_id che si sta gestendo
         subscription_id = ""
@@ -55,37 +70,72 @@ async def google_callback(request: Request):
             subscription_id = "05fd6e28-ba5a-44cf-9fe6-027f0f3b94a8"
         elif email == "dev2@example.com":
             subscription_id = "9a6f91f7-6ea6-466d-b091-9652a117fd34"
+        else:
+            logger.warning(f"No subscription_id configured for email: {email}")
+            raise HTTPException(status_code=400, detail="Email non autorizzato")
+
+        # Verifica che abbiamo tutti i dati necessari
+        if not credentials.token:
+            raise HTTPException(status_code=400, detail="Access token mancante")
+        
+        if not credentials.refresh_token:
+            logger.warning("Refresh token mancante - potrebbe essere necessario revocare e riautorizzare")
 
         # Salva le credenziali nel database
-        email = user_info["email"]
         access_token = credentials.token
         refresh_token = credentials.refresh_token
         expiry = credentials.expiry
 
-        result = subscription_service_dao.save_google_credentials(email, subscription_id, access_token, refresh_token, expiry) # <-- err:TODO non sta salvando
-        if result is False:
-            logger.error("Errore nel salvataggio delle credenziali Google")
-            raise HTTPException(status_code=500, detail="Errore nel salvataggio delle credenziali Google")
-
-        # Crea la watch Gmail
-        response = create_watch_for_user(email) # err:TODO <-- se questo non lo commento va in errore
+        logger.info(f"Saving credentials for {email} - Access token: {access_token[:20]}...")
         
-        # Salva history_id della watch Gmail
-        history_id = response.get("historyId")
-        result = subscription_service_dao.update_history_id(email, history_id)
+        try:
+            result = subscription_service_dao.save_google_credentials(email, subscription_id, access_token, refresh_token, expiry)
+            if result is False:
+                logger.error("Errore nel salvataggio delle credenziali Google nel database")
+                raise HTTPException(status_code=500, detail="Errore nel salvataggio delle credenziali Google")
+            logger.info(f"Credentials saved successfully for {email}")
+        except Exception as save_error:
+            logger.error(f"Database error saving credentials: {save_error}")
+            raise HTTPException(status_code=500, detail="Errore database nel salvataggio credenziali")
+
+        # Crea la watch Gmail con gestione errori migliorata
+        try:
+            logger.info(f"Creating Gmail watch for {email}")
+            response = create_watch_for_user(email)
+            logger.info(f"Gmail watch response: {response}")
+            
+            # Salva history_id della watch Gmail
+            history_id = response.get("historyId")
+            if history_id:
+                result = subscription_service_dao.update_history_id(email, history_id)
+                if result:
+                    logger.info(f"History ID updated successfully for {email}: {history_id}")
+                else:
+                    logger.error(f"Failed to update history ID in database for {email}")
+            else:
+                logger.warning(f"No historyId received from Gmail watch response for {email}")
+                
+        except Exception as watch_error:
+            logger.error(f"Failed to create Gmail watch for {email}: {watch_error}")
+            # Non blocchiamo l'autenticazione per questo errore, ma lo logghiamo
+            logger.warning("Continuing authentication process despite watch creation failure")
 
         token_data = {
             "email": user_info["email"],
             "access_token": credentials.token,
             "refresh_token": credentials.refresh_token,
-            "expiry": str(credentials.expiry)
+            "expiry": str(credentials.expiry) if credentials.expiry else None
         }
 
+        logger.info(f"Google authentication completed successfully for {email}")
         return JSONResponse({
             "message": "Google account connesso con successo!",
             "user": token_data
         })
 
+    except HTTPException:
+        # Re-raise HTTPExceptions as-is
+        raise
     except Exception as e:
-        logger.error(f"Errore nel callback Google: {e}")
+        logger.error(f"Errore nel callback Google: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail="Errore autenticazione Google")
