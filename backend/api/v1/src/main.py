@@ -13,6 +13,12 @@ from src.modules.subscription_service.src.routes import router as subscription_s
 logger = setup_logger()
 app = FastAPI(title="AI Mail Automation API", version="1.0.0")
 
+
+# Debug endpoint per verificare lo scheme della richiesta TODO rimuovere in produzione
+@app.get("/debug_scheme")
+async def debug_scheme(request: Request):
+    return {"scheme": request.url.scheme, "headers": dict(request.headers)}
+
 # Middleware manuale per gestire X-Forwarded-Proto e forzare https se richiesto
 @app.middleware("http")
 async def forwarded_proto_scheme(request: Request, call_next):
