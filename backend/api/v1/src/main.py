@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
+# Force rebuild - OAuth fix for reverse proxy
 from src.core.config import settings
 from src.core.logger import setup_logger
 
