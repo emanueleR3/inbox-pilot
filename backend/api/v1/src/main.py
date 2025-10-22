@@ -28,9 +28,11 @@ async def add_security_headers(request: Request, call_next):
     
     # Disabilita completamente CSP per OAuth endpoints (test temporaneo)
     if request.url.path.startswith("/auth/"):
-        # Rimuovi qualsiasi CSP esistente per OAuth
-        response.headers.pop("Content-Security-Policy", None)
-        response.headers.pop("Content-Security-Policy-Report-Only", None)
+        # Rimuovi qualsiasi CSP esistente per OAuth usando il metodo corretto per MutableHeaders
+        if "Content-Security-Policy" in response.headers:
+            del response.headers["Content-Security-Policy"]
+        if "Content-Security-Policy-Report-Only" in response.headers:
+            del response.headers["Content-Security-Policy-Report-Only"]
         
         # Aggiungi header di debug
         response.headers["X-Debug-Path"] = request.url.path
