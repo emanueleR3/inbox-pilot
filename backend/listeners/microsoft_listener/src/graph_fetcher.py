@@ -51,19 +51,19 @@ def parse_microsoft_message(graph_data: dict, user_email: str) -> dict:
         log_error(f"Errore nel parsing del messaggio Microsoft: {str(e)}", e)
         return None
 
-async def fetch_new_message(user_id: str, message_id: str):
+async def fetch_new_message(subscription_id: str, message_id: str, actual_user_id: str):
     """
     Recupera la mail completa tramite Microsoft Graph e la converte nel formato standard.
     """
     try:
-        log_info(f"📧 MICROSOFT - Recupero messaggio {message_id} per utente {user_id}")
+        log_info(f"📧 MICROSOFT - Recupero messaggio {message_id} per subscription {subscription_id}, user {actual_user_id}")
         
-        # Recupera access token dal DB per l'utente
-        credentials = await get_user_credentials(user_id)
+        # Recupera access token dal DB usando il subscription_id
+        credentials = await get_user_credentials(subscription_id)
         access_token = credentials.get("access_token")
-        user_email = credentials.get("email", user_id)
+        user_email = credentials.get("email", actual_user_id)
 
-        url = f"{GRAPH_BASE_URL}/users/{user_id}/messages/{message_id}"
+        url = f"{GRAPH_BASE_URL}/users/{actual_user_id}/messages/{message_id}"
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, headers={"Authorization": f"Bearer {access_token}"})
@@ -83,5 +83,5 @@ async def fetch_new_message(user_id: str, message_id: str):
                 return None
                 
     except Exception as e:
-        log_error(f"❌ MICROSOFT - Errore nel recupero messaggio {message_id}: {str(e)}", e)
+        log_error(f"❌ MICROSOFT - Errore nel recupero messaggio {message_id} per subscription {subscription_id}: {str(e)}", e)
         return None

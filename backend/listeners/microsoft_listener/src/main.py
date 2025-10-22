@@ -53,26 +53,30 @@ async def receive_microsoft_notification(request: Request):
         # Log completo della notifica per capire la struttura
         log_info(f"🔍 MICROSOFT - Notifica {i+1} completa: {notif}")
         
-        user_id = notif.get("userId")
+        # Estrai subscriptionId e dati del messaggio
+        subscription_id = notif.get("subscriptionId")
         resource_data = notif.get("resourceData", {})
         message_id = resource_data.get("id")
         
-        # Prova altri possibili campi per userId
-        if not user_id:
-            # Microsoft potrebbe usare altri campi per l'user ID
-            user_id = notif.get("user_id") or notif.get("userPrincipalName") or notif.get("subscriptionId")
-            log_info(f"� MICROSOFT - Tentativo alternativo userId: {user_id}")
+        # Estrai anche l'userId dal campo resource (formato: Users/{userId}/Messages/{messageId})
+        resource_path = notif.get("resource", "")
+        actual_user_id = None
+        if resource_path and "Users/" in resource_path:
+            # Estrai l'userId dal percorso resource: Users/2757a1285292fcf7/Messages/...
+            parts = resource_path.split("/")
+            if len(parts) >= 2 and parts[0] == "Users":
+                actual_user_id = parts[1]
         
-        log_info(f"�📬 MICROSOFT - Notifica {i+1}/{len(notifications)}: userId={user_id}, messageId={message_id}")
+        log_info(f"� MICROSOFT - Notifica {i+1}/{len(notifications)}: subscriptionId={subscription_id}, actualUserId={actual_user_id}, messageId={message_id}")
         log_info(f"🔍 MICROSOFT - Tutti i campi disponibili: {list(notif.keys())}")
         log_info(f"🔍 MICROSOFT - ResourceData: {resource_data}")
 
-        if message_id and user_id:
-            # Recupera il messaggio completo via Graph API (async)
-            tasks.append(asyncio.create_task(fetch_new_message(user_id, message_id)))
+        if message_id and subscription_id and actual_user_id:
+            # Usa il subscription_id per recuperare le credenziali e actual_user_id per l'API Graph
+            tasks.append(asyncio.create_task(fetch_new_message(subscription_id, message_id, actual_user_id)))
         else:
-            log_error(f"❌ MICROSOFT - Notifica {i+1} incompleta: userId={user_id}, messageId={message_id}")
-            log_error(f"❌ MICROSOFT - Campi mancanti - userId presente: {bool(user_id)}, messageId presente: {bool(message_id)}")
+            log_error(f"❌ MICROSOFT - Notifica {i+1} incompleta: subscriptionId={subscription_id}, actualUserId={actual_user_id}, messageId={message_id}")
+            log_error(f"❌ MICROSOFT - Campi mancanti - subscriptionId presente: {bool(subscription_id)}, actualUserId presente: {bool(actual_user_id)}, messageId presente: {bool(message_id)}")
 
     if not tasks:
         log_info("⚠️ MICROSOFT - Nessun messaggio valido da recuperare")

@@ -73,13 +73,13 @@ def get_supabase_client() -> Client:
                 _supabase_client = create_client(supabase_url, supabase_key)
     return _supabase_client
 
-async def get_user_credentials(user_id: str) -> Dict:
+async def get_user_credentials(subscription_id: str) -> Dict:
     """
-    Recupera le credenziali dell'utente Microsoft dal database Supabase.
+    Recupera le credenziali dell'utente Microsoft dal database Supabase usando il microsoft_subscription_id.
     I token vengono automaticamente decrittati.
     
     Args:
-        user_id (str): ID dell'utente o email dell'utente
+        subscription_id (str): ID della subscription Microsoft
         
     Returns:
         dict: Dizionario contenente le credenziali dell'utente decrittate
@@ -91,14 +91,11 @@ async def get_user_credentials(user_id: str) -> Dict:
         supabase = get_supabase_client()
         
         # Query per ottenere le credenziali dell'utente dalla tabella subscription_services
-        # Cerchiamo sia per oauth_user_id che per email
-        response = None
-        
-        # Se non trovato, prova con email
-        response = supabase.table("subscription_services").select("*").eq("email", user_id.lower()).execute()
+        # Cerchiamo per microsoft_subscription_id
+        response = supabase.table("subscription_services").select("*").eq("microsoft_subscription_id", subscription_id).execute()
         
         if not response.data:
-            raise Exception(f"Utente con ID/email {user_id} non trovato")
+            raise Exception(f"Utente con microsoft_subscription_id {subscription_id} non trovato")
         
         user_data = response.data[0]
         
@@ -125,5 +122,5 @@ async def get_user_credentials(user_id: str) -> Dict:
         }
         
     except Exception as e:
-        print(f"Errore nel recupero delle credenziali per {user_id}: {str(e)}")
+        print(f"Errore nel recupero delle credenziali per subscription_id {subscription_id}: {str(e)}")
         raise
