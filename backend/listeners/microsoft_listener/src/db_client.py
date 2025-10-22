@@ -73,7 +73,7 @@ def get_supabase_client() -> Client:
                 _supabase_client = create_client(supabase_url, supabase_key)
     return _supabase_client
 
-def get_user_credentials(user_id: str) -> Dict:
+async def get_user_credentials(user_id: str) -> Dict:
     """
     Recupera le credenziali dell'utente Microsoft dal database Supabase.
     I token vengono automaticamente decrittati.

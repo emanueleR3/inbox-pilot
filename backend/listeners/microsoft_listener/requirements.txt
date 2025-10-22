@@ -7,3 +7,5 @@ supabase
 postgrest
 cryptography
 msal
+fastapi
+uvicorn[standard]

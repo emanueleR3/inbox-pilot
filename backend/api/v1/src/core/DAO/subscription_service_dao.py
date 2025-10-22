@@ -7,7 +7,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from src.core.model.subscription_service import OAuthGoogleCredentials, SubscriptionServiceCrate, SubscriptionServiceConfigCrate, SubscriptionServiceRead
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from supabase import Client # TODO controllare se eliminare
 from supabase_auth.errors import AuthApiError
 from pydantic import ValidationError
@@ -75,18 +75,23 @@ class SubscriptionServiceDAO:
             encrypted_access_token = self._encrypt_token(access_token)
             encrypted_refresh_token = self._encrypt_token(refresh_token)
 
-            # Converti expiry (Unix timestamp) e microsoft_expiration_datetime (ISO string) in oggetti datetime
+            # Converti expiry (expires_in in secondi) e microsoft_expiration_datetime (ISO string) in oggetti datetime
             expiry_datetime = None
             if expiry:
-                # Se expiry è un numero (Unix timestamp), convertilo in datetime
+                # Se expiry è un numero (expires_in in secondi), calcolalo dal momento attuale
                 if isinstance(expiry, (int, float)):
-                    expiry_datetime = datetime.fromtimestamp(expiry)
+                    # expires_in è il numero di secondi dalla emissione del token
+                    now = datetime.now(timezone.utc)
+                    expiry_datetime = now + timedelta(seconds=expiry)
+                    logging.info(f"Microsoft token expiry calculation: now={now.isoformat()}, expires_in={expiry}s, expiry={expiry_datetime.isoformat()}")
                 # Se expiry è già una stringa ISO, parsala
                 elif isinstance(expiry, str):
                     expiry_datetime = datetime.fromisoformat(expiry.replace('Z', '+00:00'))
+                    logging.info(f"Microsoft token expiry from ISO string: {expiry} -> {expiry_datetime.isoformat()}")
                 # Se è già un datetime, usalo direttamente
                 elif isinstance(expiry, datetime):
                     expiry_datetime = expiry
+                    logging.info(f"Microsoft token expiry from datetime: {expiry_datetime.isoformat()}")
             
             microsoft_expiration_dt = None
             if microsoft_expiration_datetime:
