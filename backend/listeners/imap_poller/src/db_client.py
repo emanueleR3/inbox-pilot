@@ -93,9 +93,10 @@ async def get_all_imap_accounts() -> List[Dict]:
         for account in response.data:
             try:
                 # Decritta la password
-                decrypted_password = ""
-                if account.get("hashed_password"):
-                    decrypted_password = _decrypt_password(account["hashed_password"])
+                #decrypted_password = ""
+                decrypted_password = account.get("hashed_password") # TODO rimuovere !!!
+                #if account.get("hashed_password"):
+                #    decrypted_password = _decrypt_password(account["hashed_password"])
                 
                 # Crea il dizionario nel formato richiesto dal poller
                 imap_account = {
@@ -120,7 +121,7 @@ async def get_all_imap_accounts() -> List[Dict]:
                 log_error(f"❌ Errore nella decrittazione/configurazione account {account.get('email')}: {str(e)}")
                 continue
         
-        log_info("📊 Totale account IMAP configurati: {len(imap_accounts)}")
+        log_info(f"📊 Totale account IMAP configurati: {len(imap_accounts)}")
         return imap_accounts
         
     except Exception as e:

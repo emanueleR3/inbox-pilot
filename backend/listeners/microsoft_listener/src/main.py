@@ -41,9 +41,6 @@ async def receive_microsoft_notification(request: Request):
     notifications = data.get("value", [])
     log_info(f"🔔 MICROSOFT - Ricevute {len(notifications)} notifiche webhook")
     
-    # Log del payload completo per debug
-    log_info(f"🔍 MICROSOFT - Payload completo ricevuto: {data}")
-    
     if not notifications:
         log_info("ℹ️ MICROSOFT - Nessuna notifica nel payload")
         return {"status": "ok"}
@@ -77,7 +74,7 @@ async def receive_microsoft_notification(request: Request):
         else:
             log_error(f"❌ MICROSOFT - Notifica {i+1} incompleta: subscriptionId={subscription_id}, actualUserId={actual_user_id}, messageId={message_id}")
             log_error(f"❌ MICROSOFT - Campi mancanti - subscriptionId presente: {bool(subscription_id)}, actualUserId presente: {bool(actual_user_id)}, messageId presente: {bool(message_id)}")
-
+ 
     if not tasks:
         log_info("⚠️ MICROSOFT - Nessun messaggio valido da recuperare")
         return {"status": "ok"}
