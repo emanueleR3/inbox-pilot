@@ -41,9 +41,6 @@ async def receive_microsoft_notification(request: Request):
     notifications = data.get("value", [])
     log_info(f"🔔 MICROSOFT - Ricevute {len(notifications)} notifiche webhook")
     
-    # Log del payload completo per debug
-    log_info(f"🔍 MICROSOFT - Payload completo ricevuto: {data}")
-    
     if not notifications:
         log_info("ℹ️ MICROSOFT - Nessuna notifica nel payload")
         return {"status": "ok"}
