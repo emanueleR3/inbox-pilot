@@ -121,7 +121,7 @@ async def get_all_imap_accounts() -> List[Dict]:
                 log_error(f"❌ Errore nella decrittazione/configurazione account {account.get('email')}: {str(e)}")
                 continue
         
-        log_info("📊 Totale account IMAP configurati: {len(imap_accounts)}")
+        log_info(f"📊 Totale account IMAP configurati: {len(imap_accounts)}")
         return imap_accounts
         
     except Exception as e:

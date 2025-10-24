@@ -1,0 +1,178 @@
+"""
+Utility per il parsing e l'elaborazione delle email IMAP.
+Questo modulo contiene funzioni helper per processare i dati delle email.
+"""
+
+import re
+from email.utils import parseaddr, parsedate_to_datetime
+from typing import Dict, List, Tuple, Optional
+from datetime import datetime
+
+def extract_email_addresses(address_string: str) -> List[Dict[str, str]]:
+    """
+    Estrae nome e indirizzo email da una stringa di indirizzi.
+    
+    Args:
+        address_string: Stringa contenente indirizzi email (es: "Nome <email@domain.com>")
+    
+    Returns:
+        Lista di dizionari con 'name' ed 'email'
+    """
+    if not address_string:
+        return []
+    
+    addresses = []
+    # Splitta per virgola per gestire indirizzi multipli
+    for addr in address_string.split(','):
+        name, email = parseaddr(addr.strip())
+        addresses.append({
+            'name': name.strip() if name else '',
+            'email': email.strip() if email else ''
+        })
+    
+    return addresses
+
+def clean_email_body(body_text: str) -> str:
+    """
+    Pulisce il corpo dell'email rimuovendo caratteri indesiderati.
+    
+    Args:
+        body_text: Testo del corpo dell'email
+    
+    Returns:
+        Testo pulito
+    """
+    if not body_text:
+        return ""
+    
+    # Rimuove caratteri di controllo e normalizza gli spazi
+    cleaned = re.sub(r'[\r\n\t]+', '\n', body_text)
+    cleaned = re.sub(r' +', ' ', cleaned)
+    cleaned = cleaned.strip()
+    
+    return cleaned
+
+def extract_urls_from_text(text: str) -> List[str]:
+    """
+    Estrae tutti gli URL presenti nel testo.
+    
+    Args:
+        text: Testo da analizzare
+    
+    Returns:
+        Lista di URL trovati
+    """
+    if not text:
+        return []
+    
+    url_pattern = re.compile(
+        r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+    )
+    
+    return url_pattern.findall(text)
+
+def parse_date_string(date_string: str) -> Optional[datetime]:
+    """
+    Converte una stringa di data email in oggetto datetime.
+    
+    Args:
+        date_string: Stringa data dell'email
+    
+    Returns:
+        Oggetto datetime o None se il parsing fallisce
+    """
+    if not date_string:
+        return None
+    
+    try:
+        return parsedate_to_datetime(date_string)
+    except (ValueError, TypeError):
+        return None
+
+def is_automated_email(from_address: str, subject: str, body: str) -> bool:
+    """
+    Determina se un'email è automatica/di sistema.
+    
+    Args:
+        from_address: Indirizzo del mittente
+        subject: Oggetto dell'email
+        body: Corpo dell'email
+    
+    Returns:
+        True se l'email sembra automatica
+    """
+    automated_patterns = [
+        r'no[-_]?reply',
+        r'do[-_]?not[-_]?reply',
+        r'noreply',
+        r'mailer[-_]?daemon',
+        r'postmaster',
+        r'bounce',
+        r'notification',
+        r'automated',
+        r'system'
+    ]
+    
+    # Controlla l'indirizzo del mittente
+    from_lower = from_address.lower() if from_address else ""
+    for pattern in automated_patterns:
+        if re.search(pattern, from_lower):
+            return True
+    
+    # Controlla l'oggetto
+    subject_lower = subject.lower() if subject else ""
+    auto_subjects = [
+        'delivery status notification',
+        'mail delivery failure',
+        'returned mail',
+        'undelivered mail',
+        'auto reply',
+        'out of office'
+    ]
+    
+    for auto_subject in auto_subjects:
+        if auto_subject in subject_lower:
+            return True
+    
+    return False
+
+def extract_quoted_text(body: str) -> Tuple[str, str]:
+    """
+    Separa il testo originale da quello quotato in una risposta.
+    
+    Args:
+        body: Corpo dell'email
+    
+    Returns:
+        Tupla (testo_nuovo, testo_quotato)
+    """
+    if not body:
+        return "", ""
+    
+    # Pattern comuni per identificare testo quotato
+    quote_patterns = [
+        r'^>.*$',  # Linee che iniziano con >
+        r'^On .* wrote:$',  # "On [date] [person] wrote:"
+        r'^From:.*$',  # Headers quotati
+        r'^-----Original Message-----.*',  # Outlook
+        r'^________________________________.*'  # Separatori
+    ]
+    
+    lines = body.split('\n')
+    new_text_lines = []
+    quoted_text_lines = []
+    in_quoted_section = False
+    
+    for line in lines:
+        is_quoted_line = any(re.match(pattern, line.strip(), re.MULTILINE | re.DOTALL) 
+                            for pattern in quote_patterns)
+        
+        if is_quoted_line:
+            in_quoted_section = True
+        
+        if in_quoted_section:
+            quoted_text_lines.append(line)
+        else:
+            new_text_lines.append(line)
+    
+    return '\n'.join(new_text_lines).strip(), '\n'.join(quoted_text_lines).strip()

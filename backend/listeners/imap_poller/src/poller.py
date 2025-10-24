@@ -30,12 +30,24 @@ async def poll_account(account):
             
             message_payload = {
                 "provider": "imap",
-                #"user_id": account["user_id"],
-                "account": account["email"],
+                "user_email": account["email"],  # Cambiato da "account" a "user_email" per consistenza con il broker
                 "mail_id": mail["id"],
+                "message_id": mail["message_id"],
+                "thread_id": mail["thread_id"],
                 "from": mail["from"],
+                "to": mail["to"],
+                "cc": mail["cc"],
+                "bcc": mail["bcc"],
                 "subject": mail["subject"],
+                "date": mail["date"],
+                "timestamp": mail["timestamp"],
+                "body_text": mail["body_text"],
+                "body_html": mail["body_html"],
+                "content_type": mail["content_type"],
+                "charset": mail["charset"],
+                "size": mail["size"],
                 "raw": mail["raw"].decode(errors="ignore"),
+                "subscription_id": account.get("subscription_id")  # Aggiunge riferimento alla subscription
             }
 
             await publisher.publish_message(message_payload)
