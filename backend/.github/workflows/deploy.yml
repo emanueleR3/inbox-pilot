@@ -93,5 +93,6 @@ jobs:
             docker pull ghcr.io/${REPO_LOWER}/broker:latest
             docker pull ghcr.io/${REPO_LOWER}/listeners:latest
             docker pull ghcr.io/${REPO_LOWER}/refreshers:latest
+            docker image prune -a -f --filter "until=24h" || true
             docker compose -f /home/deploy/corretto/docker-compose.yml down || true
             docker compose -f /home/deploy/corretto/docker-compose.yml up -d
