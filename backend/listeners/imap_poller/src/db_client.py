@@ -93,9 +93,10 @@ async def get_all_imap_accounts() -> List[Dict]:
         for account in response.data:
             try:
                 # Decritta la password
-                decrypted_password = ""
-                if account.get("hashed_password"):
-                    decrypted_password = _decrypt_password(account["hashed_password"])
+                #decrypted_password = ""
+                decrypted_password = account.get("hashed_password") # TODO rimuovere !!!
+                #if account.get("hashed_password"):
+                #    decrypted_password = _decrypt_password(account["hashed_password"])
                 
                 # Crea il dizionario nel formato richiesto dal poller
                 imap_account = {
