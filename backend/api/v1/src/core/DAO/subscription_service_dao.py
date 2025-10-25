@@ -69,9 +69,9 @@ class SubscriptionServiceDAO:
     
     def save_custom_provider_credentials(self, server_imap: str, server_smtp: str, imap_port: int, smtp_port: int, email: str, password: str, subscription_id: str) -> bool:
 
-        hashed_password = self._encrypt(password, "pass")
+        encrypted_password = self._encrypt(password, "pass")
         
-        return self.create_subscription_service(email=email, server_imap=server_imap, server_smtp = server_smtp, imap_port=imap_port, smtp_port=smtp_port, hashed_password=hashed_password, subscription_id=subscription_id)
+        return self.create_subscription_service(email=email, imap_server=server_imap, smtp_server=server_smtp, imap_port=imap_port, smtp_port=smtp_port, hashed_password=encrypted_password, subscription_id=subscription_id)
 
 
     def save_microsoft_credentials(
