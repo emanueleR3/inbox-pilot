@@ -309,7 +309,7 @@ class SubscriptionServiceDAO:
                 "imap_port": imap_port,
                 "smtp_server": smtp_server,
                 "smtp_port": smtp_port,
-                "hashed_password": self._encrypt(hashed_password, "pass"),
+                "hashed_password": hashed_password,
                 "hashed_access_token": hashed_access_token,
                 "hashed_refresh_token": hashed_refresh_token,
                 "expiry_token": expiry_token.isoformat() if expiry_token else None,
