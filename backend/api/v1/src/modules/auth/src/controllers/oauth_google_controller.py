@@ -4,7 +4,6 @@ from src.modules.auth.src.utils.google_oauth_client import create_google_flow
 from src.core.logger import setup_logger
 from src.modules.google.src.controllers.gmail_watch_controller import create_watch_for_user
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
-from uuid import UUID
 import os
 
 import requests
@@ -108,16 +107,6 @@ async def google_callback(request: Request):
         expiry = credentials.expiry
 
         logger.info(f"Saving credentials for {email} - Access token: {access_token[:20]}...")
-        
-        try:
-            result = subscription_service_dao.save_google_credentials(email, subscription_id, access_token, refresh_token, expiry)
-            if result is False:
-                logger.error("Errore nel salvataggio delle credenziali Google nel database")
-                raise HTTPException(status_code=500, detail="Errore nel salvataggio delle credenziali Google")
-            logger.info(f"Credentials saved successfully for {email}")
-        except Exception as save_error:
-            logger.error(f"Database error saving credentials: {save_error}")
-            raise HTTPException(status_code=500, detail="Errore database nel salvataggio credenziali")
 
         # Crea la watch Gmail con gestione errori migliorata
         try:
@@ -127,19 +116,23 @@ async def google_callback(request: Request):
             
             # Salva history_id della watch Gmail
             history_id = response.get("historyId")
-            if history_id:
-                result = subscription_service_dao.update_history_id(email, history_id)
-                if result:
-                    logger.info(f"History ID updated successfully for {email}: {history_id}")
-                else:
-                    logger.error(f"Failed to update history ID in database for {email}")
-            else:
+            if not history_id:
                 logger.warning(f"No historyId received from Gmail watch response for {email}")
                 
         except Exception as watch_error:
             logger.error(f"Failed to create Gmail watch for {email}: {watch_error}")
             # Non blocchiamo l'autenticazione per questo errore, ma lo logghiamo
             logger.warning("Continuing authentication process despite watch creation failure")
+        
+        try:
+            result = subscription_service_dao.save_google_credentials(email, subscription_id, access_token, refresh_token, expiry, history_id)
+            if result is False:
+                logger.error("Errore nel salvataggio delle credenziali Google nel database")
+                raise HTTPException(status_code=500, detail="Errore nel salvataggio delle credenziali Google")
+            logger.info(f"Credentials saved successfully for {email}")
+        except Exception as save_error:
+            logger.error(f"Database error saving credentials: {save_error}")
+            raise HTTPException(status_code=500, detail="Errore database nel salvataggio credenziali")
 
         token_data = {
             "email": user_info["email"],

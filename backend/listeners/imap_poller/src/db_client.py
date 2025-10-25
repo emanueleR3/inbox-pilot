@@ -29,7 +29,7 @@ def _get_cipher():
     if _cipher is None:
         with _cipher_lock:
             if _cipher is None:  # double-checked locking
-                encryption_key_str = os.getenv("ENCRYPTION_KEY")
+                encryption_key_str = os.getenv("ENCRYPTION_KEY_PASS")
                 if not encryption_key_str:
                     raise ValueError("ENCRYPTION_KEY non trovata nelle variabili d'ambiente")
                 
@@ -93,10 +93,9 @@ async def get_all_imap_accounts() -> List[Dict]:
         for account in response.data:
             try:
                 # Decritta la password
-                #decrypted_password = ""
-                decrypted_password = account.get("hashed_password") # TODO rimuovere !!!
-                #if account.get("hashed_password"):
-                #    decrypted_password = _decrypt_password(account["hashed_password"])
+                decrypted_password = ""
+                if account.get("hashed_password"):
+                    decrypted_password = _decrypt_password(account["hashed_password"])
                 
                 # Crea il dizionario nel formato richiesto dal poller
                 imap_account = {

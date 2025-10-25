@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, HTTPException, status
 from src.core.dependecy import get_current_user
 from src.modules.auth.src.controllers.user_controller import UserController
 
@@ -37,27 +37,84 @@ def get_user_by_email(email: str):
 
 @router.post(
     "/createAccount",
+    status_code=status.HTTP_201_CREATED,
     summary="Crea un nuovo account utente",
-    description="Crea un nuovo utente fornendo un'email e una password.",
+    description="""
+    Crea un nuovo utente con la sua sottoscrizione associata.
+    """,
     responses={
-        200: {
-            "description": "Registrazione completata con successo",
+        201: {
+            "description": "Account creato con successo",
             "content": {
                 "application/json": {
                     "example": {
                         "message": "Registrazione completata",
-                        "result": {"user_id": "abc123", "email": "user@example.com"},
+                        "result": {
+                            "user_id": "abc123",
+                            "email": "user@example.com",
+                            "subscription": {
+                                "subscription_id": "sub_xyz789",
+                                "name": "TechVision Srl",
+                                "plan": "premium",
+                                "active": True
+                            }
+                        }
                     }
                 }
-            },
+            }
         },
-        400: {"description": "Email già registrata o password non valida"},
-    },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "value": {"detail": "Email e password sono richiesti"}
+                        },
+                        "missing_subscription": {
+                            "value": {"detail": "I dati della sottoscrizione sono richiesti"}
+                        },
+                        "weak_password": {
+                            "value": {"detail": "Password troppo debole. Usa almeno 6 caratteri"}
+                        }
+                    }
+                }
+            }
+        },
+        409: {
+            "description": "Conflitto",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Un utente con questa email esiste già"}
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante la creazione dell'account"}
+                }
+            }
+        }
+    }
 )
 def create_user_with_sub(
     payload: dict = Body(
         ...,
-        example={"email": "user@example.com", "password": "strongpassword123"},
+        example={
+            "email": "user@example.com", 
+            "password": "strongpassword123",
+            "subscription": {
+                "name": "TechVision Srl",
+                "vat_number": "IT12345678901",
+                "city": "Milano",
+                "address": "Via Roma 42",
+                "active": True,
+                "current_period_end": "2025-12-31T23:59:59Z",
+                "plan": "premium",
+            }
+        },
         description="Email e password per la registrazione del nuovo utente.",
     )
 ):
@@ -67,7 +124,13 @@ def create_user_with_sub(
 @router.post(
     "/login",
     summary="Login utente",
-    description="Esegue il login di un utente fornendo email e password.",
+    description="""
+    Esegue il login di un utente fornendo email e password.
+    
+    - Richiede email e password validi
+    - Verifica le credenziali contro Supabase Auth
+    - Restituisce un token di sessione in caso di successo
+    """,
     responses={
         200: {
             "description": "Login effettuato con successo",
@@ -75,13 +138,48 @@ def create_user_with_sub(
                 "application/json": {
                     "example": {
                         "message": "Login effettuato",
-                        "session": {"access_token": "jwt_token_example"},
+                        "session": {
+                            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                            "refresh_token": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                            "expires_in": 3600,
+                            "token_type": "bearer"
+                        }
                     }
                 }
-            },
+            }
         },
-        401: {"description": "Credenziali non valide"},
-    },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "value": {"detail": "Email e password sono richiesti"}
+                        },
+                        "unverified": {
+                            "value": {"detail": "Email non verificata. Controlla la tua casella email"}
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Autenticazione fallita",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Email o password non corretti"}
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante l'autenticazione"}
+                }
+            }
+        }
+    }
 )
 def login_user(
     payload: dict = Body(

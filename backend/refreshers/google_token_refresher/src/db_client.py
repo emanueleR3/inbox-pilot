@@ -28,7 +28,7 @@ def _get_cipher():
     if _cipher is None:
         with _cipher_lock:
             if _cipher is None:  # double-checked locking
-                encryption_key_str = os.getenv("ENCRYPTION_KEY")
+                encryption_key_str = os.getenv("ENCRYPTION_KEY_TOKEN")
                 if not encryption_key_str:
                     raise ValueError("ENCRYPTION_KEY non trovata nelle variabili d'ambiente")
                 
