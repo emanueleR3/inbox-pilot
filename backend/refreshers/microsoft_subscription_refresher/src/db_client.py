@@ -129,7 +129,7 @@ async def get_subscriptions_expiring_soon(threshold_hours=12) -> List[Dict]:
                 hours_to_expiry = time_to_expiry.total_seconds() / 3600
                 
                 Logger.log_info(f"### MICROSOFT SUBSCRIPTION ⏰ Subscription Microsoft in scadenza per {record.get('email')}: scade tra {hours_to_expiry:.1f} ore")
-                Logger.log_info(f"   Email: {record.get("email")}, Scadenza: {expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                Logger.log_info(f"   Email: {record.get('email')}, Scadenza: {expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
                 
             except Exception as e:
                 Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nel processamento della subscription per {record.get('email')}: {str(e)}")
