@@ -6,6 +6,7 @@ from datetime import datetime
 class SubscriptionServiceCrate(BaseModel):
     subscription_id: str
     email: str
+    email_provider: str
     calendar_provider: str
     calendar_names: list[str]
     information: dict
@@ -29,6 +30,7 @@ class SubscriptionServiceCrate(BaseModel):
 
 class SubscriptionServiceRead(BaseModel):
     email: str
+    email_provider: str
     calendar_provider: str
     calendar_names: list[str]
     information: dict

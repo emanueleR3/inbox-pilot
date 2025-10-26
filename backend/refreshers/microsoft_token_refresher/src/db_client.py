@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from cryptography.fernet import Fernet
 import base64
 import hashlib
+from src.utils.logger import Logger
 
 # Carica le variabili d'ambiente
 load_dotenv()
@@ -99,10 +100,10 @@ async def get_tokens_expiring_soon(threshold_minutes=15) -> List[Dict]:
         # - expiry_token <= threshold_time (scadono presto)
         # - activated = true (account attivato)
         # - microsoft_subscription_id non null (indica che sono account Microsoft)
-        response = supabase.table("subscription_services").select("*").not_.is_("expiry_token", "null").not_.is_("hashed_access_token", "null").not_.is_("hashed_refresh_token", "null").not_.is_("microsoft_subscription_id", "null").lte("expiry_token", threshold_iso).eq("activated", True).execute()
+        response = supabase.table("subscription_services").select("*").not_.is_("expiry_token", "null").not_.is_("hashed_access_token", "null").not_.is_("hashed_refresh_token", "null").not_.is_("microsoft_subscription_id", "null").lte("expiry_token", threshold_iso).eq("activated", True).eq("email_provider", "microsoft").execute()
         
         if not response.data:
-            print(f"ℹ️ Nessun token Microsoft in scadenza nei prossimi {threshold_minutes} minuti")
+            Logger.log_info("### MICROSOFT ⏰✅ Nessun token Microsoft in scadenza trovato.")
             return []
         
         expiring_tokens = []
@@ -121,7 +122,7 @@ async def get_tokens_expiring_soon(threshold_minutes=15) -> List[Dict]:
                 
                 # Verifica che i token essenziali siano presenti
                 if not refresh_token:
-                    print(f"⚠️ Refresh token mancante per {record.get('email')}")
+                    Logger.log_error(f"### MICROSOFT ❌ Token di refresh mancante per {record.get('email')}, salto questo record.")
                     continue
                 
                 # Crea il dizionario nel formato richiesto dal token_refresher
@@ -141,17 +142,17 @@ async def get_tokens_expiring_soon(threshold_minutes=15) -> List[Dict]:
                 time_to_expiry = expires_at - datetime.utcnow().replace(tzinfo=expires_at.tzinfo)
                 minutes_to_expiry = int(time_to_expiry.total_seconds() / 60)
                 
-                print(f"⏰ Token Microsoft in scadenza per {record.get('email')}: scade tra {minutes_to_expiry} minuti")
+                Logger.log_info(f"### MICROSOFT 📅 Token per {record.get('email')} scade tra {minutes_to_expiry} minuti.")
                 
             except Exception as e:
-                print(f"❌ Errore nella decrittazione/elaborazione token per {record.get('email')}: {str(e)}")
+                Logger.log_error(f"### MICROSOFT ❌ Errore nel processamento del token per {record.get('email')}: {str(e)}")
                 continue
         
-        print(f"📊 Totale token Microsoft in scadenza: {len(expiring_tokens)}")
+        Logger.log_info(f"### MICROSOFT 📊 Totale token Microsoft in scadenza: {len(expiring_tokens)}")
         return expiring_tokens
         
     except Exception as e:
-        print(f"❌ Errore nel recupero dei token Microsoft in scadenza: {str(e)}")
+        Logger.log_error(f"### MICROSOFT ❌ Errore nel recupero dei token in scadenza: {str(e)}")
         return []
 
 async def update_user_tokens(email: str, access_token: str, expires_in: int, refresh_token: str | None = None) -> bool:
@@ -188,25 +189,26 @@ async def update_user_tokens(email: str, access_token: str, expires_in: int, ref
         if refresh_token:
             encrypted_refresh_token = _encrypt_token(refresh_token)
             update_data["hashed_refresh_token"] = encrypted_refresh_token
-            print(f"🔄 Aggiornamento anche del refresh token per email: {email}")
+            Logger.log_info(f"### MICROSOFT 🔄 Aggiornamento anche del refresh token per email: {email}")
         
         # Aggiorna il record nel database
         response = supabase.table("subscription_services").update(update_data).eq("email", email).execute()
         
         if not response.data:
-            print(f"❌ Nessun record trovato per email: {email}")
+            Logger.log_error(f"### MICROSOFT ❌ Nessun record trovato per email: {email}")
             return False
         
         updated_record = response.data[0]
         email = updated_record.get("email", "unknown")
         
-        print(f"✅ Token Microsoft aggiornati con successo per {email}")
-        print(f"   Nuova scadenza: {new_expiry.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        Logger.log_info(f"### MICROSOFT ✅ Token aggiornati con successo per {email}.")
+        Logger.log_info(f"   Subscription ID: {updated_record.get('subscription_id', 'unknown')}")
+        Logger.log_info(f"   Nuova scadenza: {new_expiry.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         if refresh_token:
-            print(f"   Refresh token aggiornato: ✅")
+            Logger.log_info(f"   Refresh token aggiornato.")
         
         return True
         
     except Exception as e:
-        print(f"❌ Errore nell'aggiornamento dei token Microsoft per email {email}: {str(e)}")
+        Logger.log_error(f"### MICROSOFT ❌ Errore nell'aggiornamento del token per {email}: {str(e)}")
         return False

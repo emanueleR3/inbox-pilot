@@ -31,4 +31,6 @@ async def health_check():
     return {"status": "ok"}
 
 if __name__ == "__main__":
-    uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=True)
+    reload = settings.ENV == "development"
+    logger.info(f"### API 📡 Starting API server on port {settings.PORT} in {settings.ENV} mode (reload = {reload})")
+    uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=reload)
