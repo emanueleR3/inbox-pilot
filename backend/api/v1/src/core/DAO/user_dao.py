@@ -13,7 +13,6 @@ class UserDAO:
     
     def create_user(self, email: str, password: str, subscription_id: str):
         try:
-            #TODO: Controllare se subscription_id è valido -> fare get da usare nel front
             redirect_url = f"https://corretto.pro/email-verified?id={subscription_id}"
 
             response = self.supabase.auth.sign_up(
@@ -88,6 +87,19 @@ class UserDAO:
                 .execute()
             )
             return [item["subscription_id"] for item in response.data]
+        except Exception as e:
+            raise e
+        
+    def get_user_by_subscription(self, subscription_id: str):
+        try:
+            response = (
+                self.supabase
+                .table("users_has_subscriptions")
+                .select("user_id")
+                .eq("subscription_id", subscription_id)
+                .execute()
+            )
+            return [item["user_id"] for item in response.data]
         except Exception as e:
             raise e
     

@@ -29,6 +29,28 @@ class UserController:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=str(e)
             )
+        
+    def get_user_by_subscription(self, subscription_id: str):
+        
+
+        if not subscription_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="UserId richiesto"
+            )
+        try:
+            return self.user_dao.get_user_by_subscription(subscription_id)
+        except AuthApiError as e:
+            if "User not found" in str(e):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Subscription_id non trovata"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Errore durante il retrive della subscription_id"
+            )
+        
 
     def login_user(self, payload: dict):
         email = payload.get("email")

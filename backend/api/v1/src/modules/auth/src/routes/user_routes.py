@@ -191,6 +191,50 @@ def login_user(
     sub_id = controller.login_user(payload)
     return {"message": "Login effettuato", "sub_id": sub_id}
 
+@router.get(
+    "/get-user-by-subscription/{subscription_id}",
+    summary="Recupera un utente tramite ID sottoscrizione",
+    description="Restituisce i dati dell'utente associato all'ID di sottoscrizione specificato.",
+    responses={
+        200: {
+            "description": "Utente trovato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "user_id": "abc123",
+                        "email": "user@example.com",
+                        "subscription_id": "sub_xyz789"
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Utente o sottoscrizione non trovati",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Nessun utente trovato per la sottoscrizione specificata"
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "ID sottoscrizione non valido",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "ID sottoscrizione non valido o mancante"
+                    }
+                }
+            }
+        }
+    },
+)
+def get_user_by_subscription(subscription_id: str):
+    return controller.get_user_by_subscription(subscription_id)
+
+
+
 @router.post(
     "/magicLink",
     summary="Invia un link magico per l'accesso",
