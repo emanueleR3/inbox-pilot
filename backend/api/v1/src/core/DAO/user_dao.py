@@ -13,7 +13,10 @@ class UserDAO:
     
     def create_user(self, email: str, password: str):
         try:
-            response = self.supabase.auth.sign_up({"email": email, "password": password})
+            response = self.supabase.auth.sign_up({
+                "email": email, "password": password, 
+                "options": {"redirect_to":  "https://corretto.pro/email-verified"}
+            })
             return UserRead(id=response.user.id, email=response.user.email)
         except Exception as e:
             raise e
@@ -82,7 +85,10 @@ class UserDAO:
 
 
     def login_with_magic_link(self, email: str):
-        self.supabase.auth.sign_in_with_otp({"email": email})
+        self.supabase.auth.sign_in_with_otp({
+            "email": email, 
+            "options": {"redirect_to":  "https://corretto.pro/dashboard"}
+        })
         return {"message": f"Email di login inviata a {email}"}
 
     def delete_user(self, user_id: str):
