@@ -10,7 +10,7 @@ REFRESH_INTERVAL_HOURS = int(os.getenv("REFRESH_INTERVAL_HOURS_SUBSCRIPTIONS", 3
 
 async def main():
     while True:
-        Logger.log_info("🔁 Controllo subscription Microsoft in scadenza...")
+        Logger.log_info("### MICROSOFT SUBSCRIPTIONS 🔁 Controllo subscription Microsoft in scadenza...")
         await refresh_expiring_subscriptions()
         Logger.log_info(f"### MICROSOFT SUBSCRIPTIONS 💤 Attesa di {REFRESH_INTERVAL_HOURS} ore prima del prossimo controllo...")
         await asyncio.sleep(REFRESH_INTERVAL_HOURS * 3600)
