@@ -188,8 +188,8 @@ def login_user(
         description="Credenziali per accedere al proprio account.",
     )
 ):
-    session = controller.login_user(payload)
-    return {"message": "Login effettuato", "session": session}
+    sub_id = controller.login_user(payload)
+    return {"message": "Login effettuato", "sub_id": sub_id}
 
 @router.post(
     "/magicLink",

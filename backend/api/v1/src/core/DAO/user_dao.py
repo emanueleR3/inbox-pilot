@@ -13,6 +13,7 @@ class UserDAO:
     
     def create_user(self, email: str, password: str, subscription_id: str):
         try:
+            #TODO: Controllare se subscription_id è valido -> fare get da usare nel front
             redirect_url = f"https://corretto.pro/email-verified?id={subscription_id}"
 
             response = self.supabase.auth.sign_up(
@@ -77,6 +78,19 @@ class UserDAO:
 
         raise HTTPException(status_code=404, detail=f"Utente con email {email} non trovato")
     
+    def get_subscriptions_by_user(self, user_id: str):
+        try:
+            response = (
+                self.supabase
+                .table("users_has_subscriptions")
+                .select("subscription_id")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            return [item["subscription_id"] for item in response.data]
+        except Exception as e:
+            raise e
+    
     def login_with_password(self, email: str, password: str):
         try:
             response = self.supabase.auth.sign_in_with_password({
@@ -84,18 +98,21 @@ class UserDAO:
                 "password": password
             })
 
-            return response.session
+            sub_id=self.get_subscriptions_by_user(response.session.user.id)
+
+            return sub_id
         
         except AuthApiError as e:
             raise e
 
 
     def login_with_magic_link(self, email: str):
-        self.supabase.auth.sign_in_with_otp({
+        response = self.supabase.auth.sign_in_with_otp({
             "email": email, 
             "options": {"redirect_to":  "https://corretto.pro/dashboard"}
         })
-        return {"message": f"Email di login inviata a {email}"}
+
+        return response.session
 
     def delete_user(self, user_id: str):
         self.supabase.auth.admin.delete_user(user_id)
