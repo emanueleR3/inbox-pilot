@@ -10,11 +10,11 @@ services:
     environment:
       - POLL_INTERVAL_MINUTES_IMAP=2
       - MICROSOFT_WEBHOOK_PORT=8001
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/listeners/service-account-key.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account-key.json
     ports:
       - "8001:8001"  # Microsoft webhook
     volumes:
-      - ./service-account-key.json:/app/listeners/service-account-key.json:ro  # Mount Google credentials
+      - ./service-account-key.json:/app/credentials/service-account-key.json:ro  # Mount Google credentials
     networks:
       - broker_net
 
