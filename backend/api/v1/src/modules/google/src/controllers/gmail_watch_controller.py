@@ -1,12 +1,10 @@
 from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
 from src.core.config import settings
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
+from src.core.model.subscription_service import OAuthGoogleCredentials
 
 subscription_service_dao = SubscriptionServiceDAO()
 
-#def create_watch_for_user(user_email: str):
-# TODO DEBUG eliminare ########################### usare la firma di sopra
 def create_watch_for_user(access_token: str = None, refresh_token: str = None, user_email: str = None):
     """
     Attiva watch Gmail per un utente
@@ -14,9 +12,11 @@ def create_watch_for_user(access_token: str = None, refresh_token: str = None, u
     if access_token is None or refresh_token is None:
         credentials = subscription_service_dao.get_google_credentials(user_email)
     else:
-        credentials = Credentials(
-            token=access_token,
+        credentials = OAuthGoogleCredentials(
+            email=user_email,
+            access_token=access_token,
             refresh_token=refresh_token,
+            expiry=None,
             token_uri="https://oauth2.googleapis.com/token",
             client_id=settings.GOOGLE_CLIENT_ID,
             client_secret=settings.GOOGLE_CLIENT_SECRET,
