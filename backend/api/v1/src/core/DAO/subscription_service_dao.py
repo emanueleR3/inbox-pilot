@@ -68,45 +68,48 @@ class SubscriptionServiceDAO:
         return cipher.decrypt(encrypted_token.encode()).decode()
     
     def save_custom_provider_credentials(self, server_imap: str, server_smtp: str, imap_port: int, smtp_port: int, email: str, password: str, subscription_id: str) -> bool:
-
-        encrypted_password = self._encrypt(password, "pass")
-        
-        email_exists = self.email_exists(email)
-        if email_exists:
-            # rimuovi i token di accesso precedenti se esistono
-            data = {
-                "email_provider": "imap",
-                "imap_server": server_imap, 
-                "smtp_server": server_smtp, 
-                "imap_port": imap_port, 
-                "smtp_port": smtp_port, 
-                "hashed_password": encrypted_password, 
-                "hashed_access_token": None,
-                "hashed_refresh_token": None,
-                "expiry_token": None
-            }
-            response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
-            if not response.data:
-                logging.info(f"Nessun record aggiornato per email: {email}")
-                return False
-            return True
-        else:
-            response = self.create_subscription_service(
-                email=email,
-                email_provider="imap",
-                imap_server=server_imap, 
-                smtp_server=server_smtp, 
-                imap_port=imap_port, 
-                smtp_port=smtp_port, 
-                hashed_password=encrypted_password, 
-                subscription_id=subscription_id
-            )
-
-            if response is None:
-                logging.info(f"Errore nella creazione del nuovo record per email: {email}")
-                return False
+        try:
+            encrypted_password = self._encrypt(password, "pass")
             
-            return True
+            email_exists = self.email_exists(email)
+            if email_exists:
+                # rimuovi i token di accesso precedenti se esistono
+                data = {
+                    "email_provider": "imap",
+                    "imap_server": server_imap, 
+                    "smtp_server": server_smtp, 
+                    "imap_port": imap_port, 
+                    "smtp_port": smtp_port, 
+                    "hashed_password": encrypted_password, 
+                    "hashed_access_token": None,
+                    "hashed_refresh_token": None,
+                    "expiry_token": None
+                }
+                response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
+                if not response.data:
+                    logging.info(f"Nessun record aggiornato per email: {email}")
+                    return False
+                return True
+            else:
+                response = self.create_subscription_service(
+                    email=email,
+                    email_provider="imap",
+                    imap_server=server_imap, 
+                    smtp_server=server_smtp, 
+                    imap_port=imap_port, 
+                    smtp_port=smtp_port, 
+                    hashed_password=encrypted_password, 
+                    subscription_id=subscription_id
+                )
+
+                if response is None:
+                    logging.info(f"Errore nella creazione del nuovo record per email: {email}")
+                    return False
+                
+                return True
+        except Exception as e:
+            raise e
+
 
     def save_microsoft_credentials(
         self, 
