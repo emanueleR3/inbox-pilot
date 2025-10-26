@@ -51,9 +51,9 @@ services:
     env_file:
       - .env
     environment:
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account-key.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/listeners/service-account-key.json
     volumes:
-      - ./listeners/service-account-key.json:/app/credentials/service-account-key.json:ro
+      - ./listeners/service-account-key.json:/app/listeners/service-account-key.json:ro
     depends_on:
       rabbitmq:
         condition: service_healthy
