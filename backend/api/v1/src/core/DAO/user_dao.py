@@ -11,12 +11,18 @@ class UserDAO:
     def __init__(self):
         self.supabase = get_supabase_client()
     
-    def create_user(self, email: str, password: str):
+    def create_user(self, email: str, password: str, subscription_id: str):
         try:
-            response = self.supabase.auth.sign_up({
-                "email": email, "password": password, 
-                "options": {"redirect_to":  "https://corretto.pro/email-verified"}
-            })
+            redirect_url = f"https://corretto.pro/email-verified?id={subscription_id}"
+
+            response = self.supabase.auth.sign_up(
+                {
+                    "email": email,
+                    "password": password,
+                    "options": {"redirect_to": redirect_url}
+                }
+            )
+
             return UserRead(id=response.user.id, email=response.user.email)
         except Exception as e:
             raise e
@@ -32,8 +38,8 @@ class UserDAO:
 
     def create_user_with_sub(self, email: str, password: str, subscription_data: dict):
         try:
-            user = self.create_user(email, password)
             subscription = SubscriptionDAO().create_subscription(subscription_data)
+            user = self.create_user(email, password, subscription.subscription_id)
 
             self.link_user_subscription(user.id, subscription.subscription_id)
 
