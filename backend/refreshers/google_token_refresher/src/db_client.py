@@ -98,7 +98,7 @@ async def get_tokens_expiring_soon(threshold_minutes=15) -> List[Dict]:
         # - hashed_access_token e hashed_refresh_token non null (hanno token Google)
         # - expiry_token <= threshold_time (scadono presto)
         # - activated = true (account attivato)
-        response = supabase.table("subscription_services").select("*").not_.is_("expiry_token", "null").not_.is_("hashed_access_token", "null").not_.is_("hashed_refresh_token", "null").lte("expiry_token", threshold_iso).eq("activated", True).execute()
+        response = supabase.table("subscription_services").select("*").not_.is_("expiry_token", "null").not_.is_("hashed_access_token", "null").not_.is_("hashed_refresh_token", "null").lte("expiry_token", threshold_iso).eq("activated", True).eq("email_provider", "google").execute()
         
         if not response.data:
             Logger.log_info("### GOOGLE ⏰✅ Nessun token Google in scadenza trovato.")

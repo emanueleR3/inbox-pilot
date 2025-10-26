@@ -71,8 +71,42 @@ class SubscriptionServiceDAO:
 
         encrypted_password = self._encrypt(password, "pass")
         
-        return self.create_subscription_service(email=email, imap_server=server_imap, smtp_server=server_smtp, imap_port=imap_port, smtp_port=smtp_port, hashed_password=encrypted_password, subscription_id=subscription_id)
+        email_exists = self.email_exists(email)
+        if email_exists:
+            # rimuovi i token di accesso precedenti se esistono
+            data = {
+                "email_provider": "imap",
+                "imap_server": server_imap, 
+                "smtp_server": server_smtp, 
+                "imap_port": imap_port, 
+                "smtp_port": smtp_port, 
+                "hashed_password": encrypted_password, 
+                "hashed_access_token": None,
+                "hashed_refresh_token": None,
+                "expiry_token": None
+            }
+            response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
+            if not response.data:
+                logging.info(f"Nessun record aggiornato per email: {email}")
+                return False
+            return True
+        else:
+            response = self.create_subscription_service(
+                email=email,
+                email_provider="imap",
+                imap_server=server_imap, 
+                smtp_server=server_smtp, 
+                imap_port=imap_port, 
+                smtp_port=smtp_port, 
+                hashed_password=encrypted_password, 
+                subscription_id=subscription_id
+            )
 
+            if response is None:
+                logging.info(f"Errore nella creazione del nuovo record per email: {email}")
+                return False
+            
+            return True
 
     def save_microsoft_credentials(
         self, 
@@ -126,6 +160,7 @@ class SubscriptionServiceDAO:
             if email_exists:
                 # Aggiorna il record esistente
                 data = {
+                    "email_provider": "microsoft",
                     "hashed_access_token": encrypted_access_token,
                     "hashed_refresh_token": encrypted_refresh_token,
                     "expiry_token": expiry_datetime.isoformat() if expiry_datetime else None,
@@ -141,6 +176,7 @@ class SubscriptionServiceDAO:
                 # Crea un nuovo record
                 response = self.create_subscription_service(
                     email=email,
+                    email_provider="microsoft",
                     subscription_id=str(subscription_id),
                     hashed_access_token=encrypted_access_token,
                     hashed_refresh_token=encrypted_refresh_token,
@@ -176,6 +212,7 @@ class SubscriptionServiceDAO:
             if email_exists:
                 # Aggiorna il record esistente
                 data = {
+                    "email_provider": "google",
                     "hashed_access_token": encrypted_access_token,
                     "hashed_refresh_token": encrypted_refresh_token,
                     "expiry_token": expiry.isoformat() if expiry else None
@@ -189,6 +226,7 @@ class SubscriptionServiceDAO:
                 # Crea un nuovo record
                 response = self.create_subscription_service(
                     email=email,
+                    email_provider="google",
                     subscription_id=subscription_id,
                     hashed_access_token=encrypted_access_token,
                     hashed_refresh_token=encrypted_refresh_token,
@@ -265,6 +303,7 @@ class SubscriptionServiceDAO:
         self,
         email: str,
         subscription_id: str = None,
+        email_provider: str = None,
         calendar_provider: str = None,
         calendar_names: list = None,
         information: dict = None,
@@ -302,6 +341,7 @@ class SubscriptionServiceDAO:
             data = {
                 "email": email,
                 "subscription_id": str(subscription_id) if subscription_id else None,
+                "email_provider": email_provider,
                 "calendar_provider": calendar_provider,
                 "calendar_names": calendar_names,
                 "information": information,

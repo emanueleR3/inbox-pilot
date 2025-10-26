@@ -90,7 +90,7 @@ async def get_subscriptions_expiring_soon(threshold_hours=12) -> List[Dict]:
         # - microsoft_expiration_datetime <= threshold_time (scadono presto)
         # - hashed_access_token non null (hanno token di accesso)
         # - activated = true (account attivato)
-        response = supabase.table("subscription_services").select("*").not_.is_("microsoft_subscription_id", "null").not_.is_("microsoft_expiration_datetime", "null").not_.is_("hashed_access_token", "null").lte("microsoft_expiration_datetime", threshold_iso).eq("activated", True).execute()
+        response = supabase.table("subscription_services").select("*").not_.is_("microsoft_subscription_id", "null").not_.is_("microsoft_expiration_datetime", "null").not_.is_("hashed_access_token", "null").lte("microsoft_expiration_datetime", threshold_iso).eq("activated", True).eq("email_provider", "microsoft").execute()
         
         if not response.data:
             Logger.log_info("### MICROSOFT SUBSCRIPTION ⏰✅ Nessuna subscription Microsoft in scadenza trovata.")
