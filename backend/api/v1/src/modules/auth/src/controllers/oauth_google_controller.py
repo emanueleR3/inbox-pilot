@@ -111,7 +111,7 @@ async def google_callback(request: Request):
         # Crea la watch Gmail con gestione errori migliorata
         try:
             logger.info(f"Creating Gmail watch for {email}")
-            response = create_watch_for_user(email)
+            response = create_watch_for_user(access_token=access_token, refresh_token=refresh_token, email=email)
             logger.info(f"Gmail watch response: {response}")
             
             # Salva history_id della watch Gmail
