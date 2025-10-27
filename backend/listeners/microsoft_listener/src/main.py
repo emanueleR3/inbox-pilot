@@ -47,8 +47,6 @@ async def receive_microsoft_notification(request: Request):
 
     tasks = []
     for i, notif in enumerate(notifications):
-        # Log completo della notifica per capire la struttura
-        log_info(f"🔍 MICROSOFT - Notifica {i+1} completa: {notif}")
         
         # Estrai subscriptionId e dati del messaggio
         subscription_id = notif.get("subscriptionId")
@@ -63,10 +61,6 @@ async def receive_microsoft_notification(request: Request):
             parts = resource_path.split("/")
             if len(parts) >= 2 and parts[0] == "Users":
                 actual_user_id = parts[1]
-        
-        log_info(f"� MICROSOFT - Notifica {i+1}/{len(notifications)}: subscriptionId={subscription_id}, actualUserId={actual_user_id}, messageId={message_id}")
-        log_info(f"🔍 MICROSOFT - Tutti i campi disponibili: {list(notif.keys())}")
-        log_info(f"🔍 MICROSOFT - ResourceData: {resource_data}")
 
         if message_id and subscription_id and actual_user_id:
             # Usa il subscription_id per recuperare le credenziali e actual_user_id per l'API Graph
@@ -80,14 +74,12 @@ async def receive_microsoft_notification(request: Request):
         return {"status": "ok"}
 
     # Recupera tutte le mail in parallelo
-    log_info(f"🔄 MICROSOFT - Avvio recupero di {len(tasks)} messaggi in parallelo...")
     messages = await asyncio.gather(*tasks, return_exceptions=True)
     
     # Filtra i messaggi validi (esclude le eccezioni)
     valid_messages = [msg for msg in messages if msg is not None and not isinstance(msg, Exception)]
     
     if valid_messages:
-        log_info(f"📤 MICROSOFT - Invio di {len(valid_messages)} messaggi a RabbitMQ...")
         # Pubblica le mail sul broker RabbitMQ
         await publish_to_broker(valid_messages)
         log_info(f"✅ MICROSOFT - {len(valid_messages)} messaggi inviati con successo a RabbitMQ")

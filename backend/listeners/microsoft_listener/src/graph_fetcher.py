@@ -70,13 +70,10 @@ async def fetch_new_message(subscription_id: str, message_id: str, actual_user_i
             resp.raise_for_status()
             graph_data = resp.json()
             
-            log_info(f"✅ MICROSOFT - Messaggio recuperato da Graph API: {graph_data.get('subject', 'No subject')}")
-            
             # Converte nel formato standard
             parsed_message = parse_microsoft_message(graph_data, user_email)
             
             if parsed_message:
-                log_info(f"📨 MICROSOFT - Messaggio convertito per RabbitMQ da: {parsed_message.get('from')} oggetto: {parsed_message.get('subject')}")
                 return parsed_message
             else:
                 log_error("❌ MICROSOFT - Errore nella conversione del messaggio")
