@@ -32,6 +32,14 @@ async def receive_microsoft_notification(request: Request):
     
     try:
         data = await request.json()
+        
+        # Controlla se è una richiesta di validazione nel body
+        # Durante il rinnovo, Microsoft potrebbe inviare il validationToken nel body
+        if isinstance(data, dict) and "validationToken" in data:
+            validation_token = data["validationToken"]
+            log_info(f"🔐 MICROSOFT - Verifica subscription POST con validationToken nel body: {validation_token[:20]}...")
+            return PlainTextResponse(validation_token)
+            
     except Exception as e:
         # Se il body è vuoto o non è JSON valido, ritorna OK
         # Questo può succedere durante i test di verifica di Microsoft
