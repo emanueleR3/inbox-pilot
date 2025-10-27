@@ -72,10 +72,13 @@ async def receive_microsoft_notification(request: Request):
 
         if message_id and subscription_id and actual_user_id:
             # Usa il subscription_id per recuperare le credenziali e actual_user_id per l'API Graph
+            log_info(f"📧 MICROSOFT - Recupero messaggio {message_id} per subscription {subscription_id}, user {actual_user_id}")
             tasks.append(asyncio.create_task(fetch_new_message(subscription_id, message_id, actual_user_id)))
         else:
             log_error(f"❌ MICROSOFT - Notifica {i+1} incompleta: subscriptionId={subscription_id}, actualUserId={actual_user_id}, messageId={message_id}")
             log_error(f"❌ MICROSOFT - Campi mancanti - subscriptionId presente: {bool(subscription_id)}, actualUserId presente: {bool(actual_user_id)}, messageId presente: {bool(message_id)}")
+            # Log della notifica completa per debug
+            log_error(f"❌ MICROSOFT - Notifica completa: {notif}")
  
     if not tasks:
         log_info("⚠️ MICROSOFT - Nessun messaggio valido da recuperare")
@@ -84,8 +87,19 @@ async def receive_microsoft_notification(request: Request):
     # Recupera tutte le mail in parallelo
     messages = await asyncio.gather(*tasks, return_exceptions=True)
     
-    # Filtra i messaggi validi (esclude le eccezioni)
-    valid_messages = [msg for msg in messages if msg is not None and not isinstance(msg, Exception)]
+    # Analizza i risultati per logging dettagliato
+    valid_messages = []
+    exceptions_count = 0
+    
+    for i, msg in enumerate(messages):
+        if isinstance(msg, Exception):
+            exceptions_count += 1
+            log_error(f"❌ MICROSOFT - Errore nel task {i+1}: {type(msg).__name__}: {str(msg)}")
+        elif msg is not None:
+            valid_messages.append(msg)
+    
+    if exceptions_count > 0:
+        log_error(f"❌ MICROSOFT - {exceptions_count} errori su {len(messages)} tentativi di recupero messaggi")
     
     if valid_messages:
         # Pubblica le mail sul broker RabbitMQ

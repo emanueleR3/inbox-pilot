@@ -32,5 +32,8 @@ async def renew_subscription(access_token: str, subscription_id: str):
             Logger.log_error(f"### MICROSOFT SUBSCRIPTION 📄 Dettagli errore: {resp.text}")
             raise Exception(f"Errore nel rinnovo subscription {subscription_id}: {resp.status_code}, {resp.text}")
         
+        response_data = resp.json()
         Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Richiesta di rinnovo completata con successo")
-        return resp.json()
+        Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📄 Risposta completa Microsoft: {response_data}")
+        
+        return response_data
