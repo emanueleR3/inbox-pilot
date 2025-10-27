@@ -66,12 +66,12 @@ def get_supabase_client() -> Client:
                 _supabase_client = create_client(supabase_url, supabase_key)
     return _supabase_client
 
-async def get_subscriptions_expiring_soon(threshold_hours=12) -> List[Dict]:
+async def get_subscriptions_expiring_soon(threshold_minutes=15) -> List[Dict]:
     """
     Ritorna le subscription Microsoft che scadranno entro X ore.
     
     Args:
-        threshold_hours (int): Ore prima della scadenza per considerare una subscription "in scadenza"
+        threshold_minutes (int): Minuti prima della scadenza per considerare una subscription "in scadenza"
         
     Returns:
         List[Dict]: Lista di subscription in scadenza nel formato richiesto dal subscription_refresher
@@ -80,7 +80,7 @@ async def get_subscriptions_expiring_soon(threshold_hours=12) -> List[Dict]:
         supabase = get_supabase_client()
         
         # Calcola il timestamp di soglia
-        threshold_time = datetime.utcnow() + timedelta(hours=threshold_hours)
+        threshold_time = datetime.utcnow() + timedelta(minutes=threshold_minutes)
         threshold_iso = threshold_time.isoformat() + "+00:00"
         
         # Query per ottenere tutte le subscription Microsoft che scadranno presto
