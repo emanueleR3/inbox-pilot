@@ -4,7 +4,7 @@ from src.db_client import get_subscriptions_expiring_soon, update_subscription_e
 from src.utils.logger import Logger
 
 async def refresh_expiring_subscriptions():
-    expiring = await get_subscriptions_expiring_soon(threshold_hours=12)
+    expiring = await get_subscriptions_expiring_soon(threshold_minutes=15)
 
     for sub in expiring:
         try:
