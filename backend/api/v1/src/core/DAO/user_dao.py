@@ -10,16 +10,26 @@ from src.core.database import get_supabase_client
 class UserDAO:
     def __init__(self):
         self.supabase = get_supabase_client()
+
+    def login_with_password(self, email: str, password: str):
+        try:
+            response = self.supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+
+            return response.session
+        
+        except AuthApiError as e:
+            raise e
     
     def create_user(self, email: str, password: str, subscription_id: str):
         try:
-            redirect_url = f"https://corretto.pro/email-verified?id={subscription_id}"
 
             response = self.supabase.auth.sign_up(
                 {
                     "email": email,
                     "password": password,
-                    "options": {"redirect_to": redirect_url}
                 }
             )
 
@@ -43,10 +53,13 @@ class UserDAO:
 
             self.link_user_subscription(user.id, subscription.subscription_id)
 
+            response = self.login_with_password(email, password)
+
             return UserReadSub.model_construct(
                 id=user.id,
                 email=user.email,
                 subscription=subscription,
+                jwt= response.access_token
             )
         except Exception as e:
             raise e
@@ -77,8 +90,11 @@ class UserDAO:
 
         raise HTTPException(status_code=404, detail=f"Utente con email {email} non trovato")
     
-    def get_subscriptions_by_user(self, user_id: str):
+    def get_subscriptions_by_user(self, user_id: str, access_token):
         try:
+            
+            self.supabase.postgrest.auth(access_token)
+
             response = (
                 self.supabase
                 .table("users_has_subscriptions")
@@ -111,10 +127,6 @@ class UserDAO:
                 "password": password
             })
 
-            #sub_id=self.get_subscriptions_by_user(response.session.user.id)
-
-            #return sub_id
-
             return response.session
         
         except AuthApiError as e:
@@ -128,19 +140,3 @@ class UserDAO:
         })
 
         return response.session
-
-    def delete_user(self, user_id: str):
-        self.supabase.auth.admin.delete_user(user_id)
-        return {"message": f"Utente eliminato"}
-
-    def send_password_reset(self, email: str):
-        self.supabase.auth.reset_password_email(email)
-        return {"message": f"Email di reset inviata a {email}"}
-
-    def update_password(self, new_password: str):
-        self.supabase.auth.update_user({"password": new_password})
-        return {"message": f"Password aggiornata correttamente"}
-        
-    def logout(self):
-        self.supabase.auth.sign_out()
-        return {"message": f"Logout effettuato con successo"}

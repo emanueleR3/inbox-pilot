@@ -21,3 +21,4 @@ class UserReadSub(BaseModel):
     id: str
     email: EmailStr
     subscription: SubscriptionRead
+    jwt: str

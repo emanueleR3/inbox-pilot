@@ -339,8 +339,6 @@ class SubscriptionServiceDAO:
             dict: Il record creato se successo, None se errore
         """
         try:
-            #TODO: funzione per effettuare l'accesso al server imap
-
             data = {
                 "email": email,
                 "subscription_id": str(subscription_id) if subscription_id else None,
@@ -356,11 +354,11 @@ class SubscriptionServiceDAO:
                 "hashed_access_token": hashed_access_token,
                 "hashed_refresh_token": hashed_refresh_token,
                 "expiry_token": expiry_token.isoformat() if expiry_token else None,
-                "confidence_response_threshold": confidence_response_threshold,
-                "confidence_review_mail": confidence_review_mail,
-                "priority_threshold": priority_threshold,
-                "confidence_classification_threshold": confidence_classification_threshold,
-                "urgent_meeting_threshold": urgent_meeting_threshold,
+                "confidence_response_threshold": "0.8",
+                "confidence_review_mail": "0.7",
+                "priority_threshold": "0.6",
+                "confidence_classification_threshold": "0.75",
+                "urgent_meeting_threshold": "0.9",
                 "history_id": history_id,
                 "microsoft_subscription_id": microsoft_subscription_id,
                 "microsoft_expiration_datetime": microsoft_expiration_datetime.isoformat() if microsoft_expiration_datetime else None,
