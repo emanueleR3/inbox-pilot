@@ -99,6 +99,7 @@ class UserDAO:
                 .eq("subscription_id", subscription_id)
                 .execute()
             )
+
             return [item["user_id"] for item in response.data]
         except Exception as e:
             raise e
@@ -110,9 +111,11 @@ class UserDAO:
                 "password": password
             })
 
-            sub_id=self.get_subscriptions_by_user(response.session.user.id)
+            #sub_id=self.get_subscriptions_by_user(response.session.user.id)
 
-            return sub_id
+            #return sub_id
+
+            return response.session
         
         except AuthApiError as e:
             raise e
