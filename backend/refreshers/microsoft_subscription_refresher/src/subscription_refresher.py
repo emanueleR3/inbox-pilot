@@ -58,6 +58,47 @@ async def list_all_microsoft_subscriptions(access_token: str):
         Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nel recupero subscription: {str(e)}")
         return []
 
+async def cleanup_all_orphan_subscriptions():
+    """
+    Pulisce tutte le subscription orfane per tutti gli utenti.
+    """
+    Logger.log_info("### MICROSOFT SUBSCRIPTION 🧹 Inizio pulizia globale subscription orfane...")
+    
+    # Ottieni tutte le subscription dal database
+    expiring = await get_subscriptions_expiring_soon(threshold_minutes=60*24*30)  # Prendi tutte quelle che scadono nei prossimi 30 giorni
+    
+    for sub in expiring:
+        try:
+            Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🔍 Controllo subscription orfane per {sub.get('email', 'unknown')}")
+            
+            # Lista tutte le subscription per questo token
+            all_subs = await list_all_microsoft_subscriptions(sub["access_token"])
+            
+            # Filtra le subscription che non sono nel nostro database
+            our_subscription_id = sub['subscription_id']
+            orphan_subscriptions = [s for s in all_subs if s.get('id') != our_subscription_id and s.get('resource', '').startswith('/users/')]
+            
+            if orphan_subscriptions:
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🗑️ Trovate {len(orphan_subscriptions)} subscription orfane per {sub.get('email', 'unknown')}")
+                
+                # Elimina le subscription orfane
+                deleted_count = 0
+                for orphan in orphan_subscriptions:
+                    orphan_id = orphan.get('id')
+                    Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🗑️ Eliminazione subscription orfana: {orphan_id}")
+                    success = await delete_orphan_subscription(sub["access_token"], orphan_id)
+                    if success:
+                        deleted_count += 1
+                
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Eliminate {deleted_count}/{len(orphan_subscriptions)} subscription orfane per {sub.get('email', 'unknown')}")
+            else:
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Nessuna subscription orfana trovata per {sub.get('email', 'unknown')}")
+                
+        except Exception as e:
+            Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nella pulizia subscription orfane per {sub.get('email', 'unknown')}: {str(e)}")
+    
+    Logger.log_info("### MICROSOFT SUBSCRIPTION 🧹 Pulizia globale subscription orfane completata")
+
 async def refresh_expiring_subscriptions():
     expiring = await get_subscriptions_expiring_soon(threshold_minutes=15)
 
@@ -70,16 +111,23 @@ async def refresh_expiring_subscriptions():
             
             # Filtra le subscription che non sono nel nostro database
             our_subscription_id = sub['subscription_id']
-            orphan_subscriptions = [s for s in all_subs if s.get('id') != our_subscription_id and s.get('resource', '').startswith('Users/')]
+            orphan_subscriptions = [s for s in all_subs if s.get('id') != our_subscription_id and s.get('resource', '').startswith('/users/')]
             
             if orphan_subscriptions:
                 Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🧹 Trovate {len(orphan_subscriptions)} subscription orfane per {sub.get('email', 'unknown')}")
                 
                 # Elimina le subscription orfane
+                deleted_count = 0
                 for orphan in orphan_subscriptions:
                     orphan_id = orphan.get('id')
                     Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🗑️ Eliminazione subscription orfana: {orphan_id}")
-                    await delete_orphan_subscription(sub["access_token"], orphan_id)
+                    success = await delete_orphan_subscription(sub["access_token"], orphan_id)
+                    if success:
+                        deleted_count += 1
+                
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Eliminate {deleted_count}/{len(orphan_subscriptions)} subscription orfane per {sub.get('email', 'unknown')}")
+            else:
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Nessuna subscription orfana trovata per {sub.get('email', 'unknown')}")
             
             # Ora rinnova la subscription corretta
             renewed = await renew_subscription(sub["access_token"], sub["subscription_id"])

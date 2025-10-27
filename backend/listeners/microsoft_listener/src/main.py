@@ -94,7 +94,11 @@ async def receive_microsoft_notification(request: Request):
     for i, msg in enumerate(messages):
         if isinstance(msg, Exception):
             exceptions_count += 1
-            log_error(f"❌ MICROSOFT - Errore nel task {i+1}: {type(msg).__name__}: {str(msg)}")
+            error_str = str(msg)
+            if "non trovato" in error_str:
+                log_error(f"❌ MICROSOFT - Subscription orfana nel task {i+1}: {error_str}")
+            else:
+                log_error(f"❌ MICROSOFT - Errore nel task {i+1}: {type(msg).__name__}: {error_str}")
         elif msg is not None:
             valid_messages.append(msg)
     
