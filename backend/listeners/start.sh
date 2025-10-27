@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -e
 
-sleep 15
+sleep 15 # Wait for RabbitMQ to be ready
 
 # Forward SIGTERM/SIGINT to children so docker stop exits cleanly
 term_handler() {

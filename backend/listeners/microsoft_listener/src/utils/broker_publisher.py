@@ -25,12 +25,9 @@ async def publish_to_broker(messages):
         return
     
     try:
-        log_info(f"🔌 BROKER - Connessione a RabbitMQ: {RABBITMQ_URL}")
         connection = await aio_pika.connect_robust(RABBITMQ_URL)
         channel = await connection.channel()
         await channel.declare_queue(QUEUE_NAME, durable=True)
-        
-        log_info(f"📤 BROKER - Pubblicazione di {len(valid_messages)} messaggi su coda '{QUEUE_NAME}'")
 
         for i, msg in enumerate(valid_messages):
             try:
@@ -43,16 +40,10 @@ async def publish_to_broker(messages):
                     routing_key=QUEUE_NAME,
                 )
                 
-                # Log informazioni del messaggio pubblicato
-                subject = msg.get('subject', 'No subject')[:50]
-                from_addr = msg.get('from', 'Unknown sender')[:50]
-                log_info(f"✅ BROKER - Messaggio {i+1}/{len(valid_messages)} pubblicato: '{subject}' da '{from_addr}'")
-                
             except Exception as e:
                 log_error(f"❌ BROKER - Errore pubblicazione messaggio {i+1}: {str(e)}", e)
 
         await connection.close()
-        log_info(f"🎯 BROKER - Pubblicazione completata! {len(valid_messages)} messaggi inviati con successo")
         
     except Exception as e:
         log_error(f"❌ BROKER - Errore connessione/pubblicazione RabbitMQ: {str(e)}", e)
