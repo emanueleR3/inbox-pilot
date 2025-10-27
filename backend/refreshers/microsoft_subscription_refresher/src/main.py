@@ -14,27 +14,25 @@ async def wait_for_webhook_endpoint():
     Verifica che l'endpoint webhook Microsoft sia raggiungibile prima di iniziare i refresh.
     """
     webhook_url = os.getenv("MICROSOFT_WEBHOOK_URL", "https://listeners.corretto.pro/microsoft/webhook")
-    max_attempts = 10
-    delay_between_attempts = 5
+    max_attempts = 5
+    delay_between_attempts = 3
+    
+    Logger.log_info("### MICROSOFT SUBSCRIPTIONS 🔍 Verifica webhook endpoint...")
     
     for attempt in range(max_attempts):
         try:
-            Logger.log_info(f"### MICROSOFT SUBSCRIPTIONS 🔍 Tentativo {attempt + 1}/{max_attempts} di verifica webhook endpoint...")
-            
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(f"{webhook_url}?validationToken=healthcheck")
                 
                 if response.status_code == 200 and response.text == "healthcheck":
                     Logger.log_info("### MICROSOFT SUBSCRIPTIONS ✅ Webhook endpoint raggiungibile e funzionante!")
                     return True
-                else:
-                    Logger.log_warning(f"### MICROSOFT SUBSCRIPTIONS ⚠️ Webhook endpoint risponde ma non correttamente: {response.status_code}, {response.text}")
                     
         except Exception as e:
-            Logger.log_warning(f"### MICROSOFT SUBSCRIPTIONS ⚠️ Webhook endpoint non ancora raggiungibile: {str(e)}")
+            if attempt == max_attempts - 1:  # Solo ultimo tentativo
+                Logger.log_warning(f"### MICROSOFT SUBSCRIPTIONS ⚠️ Webhook endpoint non raggiungibile: {str(e)}")
         
         if attempt < max_attempts - 1:
-            Logger.log_info(f"### MICROSOFT SUBSCRIPTIONS ⏳ Attesa di {delay_between_attempts} secondi prima del prossimo tentativo...")
             await asyncio.sleep(delay_between_attempts)
     
     Logger.log_error(f"### MICROSOFT SUBSCRIPTIONS ❌ Webhook endpoint non raggiungibile dopo {max_attempts} tentativi. Continuando comunque...")

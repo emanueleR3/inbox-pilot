@@ -22,8 +22,7 @@ async def renew_subscription(access_token: str, subscription_id: str):
     }
 
     Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📡 Invio richiesta di rinnovo a Microsoft Graph per subscription: {subscription_id}")
-    Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🕐 Timestamp corrente UTC: {now_utc.isoformat()}")
-    Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📅 Nuova data di scadenza impostata: {new_expiration}")
+    Logger.log_info(f"### MICROSOFT SUBSCRIPTION  Nuova data di scadenza impostata: {new_expiration}")
 
     async with httpx.AsyncClient() as client:
         resp = await client.patch(f"{GRAPH_URL}/{subscription_id}", json=data, headers=headers)
@@ -39,8 +38,6 @@ async def renew_subscription(access_token: str, subscription_id: str):
         returned_expiration = response_data.get("expirationDateTime")
         
         Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Richiesta di rinnovo completata con successo")
-        Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📤 Data inviata: {new_expiration}")
-        Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📥 Data restituita da Microsoft: {returned_expiration}")
-        Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📄 Risposta completa Microsoft: {response_data}")
+        Logger.log_info(f"### MICROSOFT SUBSCRIPTION � Nuova scadenza confermata: {returned_expiration}")
         
         return response_data

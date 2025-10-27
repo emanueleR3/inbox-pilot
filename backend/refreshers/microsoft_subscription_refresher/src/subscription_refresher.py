@@ -1,4 +1,3 @@
-# refreshers/microsoft_subscription_refresher/src/subscription_refresher.py
 import httpx
 from src.utils.graph_client import renew_subscription
 from src.db_client import get_subscriptions_expiring_soon, update_subscription_expiration
@@ -46,9 +45,6 @@ async def list_all_microsoft_subscriptions(access_token: str):
                 subscriptions = data.get("value", [])
                 Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📋 Trovate {len(subscriptions)} subscription totali per questo token")
                 
-                for sub in subscriptions:
-                    Logger.log_info(f"   - ID: {sub.get('id')}, Resource: {sub.get('resource')}, Expiry: {sub.get('expirationDateTime')}")
-                
                 return subscriptions
             else:
                 Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nel recupero subscription: {resp.status_code}")
@@ -85,7 +81,6 @@ async def cleanup_all_orphan_subscriptions():
                 deleted_count = 0
                 for orphan in orphan_subscriptions:
                     orphan_id = orphan.get('id')
-                    Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🗑️ Eliminazione subscription orfana: {orphan_id}")
                     success = await delete_orphan_subscription(sub["access_token"], orphan_id)
                     if success:
                         deleted_count += 1
@@ -120,7 +115,6 @@ async def refresh_expiring_subscriptions():
                 deleted_count = 0
                 for orphan in orphan_subscriptions:
                     orphan_id = orphan.get('id')
-                    Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🗑️ Eliminazione subscription orfana: {orphan_id}")
                     success = await delete_orphan_subscription(sub["access_token"], orphan_id)
                     if success:
                         deleted_count += 1
