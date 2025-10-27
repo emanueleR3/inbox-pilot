@@ -35,7 +35,7 @@ jobs:
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           SHA_TAG=${{ github.sha }}
           BROKER_IMAGE=ghcr.io/${REPO_LOWER}/broker
-          docker build -t ${BROKER_IMAGE}:latest -t ${BROKER_IMAGE}:${SHA_TAG} -f broker/worker/Dockerfile broker
+          docker build --no-cache -t ${BROKER_IMAGE}:latest -t ${BROKER_IMAGE}:${SHA_TAG} -f broker/worker/Dockerfile broker
           docker push ${BROKER_IMAGE}:latest
           docker push ${BROKER_IMAGE}:${SHA_TAG}
 
@@ -45,7 +45,7 @@ jobs:
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           SHA_TAG=${{ github.sha }}
           LISTENERS_IMAGE=ghcr.io/${REPO_LOWER}/listeners
-          docker build -t ${LISTENERS_IMAGE}:latest -t ${LISTENERS_IMAGE}:${SHA_TAG} listeners
+          docker build --no-cache -t ${LISTENERS_IMAGE}:latest -t ${LISTENERS_IMAGE}:${SHA_TAG} listeners
           docker push ${LISTENERS_IMAGE}:latest
           docker push ${LISTENERS_IMAGE}:${SHA_TAG}
 
@@ -55,7 +55,7 @@ jobs:
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           SHA_TAG=${{ github.sha }}
           REFRESHERS_IMAGE=ghcr.io/${REPO_LOWER}/refreshers
-          docker build -t ${REFRESHERS_IMAGE}:latest -t ${REFRESHERS_IMAGE}:${SHA_TAG} refreshers
+          docker build --no-cache -t ${REFRESHERS_IMAGE}:latest -t ${REFRESHERS_IMAGE}:${SHA_TAG} refreshers
           docker push ${REFRESHERS_IMAGE}:latest
           docker push ${REFRESHERS_IMAGE}:${SHA_TAG}
 
