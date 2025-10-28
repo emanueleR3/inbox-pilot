@@ -10,11 +10,12 @@ import time
 
 class UserDAO:
     def __init__(self):
-        self.supabase = get_fresh_supabase_client() 
+        self.supabase = get_supabase_client()
+        self.supabase_auth = get_fresh_supabase_client() 
 
     def login_with_password(self, email: str, password: str):
         try:
-            response = self.supabase.auth.sign_in_with_password({
+            response = self.supabase_auth.auth.sign_in_with_password({
                 "email": email,
                 "password": password
             })
@@ -27,7 +28,7 @@ class UserDAO:
     def create_user(self, email: str, password: str):
         try:
 
-            response = self.supabase.auth.sign_up(
+            response = self.supabase_auth.auth.sign_up(
                 {
                     "email": email,
                     "password": password,
@@ -130,7 +131,7 @@ class UserDAO:
 
     def logout(self):
         try:
-            return self.supabase.auth.sign_out()
+            return self.supabase_auth.auth.sign_out()
            
         except AuthApiError as e:
             raise e
