@@ -1,3 +1,4 @@
+'''
 from fastapi import APIRouter, Request
 from ..controllers.oauth_google_controller import (
     google_login,
@@ -13,3 +14,4 @@ async def google_login_route():
 @router.get("/google/callback")
 async def google_callback_route(request: Request):
     return await google_callback(request)
+'''

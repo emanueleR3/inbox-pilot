@@ -1,3 +1,4 @@
+'''
 from fastapi import APIRouter, Request
 from src.modules.auth.src.controllers.oauth_microsoft_controller import (
     microsoft_login,
@@ -13,3 +14,4 @@ async def microsoft_login_route():
 @router.get("/microsoft/callback")
 async def microsoft_callback_route(request: Request):
     return await microsoft_callback(request)
+'''
