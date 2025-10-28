@@ -57,6 +57,7 @@ class Answer(BaseModel):
 class Quiz(BaseModel):
     id: Optional[str] = None
     questions: List[Question] = Field(default_factory=list)
+    answers: Optional[List[Answer]] = None
     created_at: datetime = Field(default_factory=datetime.now)
 
     def to_ordered_questions(self) -> List[Question]:
@@ -82,6 +83,7 @@ class CompanyInfo(BaseModel):
     email_signature: Optional[str] = None
     phone_number: Optional[str] = None
     vat_number: Optional[str] = None
+    other_details: Optional[str] = None
     # metadata: Optional[Dict[str, Any]] = None
 
     def to_prompt_snippet(self) -> str:
@@ -105,6 +107,8 @@ class CompanyInfo(BaseModel):
             parts.append(f"Tone of Voice: {self.tone_of_voice}")
         if self.email_signature:
             parts.append(f"Email Signature: {self.email_signature}")
+        if self.other_details:
+            parts.append(f"Other Details: {self.other_details}")
         return "\n".join(parts)
 
 __all__ = [

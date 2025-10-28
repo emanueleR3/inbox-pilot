@@ -49,8 +49,8 @@ class QuizChain:
         
         # TODO Could add logic to check if we have minimum required info, examining answers
         return True
-    
-    def generate_next_question(self, answers: List[Answer]) -> Optional[Question]:
+
+    def generate_next_question(self, questions: List[Question], answers: List[Answer]) -> Optional[Question]:
         """
         Generate the next question based on previous answers.
         
@@ -67,7 +67,7 @@ class QuizChain:
         
         # Format history
         history = "\n".join([
-            f"Q{i+1}: {ans.question_id} = {ans.value}"
+            f"Q{i+1}: {questions[i].text}\nA{i+1}: {ans.value}"
             for i, ans in enumerate(answers)
         ]) if answers else "No questions asked yet."
         
@@ -86,6 +86,7 @@ class QuizChain:
         # Generate question
         try:
             result: Question = chain.invoke({})
+            questions.append(result)
         except Exception as e:
             # Try to detect completion signal
             print(f"Quiz may be complete or error occurred: {e}")
@@ -110,11 +111,12 @@ class QuizChain:
         
         quiz = Quiz(id="company_info_quiz", questions=[])
         answers: List[Answer] = []
+        questions: List[Question] = []
         
         while len(answers) < self.MAX_QUESTIONS:
             # Generate next question
-            question = self.generate_next_question(answers)
-            
+            question = self.generate_next_question(questions, answers)
+
             if question is None:
                 print("\n✓ Quiz complete!")
                 break
@@ -144,6 +146,7 @@ class QuizChain:
             # Store answer
             answer = Answer(question_id=question.id, value=value)
             answers.append(answer)
+            quiz.answers = answers
             
             print(f"✓ Answer recorded: {value}")
         
@@ -195,7 +198,8 @@ class QuizChain:
             email_address=result.email_address,
             email_signature=result.email_signature,
             phone_number=result.phone_number,
-            vat_number=result.vat_number
+            vat_number=result.vat_number,
+            other_details=result.other_details
         )
         
         return company_info
@@ -219,6 +223,12 @@ def main():
     # Note: To extract company info, you'd need the answers list
     # This is just a demonstration
     print("\nQuiz completed successfully!")
+
+    # Extract company information basing on the quiz ran
+    company_info = quiz_chain.extract_company_info(quiz, quiz.answers or [])
+    print("\nExtracted Company Information:")
+    print(company_info.to_prompt_snippet())
+
 
 
 if __name__ == "__main__":

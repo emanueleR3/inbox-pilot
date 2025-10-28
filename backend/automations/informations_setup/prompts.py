@@ -3,6 +3,9 @@ Prompts for the QuizChain system.
 Centralized prompt management for better maintainability and flexibility.
 """
 
+# TODO Orientare i prompt verso la raccolta di informazioni utili a rispondere ad email in ingresso 
+# all'azienda. Attualmente i prompt si focalizzano sulla raccolta di informazioni aziendali.
+
 from typing import Optional
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
@@ -34,7 +37,7 @@ class ExtractedCompanyInfo(BaseModel):
     email_signature: Optional[str] = Field(default=None, description="Email signature")
     phone_number: Optional[str] = Field(default=None, description="Contact phone number")
     vat_number: Optional[str] = Field(default=None, description="VAT/Tax number")
-
+    other_details: Optional[str] = Field(default=None, description="Any other relevant details about the company")
 
 class Prompts:
     """
