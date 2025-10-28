@@ -5,11 +5,12 @@ from src.core.redis_client import get_redis_client
 #from src.core.model.subscription_service import SubscriptionServiceCrate
 from src.core.DAO.subscription_dao import SubscriptionDAO
 #from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
-from src.core.database import get_supabase_client
+from src.core.database import get_supabase_client, get_fresh_supabase_client
+import time
 
 class UserDAO:
     def __init__(self):
-        self.supabase = get_supabase_client()
+        self.supabase = get_fresh_supabase_client() 
 
     def login_with_password(self, email: str, password: str):
         try:
@@ -23,7 +24,7 @@ class UserDAO:
         except AuthApiError as e:
             raise e
     
-    def create_user(self, email: str, password: str, subscription_id: str):
+    def create_user(self, email: str, password: str):
         try:
 
             response = self.supabase.auth.sign_up(
@@ -49,7 +50,7 @@ class UserDAO:
     def create_user_with_sub(self, email: str, password: str, subscription_data: dict):
         try:
             subscription = SubscriptionDAO().create_subscription(subscription_data)
-            user = self.create_user(email, password, subscription.subscription_id)
+            user = self.create_user(email, password)
 
             self.link_user_subscription(user.id, subscription.subscription_id)
 
@@ -120,23 +121,20 @@ class UserDAO:
         except Exception as e:
             raise e
     
-    def login_with_password(self, email: str, password: str):
-        try:
-            response = self.supabase.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
-
-            return response.session
-        
-        except AuthApiError as e:
-            raise e
-
-
     def login_with_magic_link(self, email: str):
         response = self.supabase.auth.sign_in_with_otp({
             "email": email, 
             "options": {"redirect_to":  "https://corretto.pro/dashboard"}
         })
-
         return response.session
+
+    def logout(self):
+        try:
+            return self.supabase.auth.sign_out()
+           
+        except AuthApiError as e:
+            raise e
+        except Exception as e:
+            raise e
+    
+
