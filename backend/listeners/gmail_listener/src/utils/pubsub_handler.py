@@ -93,8 +93,8 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "provider": "gmail",
         "user_email": user_email,
         "history_id": history_id,
-        "message_id": message.get("id"),
-        "thread_id": message.get("threadId"),
+        "message_id": headers.get("Message-ID"),  # Usa Message-ID header IMAP invece dell'ID Gmail
+        "thread_id": headers.get("In-Reply-To"),   # Usa In-Reply-To header IMAP invece del threadId Gmail
         "subject": headers.get("Subject"),
         "from": headers.get("From"),
         "to": headers.get("To"),
