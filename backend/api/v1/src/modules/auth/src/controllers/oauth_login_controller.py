@@ -47,7 +47,7 @@ async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, requ
         logger.error(f"Error in OAuth login: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during OAuth login")
 
-
+'''
 async def _google_login(subscription_id: str, request: Request):
     """
     Gestisce il login Google con subscription_id.
@@ -77,8 +77,40 @@ async def _google_login(subscription_id: str, request: Request):
     response.set_cookie(key="oauth_state", value=encoded_state, httponly=True)
     response.set_cookie(key="subscription_id", value=subscription_id, httponly=True)
     return response
+'''
 
+async def _google_login(subscription_id: str, request: Request):
+    """
+    Gestisce il login Google con subscription_id.
+    """
+    flow = create_google_flow()
+    
+    # Crea uno stato personalizzato che include il subscription_id
+    import json
+    import base64
+    import time
+    custom_state = {
+        "subscription_id": subscription_id,
+        "timestamp": str(int(time.time()))
+    }
+    encoded_state = base64.urlsafe_b64encode(json.dumps(custom_state).encode()).decode()
+    
+    authorization_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+        state=encoded_state
+    )
 
+    logger.info(f"Returning Google OAuth URL: {authorization_url}")
+    
+    # CAMBIA QUESTO: Restituisci JSON invece di RedirectResponse
+    return JSONResponse(content={
+        "success": True,
+        "url": authorization_url,
+        "message": "Google OAuth URL generated successfully"
+    })
+'''
 async def _microsoft_login(subscription_id: str, request: Request):
     """
     Gestisce il login Microsoft con subscription_id.
@@ -96,6 +128,28 @@ async def _microsoft_login(subscription_id: str, request: Request):
     # Salva il subscription_id nei cookie per il callback (per compatibilità)
     response.set_cookie(key="subscription_id", value=subscription_id, httponly=True)
     return response
+'''
+
+async def _microsoft_login(subscription_id: str, request: Request):
+    """
+    Gestisce il login Microsoft con subscription_id.
+    """
+    authorization_url = create_microsoft_auth_url()
+    
+    # Aggiungi subscription_id come query parameter nell'URL di autorizzazione
+    if "?" in authorization_url:
+        authorization_url += f"&subscription_id={subscription_id}"
+    else:
+        authorization_url += f"?subscription_id={subscription_id}"
+    
+    logger.info(f"Returning Microsoft OAuth URL: {authorization_url}")
+    
+    # CAMBIA QUESTO: Restituisci JSON invece di RedirectResponse
+    return JSONResponse(content={
+        "success": True,
+        "url": authorization_url,
+        "message": "Microsoft OAuth URL generated successfully"
+    })
 
 
 async def google_callback(request: Request):
