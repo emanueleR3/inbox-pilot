@@ -29,3 +29,4 @@ class UserReadSubs(BaseModel):
     email: str
     subscriptions: List[SubscriptionRead]  
     jwt: str
+    sub_selected: int

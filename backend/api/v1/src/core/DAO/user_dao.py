@@ -12,6 +12,35 @@ class UserDAO:
         self.supabase = get_supabase_client()
         self.supabase_auth = get_fresh_supabase_client() 
 
+    def get_users_by_subscription(self, subscription_id: str) -> list[UserRead]:
+            link_response = (
+                self.supabase
+                    .table("users_has_subscriptions")
+                    .select("user_id")
+                    .eq("subscription_id", subscription_id)
+                    .execute()
+            )
+
+            if not link_response.data:
+                return []
+
+            user_ids = [row["user_id"] for row in link_response.data]
+
+            users_response = self.supabase.auth.admin.list_users()
+
+            if isinstance(users_response, list):
+                users = users_response
+
+            if not users:
+                return []
+
+            result = []
+            for u in users:
+                if getattr(u, "id", None) in user_ids:
+                    result.append(UserRead(id=u.id, email=u.email))
+
+            return result
+
     def get_subscriptions_by_user(self, user_id: str) -> list[SubscriptionRead]:            
         link_response = (
             self.supabase
@@ -53,7 +82,7 @@ class UserDAO:
 
         return subscriptions
 
-    def login_with_password(self, email: str, password: str):
+    def login_with_password(self, email: str, password: str) -> UserReadSubs:
         response = self.supabase_auth.auth.sign_in_with_password({
             "email": email,
             "password": password
@@ -65,10 +94,11 @@ class UserDAO:
             id = response.session.user.id,
             email = response.session.user.email,
             subscriptions=subscriptions,
-            jwt=response.session.access_token
+            jwt=response.session.access_token,
+            sub_selected=0
         )
     
-    def create_user(self, email: str, password: str):
+    def create_user(self, email: str, password: str) -> UserRead:
         response = self.supabase_auth.auth.sign_up(
             {
                 "email": email,
@@ -76,16 +106,17 @@ class UserDAO:
             }
         )
 
-        return UserRead(id=response.user.id, email=response.user.email)
-      
+        return UserRead(id=response.user.id, email=response.user.email)      
 
-    def link_user_subscription(self, user_id: str, subscription_id: str):
+    def link_user_subscription(self, user_id: str, subscription_id: str) -> bool:
         self.supabase.table("users_has_subscriptions").insert({
             "user_id": user_id,
             "subscription_id": subscription_id
         }).execute()
 
-    def create_user_with_sub(self, email: str, password: str, subscription_data: dict):
+        return True
+
+    def create_user_with_sub(self, email: str, password: str, subscription_data: dict) -> UserReadSubs:
         subscription = SubscriptionDAO().create_subscription(subscription_data)
         user = self.create_user(email, password)
 
@@ -94,6 +125,11 @@ class UserDAO:
         response = self.login_with_password(email, password)
 
         return response
+    
+    def add_new_user(self, email: str, password: str, subscription_id: str) -> bool:
+        user = self.create_user(email, password)
+        return self.link_user_subscription(user.id, subscription_id)
+
 
     def get_user_by_email(self, email: str):
         # 1) Try Redis cache first
