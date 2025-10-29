@@ -191,6 +191,7 @@ class ImapClient:
             
             # Controlla se l'email è recente (inviata dopo ieri)
             if not self._is_email_recent(date_str):
+                log_info(f"Email {mail_id.decode()} ignorata (data: {date_str})")
                 continue  # Salta le email vecchie
             
             # Converte la data in formato timestamp
