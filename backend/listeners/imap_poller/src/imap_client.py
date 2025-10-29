@@ -1,9 +1,11 @@
 import imaplib
 import email
+import ssl
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
 from typing import List, Dict
 import re
+from src.utils.logger import log_info, log_error
 
 class ImapClient:
     def __init__(self, host: str, port: int, username: str, password: str, use_ssl: bool = True):
@@ -15,13 +17,49 @@ class ImapClient:
         self.conn = None
 
     def connect(self):
-        if self.use_ssl:
-            self.conn = imaplib.IMAP4_SSL(self.host, self.port)
-        else:
-            self.conn = imaplib.IMAP4(self.host, self.port)
+        try:
+            if self.use_ssl:
+                # Crea un contesto SSL personalizzato per gestire server con configurazioni SSL più vecchie
+                ssl_context = ssl.create_default_context()
+                # Imposta il livello di sicurezza per permettere chiavi DH più piccole
+                ssl_context.set_ciphers('DEFAULT:@SECLEVEL=1')
+                # Consenti protocolli TLS più vecchi se necessario
+                ssl_context.minimum_version = ssl.TLSVersion.TLSv1
+                
+                log_info(f"🔗 Tentativo di connessione SSL a {self.host}:{self.port}")
+                self.conn = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=ssl_context)
+            else:
+                log_info(f"🔗 Tentativo di connessione non-SSL a {self.host}:{self.port}")
+                self.conn = imaplib.IMAP4(self.host, self.port)
 
-        self.conn.login(self.username, self.password)
-        self.conn.select("INBOX")   # di default seleziono la inbox (TODO pensare eventualmente di andare a controllare anche la spam)
+            log_info(f"🔐 Tentativo di login per {self.username}")
+            self.conn.login(self.username, self.password)
+            self.conn.select("INBOX")   # di default seleziono la inbox (TODO pensare eventualmente di andare a controllare anche la spam)
+            log_info(f"✅ Connessione IMAP riuscita per {self.username}")
+            
+        except ssl.SSLError as e:
+            log_error(f"❌ Errore SSL durante la connessione a {self.host}:{self.port} - {str(e)}")
+            # Prova con un contesto SSL ancora più permissivo
+            try:
+                log_info("🔄 Tentativo con contesto SSL più permissivo...")
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                ssl_context.set_ciphers('ALL:@SECLEVEL=0')
+                
+                self.conn = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=ssl_context)
+                self.conn.login(self.username, self.password)
+                self.conn.select("INBOX")
+                log_info(f"✅ Connessione IMAP riuscita con SSL permissivo per {self.username}")
+            except Exception as fallback_e:
+                log_error(f"❌ Fallback SSL fallito per {self.host}: {str(fallback_e)}")
+                raise
+        except imaplib.IMAP4.error as e:
+            log_error(f"❌ Errore IMAP durante login per {self.username}: {str(e)}")
+            raise
+        except Exception as e:
+            log_error(f"❌ Errore generico durante connessione IMAP per {self.username}: {str(e)}")
+            raise
 
     def _decode_header(self, header_value):
         """
@@ -175,7 +213,9 @@ class ImapClient:
 
     def close(self):
         try:
-            self.conn.close()
-            self.conn.logout()
-        except:
-            pass
+            if self.conn:
+                self.conn.close()
+                self.conn.logout()
+                log_info(f"🔌 Connessione IMAP chiusa per {self.username}")
+        except Exception as e:
+            log_error(f"⚠️ Errore durante chiusura connessione IMAP per {self.username}: {str(e)}")
