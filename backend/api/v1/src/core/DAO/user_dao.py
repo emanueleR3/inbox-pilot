@@ -111,12 +111,7 @@ class UserDAO:
 
             response = self.login_with_password(email, password)
 
-            return UserReadSub.model_construct(
-                id=user.id,
-                email=user.email,
-                subscription=subscription,
-                jwt= response.access_token
-            )
+            return response
         except Exception as e:
             raise e
 
