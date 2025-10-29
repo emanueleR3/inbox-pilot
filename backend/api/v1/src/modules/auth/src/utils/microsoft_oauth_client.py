@@ -70,15 +70,21 @@ async def refresh_access_token(refresh_token: str):
         response.raise_for_status()
         return response.json()
     
-def create_microsoft_auth_url():
+def create_microsoft_auth_url(custom_state: str = None):
     """
     Restituisce l'URL di login Microsoft pronto per il redirect.
-    Genera uno state casuale per protezione CSRF.
+    Se custom_state è fornito, lo usa; altrimenti genera uno state casuale.
     """
     from src.core.logger import setup_logger
     logger = setup_logger()
     
-    state = secrets.token_urlsafe(16)  # genera uno state sicuro
+    if custom_state:
+        state = custom_state
+        logger.info(f"Using custom state for Microsoft OAuth: {state[:20]}...")
+    else:
+        state = secrets.token_urlsafe(16)  # genera uno state sicuro di default
+        logger.info(f"Generated random state for Microsoft OAuth: {state}")
+    
     auth_url = get_auth_url(state)
     
     # Log per debug

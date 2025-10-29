@@ -134,13 +134,18 @@ async def _microsoft_login(subscription_id: str, request: Request):
     """
     Gestisce il login Microsoft con subscription_id.
     """
-    authorization_url = create_microsoft_auth_url()
+    # Crea uno stato personalizzato che include il subscription_id (come Google)
+    import json
+    import base64
+    import time
+    custom_state = {
+        "subscription_id": subscription_id,
+        "timestamp": str(int(time.time()))
+    }
+    encoded_state = base64.urlsafe_b64encode(json.dumps(custom_state).encode()).decode()
     
-    # Aggiungi subscription_id come query parameter nell'URL di autorizzazione
-    if "?" in authorization_url:
-        authorization_url += f"&subscription_id={subscription_id}"
-    else:
-        authorization_url += f"?subscription_id={subscription_id}"
+    # Usa la funzione modificata che accetta lo state personalizzato
+    authorization_url = create_microsoft_auth_url(encoded_state)
     
     logger.info(f"Returning Microsoft OAuth URL: {authorization_url}")
     
@@ -424,15 +429,30 @@ async def microsoft_callback(request: Request):
     Gestisce il callback dopo il login Microsoft.
     """
     try:
-        # Prova a recuperare subscription_id dai query parameters prima, poi dai cookie
-        subscription_id = request.query_params.get("subscription_id") or request.cookies.get("subscription_id")
+        # Prova a recuperare subscription_id dallo stato OAuth (come Google)
+        subscription_id = None
+        state = request.query_params.get("state")
+        
+        if state:
+            try:
+                import json
+                import base64
+                decoded_state = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
+                subscription_id = decoded_state.get("subscription_id")
+                logger.info(f"Retrieved subscription_id from Microsoft OAuth state: {subscription_id}")
+            except Exception as e:
+                logger.warning(f"Could not decode Microsoft OAuth state: {e}")
+        
+        # Fallback ai query parameters e poi ai cookie (per compatibilità)
+        if not subscription_id:
+            subscription_id = request.query_params.get("subscription_id") or request.cookies.get("subscription_id")
         
         if not subscription_id:
-            logger.error("Missing subscription_id from both query params and cookies")
+            logger.error("Missing subscription_id from state, query params and cookies")
             raise HTTPException(status_code=400, detail="Missing subscription_id from login session")
         
         logger.info(f"Microsoft callback URL: {request.url}")
-        logger.info(f"Retrieved subscription_id: {subscription_id}")
+        logger.info(f"Using subscription_id: {subscription_id}")
         
         # Controlla se c'è un errore da Microsoft
         error = request.query_params.get("error")
