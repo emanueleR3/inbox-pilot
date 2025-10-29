@@ -15,16 +15,6 @@ import httpx
 logger = setup_logger()
 subscription_service_dao = SubscriptionServiceDAO()
 
-
-async def microsoft_login():
-    """
-    Reindirizza l'utente alla pagina di consenso Microsoft.
-    """
-    authorization_url = create_microsoft_auth_url()
-    logger.info(f"Redirecting to Microsoft OAuth: {authorization_url}")
-    return RedirectResponse(url=authorization_url)
-
-
 async def microsoft_callback(request: Request):
     """
     Gestisce il callback dopo il login Microsoft.

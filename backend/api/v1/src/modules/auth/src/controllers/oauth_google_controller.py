@@ -1,3 +1,5 @@
+
+
 from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
 from src.modules.auth.src.utils.google_oauth_client import create_google_flow
@@ -13,22 +15,6 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 logger = setup_logger()
 subscription_service_dao = SubscriptionServiceDAO()
-
-async def google_login():
-    """
-    Reindirizza l'utente alla pagina di consenso Google.
-    """
-    flow = create_google_flow()
-    authorization_url, state = flow.authorization_url(
-        access_type="offline",      # per ottenere anche il refresh token
-        include_granted_scopes="true",
-        prompt="consent"            # forza Google a chiedere il consenso anche se già loggato
-    )
-
-    logger.info(f"Redirecting to Google OAuth: {authorization_url}")
-    response = RedirectResponse(url=authorization_url)
-    response.set_cookie(key="oauth_state", value=state, httponly=True)
-    return response
 
 
 async def google_callback(request: Request):

@@ -30,32 +30,6 @@ class UserController:
                 detail=str(e)
             )
         
-    def get_user_by_subscription(self, subscription_id: str):
-        if not subscription_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="UserId richiesto"
-            )
-
-        try:
-            response = self.user_dao.get_user_by_subscription(subscription_id)
-
-            if not response:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Subscription_id non trovata"
-                )
-
-            return response
-
-        except HTTPException as e:
-            raise e
-
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Errore sconosciuto: {e}"
-            )
     
     def login_user(self, payload: dict):
         email = payload.get("email")

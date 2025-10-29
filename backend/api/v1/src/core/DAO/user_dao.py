@@ -1,6 +1,7 @@
 from fastapi import HTTPException, status
 from supabase_auth.errors import AuthApiError
-from src.core.model.user import UserRead, UserReadSub
+from src.core.model.user import UserRead, UserReadSub, UserReadSubs
+from src.core.model.subscription import SubscriptionRead
 from src.core.redis_client import get_redis_client
 #from src.core.model.subscription_service import SubscriptionServiceCrate
 from src.core.DAO.subscription_dao import SubscriptionDAO
@@ -13,6 +14,52 @@ class UserDAO:
         self.supabase = get_supabase_client()
         self.supabase_auth = get_fresh_supabase_client() 
 
+    def get_subscriptions_by_user(self, user_id: str) -> list[SubscriptionRead]:
+        try:
+            
+            link_response = (
+                self.supabase
+                .table("users_has_subscriptions")
+                .select("subscription_id")
+                .eq("user_id", user_id)
+                .execute()
+            )
+
+            if not link_response.data:
+                return []
+
+            subscription_ids = [row["subscription_id"] for row in link_response.data]
+
+            subs_response = (
+                self.supabase
+                .table("subscriptions")
+                .select("subscription_id, name, vat_number, city, address, active, current_period_end, plan")
+                .in_("subscription_id", subscription_ids)
+                .execute()
+            )
+
+            if not subs_response.data:
+                return []
+
+            subscriptions = [
+                SubscriptionRead(
+                    subscription_id=sub["subscription_id"],
+                    name=sub["name"],
+                    vat_number=sub.get("vat_number"),
+                    city=sub["city"],
+                    address=sub["address"],
+                    active=sub["active"],
+                    current_period_end=sub["current_period_end"],
+                    plan=sub.get("plan"),
+                )
+                for sub in subs_response.data
+            ]
+
+            return subscriptions
+
+        except Exception as e:
+            raise e
+
     def login_with_password(self, email: str, password: str):
         try:
             response = self.supabase_auth.auth.sign_in_with_password({
@@ -20,7 +67,14 @@ class UserDAO:
                 "password": password
             })
 
-            return response.session
+            subscriptions = self.get_subscriptions_by_user(response.session.user.id)
+
+            return UserReadSubs(
+                id = response.session.user.id,
+                email = response.session.user.email,
+                subscriptions=subscriptions,
+                jwt=response.session.access_token
+            )
         
         except AuthApiError as e:
             raise e
@@ -91,36 +145,6 @@ class UserDAO:
                 return UserRead(id=u.id, email=u.email)
 
         raise HTTPException(status_code=404, detail=f"Utente con email {email} non trovato")
-    
-    def get_subscriptions_by_user(self, user_id: str, access_token):
-        try:
-            
-            self.supabase.postgrest.auth(access_token)
-
-            response = (
-                self.supabase
-                .table("users_has_subscriptions")
-                .select("subscription_id")
-                .eq("user_id", user_id)
-                .execute()
-            )
-            return [item["subscription_id"] for item in response.data]
-        except Exception as e:
-            raise e
-        
-    def get_user_by_subscription(self, subscription_id: str):
-        try:
-            response = (
-                self.supabase
-                .table("users_has_subscriptions")
-                .select("user_id")
-                .eq("subscription_id", subscription_id)
-                .execute()
-            )
-
-            return [item["user_id"] for item in response.data]
-        except Exception as e:
-            raise e
     
     def login_with_magic_link(self, email: str):
         response = self.supabase.auth.sign_in_with_otp({
