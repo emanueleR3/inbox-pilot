@@ -118,12 +118,22 @@ class SubscriptionServiceDAO:
         access_token: str, 
         refresh_token: str, 
         expiry,
-        microsoft_subscription_id: str,
-        microsoft_expiration_datetime
+        microsoft_subscription_id: str = None,
+        microsoft_expiration_datetime = None
     ) -> bool:
         """
         Salva le credenziali Microsoft nel database per l'utente con l'email specificata.
         I token vengono cifrati prima del salvataggio.
+        
+        Args:
+            email: Email dell'utente
+            subscription_id: ID della subscription
+            access_token: Token di accesso Microsoft
+            refresh_token: Token di refresh Microsoft
+            expiry: Data di scadenza del token (secondi o datetime)
+            microsoft_subscription_id: ID della subscription Microsoft Graph (None se services="calendar")
+            microsoft_expiration_datetime: Data di scadenza della subscription Graph (None se services="calendar")
+            calendar_provider: Provider del calendar ("microsoft" se services="calendar", None se services="all")
         """
         try:
             # Cifra i token prima del salvataggio
@@ -156,6 +166,8 @@ class SubscriptionServiceDAO:
                     microsoft_expiration_dt = datetime.fromisoformat(microsoft_expiration_datetime.replace('Z', '+00:00'))
                 elif isinstance(microsoft_expiration_datetime, datetime):
                     microsoft_expiration_dt = microsoft_expiration_datetime
+            else:
+                logging.info(f"Microsoft expiration datetime is None (probably services='calendar')")
 
             
             # controllo se esiste già un record con questa email
@@ -163,13 +175,22 @@ class SubscriptionServiceDAO:
             if email_exists:
                 # Aggiorna il record esistente
                 data = {
-                    "email_provider": "microsoft",
                     "hashed_access_token": encrypted_access_token,
                     "hashed_refresh_token": encrypted_refresh_token,
                     "expiry_token": expiry_datetime.isoformat() if expiry_datetime else None,
-                    "microsoft_subscription_id": microsoft_subscription_id,
-                    "microsoft_expiration_datetime": microsoft_expiration_dt.isoformat() if microsoft_expiration_dt else None
+                    "calendar_provider": "microsoft"
+
                 }
+                
+                # Aggiungi microsoft_subscription_id solo se non è None
+                if microsoft_subscription_id is not None:
+                    data["microsoft_subscription_id"] = microsoft_subscription_id
+                    data["email_provider"] = "microsoft"
+                
+                # Aggiungi microsoft_expiration_datetime solo se non è None
+                if microsoft_expiration_dt is not None:
+                    data["microsoft_expiration_datetime"] = microsoft_expiration_dt.isoformat()
+                
                 response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
                     
                 if not response.data:
@@ -184,8 +205,9 @@ class SubscriptionServiceDAO:
                     hashed_access_token=encrypted_access_token,
                     hashed_refresh_token=encrypted_refresh_token,
                     expiry_token=expiry_datetime,
-                    microsoft_subscription_id=microsoft_subscription_id,
-                    microsoft_expiration_datetime=microsoft_expiration_dt,
+                    microsoft_subscription_id=microsoft_subscription_id,  # Può essere None
+                    microsoft_expiration_datetime=microsoft_expiration_dt,  # Può essere None
+                    calendar_provider="microsoft",  # Può essere None
                     config_completed=False,
                     activated=False
                 )
@@ -200,10 +222,19 @@ class SubscriptionServiceDAO:
             print(f"Errore nel salvataggio delle credenziali Microsoft: {e}")
             return False  
 
-    def save_google_credentials(self, email: str, subscription_id: str, access_token: str, refresh_token: str, expiry, history_id: str) -> bool:
+    def save_google_credentials(self, email: str, subscription_id: str, access_token: str, refresh_token: str, expiry, history_id: str = None) -> bool:
         """
         Salva le credenziali Google nel database per l'utente con l'email specificata.
         I token vengono cifrati prima del salvataggio.
+        
+        Args:
+            email: Email dell'utente
+            subscription_id: ID della subscription
+            access_token: Token di accesso Google
+            refresh_token: Token di refresh Google
+            expiry: Data di scadenza del token
+            history_id: ID dello storico Gmail (None se services="calendar")
+            calendar_provider: Provider del calendar ("google" se services="calendar", None se services="all")
         """
         try:
             # Cifra i token prima del salvataggio
@@ -215,11 +246,17 @@ class SubscriptionServiceDAO:
             if email_exists:
                 # Aggiorna il record esistente
                 data = {
-                    "email_provider": "google",
                     "hashed_access_token": encrypted_access_token,
                     "hashed_refresh_token": encrypted_refresh_token,
-                    "expiry_token": expiry.isoformat() if expiry else None
+                    "expiry_token": expiry.isoformat() if expiry else None,
+                    "calendar_provider": "google"
                 }
+                
+                # Aggiungi history_id solo se non è None
+                if history_id is not None:
+                    data["history_id"] = history_id
+                    data["email_provider"] = "google"
+                
                 response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
                     
                 if not response.data:
@@ -236,7 +273,8 @@ class SubscriptionServiceDAO:
                     expiry_token=expiry,
                     config_completed=False,
                     activated=False,
-                    history_id=history_id
+                    history_id=history_id,  # Può essere None
+                    calendar_provider="google"
                 )
                 
                 if response is None:
