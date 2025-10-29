@@ -5,6 +5,7 @@ from email.header import decode_header
 from email.utils import parsedate_to_datetime
 from typing import List, Dict
 import re
+from datetime import datetime, timedelta
 from src.utils.logger import log_info, log_error
 
 class ImapClient:
@@ -26,22 +27,16 @@ class ImapClient:
                 # Consenti protocolli TLS più vecchi se necessario
                 ssl_context.minimum_version = ssl.TLSVersion.TLSv1
                 
-                log_info(f"🔗 Tentativo di connessione SSL a {self.host}:{self.port}")
                 self.conn = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=ssl_context)
             else:
-                log_info(f"🔗 Tentativo di connessione non-SSL a {self.host}:{self.port}")
                 self.conn = imaplib.IMAP4(self.host, self.port)
 
-            log_info(f"🔐 Tentativo di login per {self.username}")
             self.conn.login(self.username, self.password)
             self.conn.select("INBOX")   # di default seleziono la inbox (TODO pensare eventualmente di andare a controllare anche la spam)
-            log_info(f"✅ Connessione IMAP riuscita per {self.username}")
             
         except ssl.SSLError as e:
-            log_error(f"❌ Errore SSL durante la connessione a {self.host}:{self.port} - {str(e)}")
             # Prova con un contesto SSL ancora più permissivo
             try:
-                log_info("🔄 Tentativo con contesto SSL più permissivo...")
                 ssl_context = ssl.create_default_context()
                 ssl_context.check_hostname = False
                 ssl_context.verify_mode = ssl.CERT_NONE
@@ -50,15 +45,11 @@ class ImapClient:
                 self.conn = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=ssl_context)
                 self.conn.login(self.username, self.password)
                 self.conn.select("INBOX")
-                log_info(f"✅ Connessione IMAP riuscita con SSL permissivo per {self.username}")
             except Exception as fallback_e:
-                log_error(f"❌ Fallback SSL fallito per {self.host}: {str(fallback_e)}")
+                log_error(f"Errore SSL per {self.host}: {str(fallback_e)}")
                 raise
-        except imaplib.IMAP4.error as e:
-            log_error(f"❌ Errore IMAP durante login per {self.username}: {str(e)}")
-            raise
         except Exception as e:
-            log_error(f"❌ Errore generico durante connessione IMAP per {self.username}: {str(e)}")
+            log_error(f"Errore connessione IMAP per {self.username}: {str(e)}")
             raise
 
     def _decode_header(self, header_value):
@@ -144,9 +135,39 @@ class ImapClient:
         
         return thread_id
 
+    def _is_email_recent(self, date_str: str) -> bool:
+        """
+        Controlla se un'email è stata inviata dopo ieri.
+        
+        Args:
+            date_str: Stringa data dell'email
+            
+        Returns:
+            True se l'email è recente (inviata dopo ieri), False altrimenti
+        """
+        if not date_str:
+            return False
+            
+        try:
+            parsed_date = parsedate_to_datetime(date_str)
+            # Calcola la data di ieri a mezzanotte
+            yesterday = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+            
+            # Converte anche parsed_date in timezone naive se necessario per il confronto
+            if parsed_date.tzinfo is not None:
+                # Converte in UTC e poi rimuove timezone info per il confronto
+                parsed_date = parsed_date.utctimetuple()
+                parsed_date = datetime(*parsed_date[:6])
+            
+            return parsed_date > yesterday
+        except Exception as e:
+            log_error(f"Errore nel parsing della data {date_str}: {str(e)}")
+            # In caso di errore nel parsing, consideriamo l'email come recente per sicurezza
+            return True
+
     def fetch_unseen_messages(self) -> List[Dict]:
         """
-        Recupera i messaggi non letti con tutti i dati disponibili.
+        Recupera i messaggi non letti inviati dopo ieri.
         """
         status, messages = self.conn.search(None, "UNSEEN")
         if status != "OK":
@@ -167,6 +188,10 @@ class ImapClient:
             cc_address = self._decode_header(msg.get("Cc", ""))
             bcc_address = self._decode_header(msg.get("Bcc", ""))
             date_str = msg.get("Date", "")
+            
+            # Controlla se l'email è recente (inviata dopo ieri)
+            if not self._is_email_recent(date_str):
+                continue  # Salta le email vecchie
             
             # Converte la data in formato timestamp
             timestamp = ""
@@ -216,6 +241,5 @@ class ImapClient:
             if self.conn:
                 self.conn.close()
                 self.conn.logout()
-                log_info(f"🔌 Connessione IMAP chiusa per {self.username}")
         except Exception as e:
-            log_error(f"⚠️ Errore durante chiusura connessione IMAP per {self.username}: {str(e)}")
+            log_error(f"Errore durante chiusura connessione IMAP per {self.username}: {str(e)}")
