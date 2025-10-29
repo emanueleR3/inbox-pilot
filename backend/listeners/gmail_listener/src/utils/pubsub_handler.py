@@ -84,10 +84,27 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     """
     Converte un messaggio Gmail API in un payload standard per il broker.
     """
+    # DEBUG: Stampa l'intero messaggio Gmail per capire la struttura
+    print("🔍 DEBUG - MESSAGGIO GMAIL COMPLETO:")
+    print(json.dumps(message, indent=2, ensure_ascii=False))
+    
     headers = {h["name"]: h["value"] for h in message.get("payload", {}).get("headers", [])}
+    
+    # DEBUG: Stampa tutti gli headers disponibili
+    print("🔍 DEBUG - HEADERS DISPONIBILI:")
+    for header_name, header_value in headers.items():
+        print(f"  {header_name}: {header_value}")
     
     # Estrai il corpo del messaggio
     body_text = _extract_message_body(message.get("payload", {}))
+    
+    # DEBUG: Stampa gli ID che stiamo cercando
+    message_id_header = headers.get("Message-ID")
+    in_reply_to_header = headers.get("In-Reply-To")
+    print(f"📧 Message-ID header: {message_id_header}")
+    print(f"📧 In-Reply-To header: {in_reply_to_header}")
+    print(f"📧 Gmail ID: {message.get('id')}")
+    print(f"📧 Gmail ThreadID: {message.get('threadId')}")
     
     payload = {
         "provider": "gmail",
