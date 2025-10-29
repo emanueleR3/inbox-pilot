@@ -8,7 +8,6 @@ class SubscriptionDAO:
         self.supabase = get_supabase_client()
 
     def create_subscription(self, subscription_data: dict):
-        try:
             sub = Subscription.model_validate(subscription_data)
 
             sub_dict = sub.model_dump(mode="json")
@@ -19,5 +18,3 @@ class SubscriptionDAO:
                 raise ValueError("Nessun dato restituito da Supabase dopo l'inserimento")
 
             return SubscriptionRead.model_validate(result.data[0])
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Errore nella creazione della subscription: {str(e)}")

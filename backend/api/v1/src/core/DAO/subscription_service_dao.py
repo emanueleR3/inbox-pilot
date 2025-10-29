@@ -402,31 +402,25 @@ class SubscriptionServiceDAO:
             return False
 
     def get_configuration(self, subscription_id: str):
-        try:
-            result = self.supabase.table("subscription_services").select(
-                "subscription_id, confidence_response_threshold, confidence_review_mail, priority_threshold, confidence_classification_threshold, urgent_meeting_threshold"
-            ).eq("subscription_id", subscription_id).execute()
+        result = self.supabase.table("subscription_services").select(
+            "subscription_id, confidence_response_threshold, confidence_review_mail, priority_threshold, confidence_classification_threshold, urgent_meeting_threshold"
+        ).eq("subscription_id", subscription_id).execute()
 
-            if not result.data:
-                return None
-            return result.data[0]
-
-        except Exception as e:
-            raise e
+        if not result.data:
+            return None
+        
+        return result.data[0]
 
     def update_configuration(self, subscription_id: str, updates: dict):
-        try:
-            config = SubscriptionServiceConfigCrate.model_validate(updates)
+        config = SubscriptionServiceConfigCrate.model_validate(updates)
 
-            upload_dict = config.model_dump()
+        upload_dict = config.model_dump()
 
-            result = (
-                self.supabase.table("subscription_services")
+        result = (
+            self.supabase.table("subscription_services")
                 .update(upload_dict)
                 .eq("subscription_id", subscription_id)
                 .execute()
             )
 
-            return result.data[0]
-        except Exception as e:
-            raise e
+        return result.data[0]

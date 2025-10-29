@@ -13,7 +13,7 @@ router = APIRouter(tags=["Autenticazione Supa"])
 controller = UserController()
 
 @router.get(
-    "/getUser/{email}",
+    "/get-user/{email}",
     summary="Recupera un utente tramite email",
     description="Restituisce i dati dell’utente corrispondente all’indirizzo email fornito.",
     responses={
@@ -36,7 +36,7 @@ def get_user_by_email(email: str):
     return controller.get_user_by_email(email)
 
 @router.post(
-    "/createAccount",
+    "/create-account",
     status_code=status.HTTP_201_CREATED,
     summary="Crea un nuovo account utente",
     description="""
@@ -194,7 +194,7 @@ def login_user(
 
 
 @router.post(
-    "/magicLink",
+    "/magic-link",
     summary="Invia un link magico per l'accesso",
     description="Invia via email un link magico per effettuare il login senza password.",
     responses={
@@ -221,7 +221,7 @@ def magic_link_login(
     return controller.send_magic_link(payload)
 
 @router.post(
-    "/resetPassword",
+    "/reset-password",
     summary="Richiedi il reset della password",
     description="Invia un'email con le istruzioni per resettare la password.",
     responses={
@@ -248,7 +248,7 @@ def reset_password(
     return controller.reset_password(payload)
 
 @router.post(
-    "/updatePassword",
+    "/update-password",
     summary="Aggiorna la password dell'utente",
     description="Permette di aggiornare la password fornendo quella vecchia e la nuova.",
     responses={
@@ -293,7 +293,8 @@ def update_password(
     },
 )
 def logout(current_user=Depends(get_current_user)):
-    return controller.logout()
+    controller.logout()
+    return {"message": "Logout effettutato"}
 
 @router.delete(
     "/delete/{user_id}",
@@ -313,4 +314,5 @@ def logout(current_user=Depends(get_current_user)):
     },
 )
 def delete_user(user_id: str, current_user=Depends(get_current_user)):
-    return controller.delete_account(user_id)
+    controller.delete_account(user_id)
+    return {"message": "Account cancellato"}

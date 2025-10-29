@@ -3,9 +3,7 @@ from supabase_auth.errors import AuthApiError
 from src.core.model.user import UserRead, UserReadSub, UserReadSubs
 from src.core.model.subscription import SubscriptionRead
 from src.core.redis_client import get_redis_client
-#from src.core.model.subscription_service import SubscriptionServiceCrate
 from src.core.DAO.subscription_dao import SubscriptionDAO
-#from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 from src.core.database import get_supabase_client, get_fresh_supabase_client
 import time
 
@@ -14,106 +12,88 @@ class UserDAO:
         self.supabase = get_supabase_client()
         self.supabase_auth = get_fresh_supabase_client() 
 
-    def get_subscriptions_by_user(self, user_id: str) -> list[SubscriptionRead]:
-        try:
-            
-            link_response = (
-                self.supabase
+    def get_subscriptions_by_user(self, user_id: str) -> list[SubscriptionRead]:            
+        link_response = (
+            self.supabase
                 .table("users_has_subscriptions")
                 .select("subscription_id")
                 .eq("user_id", user_id)
                 .execute()
             )
 
-            if not link_response.data:
-                return []
+        if not link_response.data:
+            return []
 
-            subscription_ids = [row["subscription_id"] for row in link_response.data]
+        subscription_ids = [row["subscription_id"] for row in link_response.data]
 
-            subs_response = (
-                self.supabase
-                .table("subscriptions")
-                .select("subscription_id, name, vat_number, city, address, active, current_period_end, plan")
-                .in_("subscription_id", subscription_ids)
-                .execute()
+        subs_response = (
+            self.supabase
+            .table("subscriptions")
+            .select("subscription_id, name, vat_number, city, address, active, current_period_end, plan")
+            .in_("subscription_id", subscription_ids)
+            .execute()
+        )
+
+        if not subs_response.data:
+            return []
+
+        subscriptions = [
+            SubscriptionRead(
+                subscription_id=sub["subscription_id"],
+                name=sub["name"],
+                vat_number=sub.get("vat_number"),
+                city=sub["city"],
+                address=sub["address"],
+                active=sub["active"],
+                current_period_end=sub["current_period_end"],
+                plan=sub.get("plan"),
             )
+            for sub in subs_response.data
+        ]
 
-            if not subs_response.data:
-                return []
-
-            subscriptions = [
-                SubscriptionRead(
-                    subscription_id=sub["subscription_id"],
-                    name=sub["name"],
-                    vat_number=sub.get("vat_number"),
-                    city=sub["city"],
-                    address=sub["address"],
-                    active=sub["active"],
-                    current_period_end=sub["current_period_end"],
-                    plan=sub.get("plan"),
-                )
-                for sub in subs_response.data
-            ]
-
-            return subscriptions
-
-        except Exception as e:
-            raise e
+        return subscriptions
 
     def login_with_password(self, email: str, password: str):
-        try:
-            response = self.supabase_auth.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
+        response = self.supabase_auth.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
 
-            subscriptions = self.get_subscriptions_by_user(response.session.user.id)
+        subscriptions = self.get_subscriptions_by_user(response.session.user.id)
 
-            return UserReadSubs(
-                id = response.session.user.id,
-                email = response.session.user.email,
-                subscriptions=subscriptions,
-                jwt=response.session.access_token
-            )
-        
-        except AuthApiError as e:
-            raise e
+        return UserReadSubs(
+            id = response.session.user.id,
+            email = response.session.user.email,
+            subscriptions=subscriptions,
+            jwt=response.session.access_token
+        )
     
     def create_user(self, email: str, password: str):
-        try:
+        response = self.supabase_auth.auth.sign_up(
+            {
+                "email": email,
+                "password": password,
+            }
+        )
 
-            response = self.supabase_auth.auth.sign_up(
-                {
-                    "email": email,
-                    "password": password,
-                }
-            )
-
-            return UserRead(id=response.user.id, email=response.user.email)
-        except Exception as e:
-            raise e
+        return UserRead(id=response.user.id, email=response.user.email)
+      
 
     def link_user_subscription(self, user_id: str, subscription_id: str):
-        try:
-            self.supabase.table("users_has_subscriptions").insert({
-                "user_id": user_id,
-                "subscription_id": subscription_id
-            }).execute()
-        except Exception as e:
-            raise e
+        self.supabase.table("users_has_subscriptions").insert({
+            "user_id": user_id,
+            "subscription_id": subscription_id
+        }).execute()
 
     def create_user_with_sub(self, email: str, password: str, subscription_data: dict):
-        try:
-            subscription = SubscriptionDAO().create_subscription(subscription_data)
-            user = self.create_user(email, password)
+        subscription = SubscriptionDAO().create_subscription(subscription_data)
+        user = self.create_user(email, password)
 
-            self.link_user_subscription(user.id, subscription.subscription_id)
+        self.link_user_subscription(user.id, subscription.subscription_id)
 
-            response = self.login_with_password(email, password)
+        response = self.login_with_password(email, password)
 
-            return response
-        except Exception as e:
-            raise e
+        return response
 
     def get_user_by_email(self, email: str):
         # 1) Try Redis cache first
@@ -149,12 +129,6 @@ class UserDAO:
         return response.session
 
     def logout(self):
-        try:
-            return self.supabase_auth.auth.sign_out()
-           
-        except AuthApiError as e:
-            raise e
-        except Exception as e:
-            raise e
+        return self.supabase_auth.auth.sign_out()
     
 
