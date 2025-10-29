@@ -7,22 +7,6 @@ from ..controllers.oauth_login_controller import (
 )
 
 router = APIRouter()
-'''
-@router.post("/oauth/login/{provider_name}")
-async def oauth_login_route(provider_name: str, oauth_request: OAuthLoginRequest, request: Request):
-    """
-    Inizia il processo di autenticazione OAuth per il provider specificato.
-    
-    Args:
-        provider_name: Nome del provider OAuth ('google' o 'microsoft')
-        oauth_request: Contiene il subscription_id nel body della richiesta
-        request: Oggetto FastAPI Request
-    
-    Returns:
-        RedirectResponse alla pagina di autenticazione del provider
-    """
-    return await oauth_login(provider_name, oauth_request, request)
-'''
 
 @router.post("/oauth/login/{provider_name}")
 async def oauth_login_route(provider_name: str, request: Request):
@@ -31,20 +15,23 @@ async def oauth_login_route(provider_name: str, request: Request):
     """
     try:
         subscription_id = None
+        services = None
         
         # Prova prima a leggere come form data
         if request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
             form_data = await request.form()
             subscription_id = form_data.get("subscription_id")
+            services = form_data.get("services", "all")  # default to "all"
         else:
             # Prova come JSON
             json_data = await request.json()
             subscription_id = json_data.get("subscription_id")
+            services = json_data.get("services", "all")  # default to "all"
         
         if not subscription_id:
             raise HTTPException(status_code=400, detail="Missing subscription_id")
         
-        oauth_request = OAuthLoginRequest(subscription_id=subscription_id)
+        oauth_request = OAuthLoginRequest(subscription_id=subscription_id, services=services)
         return await oauth_login(provider_name, oauth_request, request)
         
     except Exception as e:
