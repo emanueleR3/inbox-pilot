@@ -84,40 +84,34 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     """
     Converte un messaggio Gmail API in un payload standard per il broker.
     """
-    # DEBUG: Stampa l'intero messaggio Gmail per capire la struttura
-    print("🔍 DEBUG - MESSAGGIO GMAIL COMPLETO:")
-    print(json.dumps(message, indent=2, ensure_ascii=False))
-    
     headers = {h["name"]: h["value"] for h in message.get("payload", {}).get("headers", [])}
     
-    # DEBUG: Stampa tutti gli headers disponibili
-    print("🔍 DEBUG - HEADERS DISPONIBILI:")
-    for header_name, header_value in headers.items():
-        print(f"  {header_name}: {header_value}")
+    # Crea un dizionario case-insensitive per gli header
+    headers_lower = {k.lower(): v for k, v in headers.items()}
     
     # Estrai il corpo del messaggio
     body_text = _extract_message_body(message.get("payload", {}))
     
-    # DEBUG: Stampa gli ID che stiamo cercando
-    message_id_header = headers.get("Message-ID")
-    in_reply_to_header = headers.get("In-Reply-To")
-    print(f"📧 Message-ID header: {message_id_header}")
-    print(f"📧 In-Reply-To header: {in_reply_to_header}")
-    print(f"📧 Gmail ID: {message.get('id')}")
-    print(f"📧 Gmail ThreadID: {message.get('threadId')}")
+    # Cerca message-id in modo case-insensitive
+    message_id = headers_lower.get("message-id")
+    
+    # Cerca in-reply-to in modo case-insensitive
+    thread_id = headers_lower.get("in-reply-to")
+    if thread_id is None:
+        thread_id = "no"
     
     payload = {
         "provider": "gmail",
         "user_email": user_email,
         "history_id": history_id,
-        "message_id": headers.get("Message-ID"),  # Usa Message-ID header IMAP invece dell'ID Gmail
-        "thread_id": headers.get("In-Reply-To"),   # Usa In-Reply-To header IMAP invece del threadId Gmail
-        "subject": headers.get("Subject"),
-        "from": headers.get("From"),
-        "to": headers.get("To"),
-        "cc": headers.get("Cc"),
-        "bcc": headers.get("Bcc"),
-        "date": headers.get("Date"),
+        "message_id": message_id,  # Usa header Message-Id IMAP standard (case-insensitive)
+        "thread_id": thread_id,   # Usa header In-Reply-To IMAP o "no" se è None (case-insensitive)
+        "subject": headers_lower.get("subject"),
+        "from": headers_lower.get("from"),
+        "to": headers_lower.get("to"),
+        "cc": headers_lower.get("cc"),
+        "bcc": headers_lower.get("bcc"),
+        "date": headers_lower.get("date"),
         "snippet": message.get("snippet"),
         "body_text": body_text,
         "timestamp": message.get("internalDate"),
