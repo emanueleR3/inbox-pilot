@@ -92,20 +92,24 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     # Estrai il corpo del messaggio
     body_text = _extract_message_body(message.get("payload", {}))
     
-    # Cerca message-id in modo case-insensitive
+    # Cerca message-id in modo case-insensitive e rimuovi < >
     message_id = headers_lower.get("message-id")
+    if message_id:
+        message_id = _clean_message_id(message_id)
     
-    # Cerca in-reply-to in modo case-insensitive
+    # Cerca in-reply-to in modo case-insensitive e rimuovi < >
     thread_id = headers_lower.get("in-reply-to")
-    if thread_id is None:
+    if thread_id:
+        thread_id = _clean_message_id(thread_id)
+    else:
         thread_id = "no"
     
     payload = {
         "provider": "gmail",
         "user_email": user_email,
         "history_id": history_id,
-        "message_id": message_id,  # Usa header Message-Id IMAP standard (case-insensitive)
-        "thread_id": thread_id,   # Usa header In-Reply-To IMAP o "no" se è None (case-insensitive)
+        "message_id": message_id,  # Usa header Message-Id IMAP standard (case-insensitive, senza < >)
+        "thread_id": thread_id,   # Usa header In-Reply-To IMAP o "no" se è None (case-insensitive, senza < >)
         "subject": headers_lower.get("subject"),
         "from": headers_lower.get("from"),
         "to": headers_lower.get("to"),
@@ -119,6 +123,22 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "attachments": [],
     }
     return payload
+
+def _clean_message_id(message_id: str) -> str:
+    """
+    Rimuove i caratteri < > dai Message-ID se presenti.
+    Esempi:
+    - "<123456@gmail.com>" -> "123456@gmail.com"
+    - "123456@gmail.com" -> "123456@gmail.com"
+    """
+    if not message_id:
+        return message_id
+    
+    # Rimuovi < > se presenti all'inizio e alla fine
+    if message_id.startswith('<') and message_id.endswith('>'):
+        return message_id[1:-1]
+    
+    return message_id
 
 def _extract_email_from_header(from_header: str) -> str:
     """
