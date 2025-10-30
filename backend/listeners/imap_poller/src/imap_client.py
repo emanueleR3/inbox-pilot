@@ -107,21 +107,48 @@ class ImapClient:
         
         return body_text, body_html
 
+    def _clean_message_id(self, message_id: str) -> str:
+        """
+        Rimuove i caratteri < > dai Message-ID se presenti.
+        Esempi:
+        - "<123456@gmail.com>" -> "123456@gmail.com"
+        - "<VI1PR02MB5216BB2DDAE4C17080150FD380FBA@VI1PR02MB5216.eurprd02.prod.outlook.com>" -> "VI1PR02MB5216BB2DDAE4C17080150FD380FBA@VI1PR02MB5216.eurprd02.prod.outlook.com"
+        - "123456@gmail.com" -> "123456@gmail.com"
+        """
+        if not message_id:
+            return message_id
+        
+        # Rimuovi < > se presenti all'inizio e alla fine
+        if message_id.startswith('<') and message_id.endswith('>'):
+            return message_id[1:-1]
+        # Rimuovi solo < all'inizio se presente (per casi come il tuo esempio)
+        elif message_id.startswith('<'):
+            return message_id[1:]
+        # Rimuovi solo > alla fine se presente
+        elif message_id.endswith('>'):
+            return message_id[:-1]
+        
+        return message_id
+
     def _extract_message_id(self, msg):
         """
-        Estrae il Message-ID dell'email.
+        Estrae il Message-ID dell'email e rimuove < > se presenti.
         """
         message_id = msg.get("Message-ID", "")
-        return message_id.strip("<>") if message_id else ""
+        return self._clean_message_id(message_id)
 
     def _extract_thread_id(self, msg):
         """
         Estrae il Thread-ID usando sempre l'header IMAP standard In-Reply-To.
         Se In-Reply-To non è presente, restituisce "no" (per messaggi che iniziano una nuova conversazione).
+        Rimuove < > se presenti.
         """
         # Usa sempre In-Reply-To come standard IMAP per il threading
         in_reply_to = msg.get("In-Reply-To", "")
-        thread_id = in_reply_to.strip("<>") if in_reply_to else "no"
+        if in_reply_to:
+            thread_id = self._clean_message_id(in_reply_to)
+        else:
+            thread_id = "no"
         
         return thread_id
 

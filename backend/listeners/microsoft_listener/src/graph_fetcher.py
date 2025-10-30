@@ -87,11 +87,6 @@ async def fetch_new_message(subscription_id: str, message_id: str, actual_user_i
             resp.raise_for_status()
             graph_data = resp.json()
             
-            # DEBUG: Stampa il payload completo di Microsoft Graph per analisi
-            import json
-            log_info(f"🔍 DEBUG MICROSOFT GRAPH PAYLOAD per messaggio {message_id}:")
-            log_info(json.dumps(graph_data, indent=2, ensure_ascii=False))
-            
             # Converte nel formato standard
             parsed_message = parse_microsoft_message(graph_data, user_email)
             
