@@ -6,63 +6,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, EmailStr, AnyUrl
 
-
-class QuestionType(str, Enum):
-    TEXT = "text"
-    EMAIL = "email"
-    URL = "url"
-    PHONE = "phone"
-    NUMBER = "number"
-    DATE = "date"
-    CHOICE_SINGLE = "choice_single"
-    CHOICE_MULTI = "choice_multi"
-
-class Option(BaseModel):
-    id: str = Field(..., description="Unique id for the option")
-    value: Optional[Any] = Field(None, description="Canonical value represented by the option")
-
-class Question(BaseModel):
-    id: str = Field(..., description="Unique identifier for the question")
-    text: str = Field(..., description="Question text shown to the user")
-    type: QuestionType = Field(..., description="Type of expected answer")
-    options: Optional[List[Option]] = None
-    helper_text: Optional[str] = None
-    order: Optional[int] = None	
-'''
-    # conditional_on allows simple conditional flows: {question_id: expected_value}
-    conditional_on: Optional[Dict[str, Any]] = None
-
-    def is_applicable(self, answers: Dict[str, Any]) -> bool:
-        # Return True if question should be asked given current answers (simple equality checks).
-        if not self.conditional_on:
-            return True
-        for qid, expected in self.conditional_on.items():
-            if qid not in answers:
-                return False
-            # simple match; for lists (multi choice) check membership
-            val = answers[qid]
-            if isinstance(val, list):
-                if expected not in val:
-                    return False
-            else:
-                if val != expected:
-                    return False
-        return True 
-    '''
-
-class Answer(BaseModel):
-    question_id: str
-    value: Any
-
-class Quiz(BaseModel):
-    id: Optional[str] = None
-    questions: List[Question] = Field(default_factory=list)
-    answers: Optional[List[Answer]] = None
-    created_at: datetime = Field(default_factory=datetime.now)
-
-    def to_ordered_questions(self) -> List[Question]:
-        return sorted(self.questions, key=lambda q: (q.order if q.order is not None else 1000, q.id))
-
 class Address(BaseModel):
     street: Optional[str] = None
     city: Optional[str] = None
@@ -83,42 +26,63 @@ class CompanyInfo(BaseModel):
     email_signature: Optional[str] = None
     phone_number: Optional[str] = None
     vat_number: Optional[str] = None
-    other_details: Optional[str] = None
-    # metadata: Optional[Dict[str, Any]] = None
-
+    
     def to_prompt_snippet(self) -> str:
-        parts = []
+        """
+        Convert company info to a readable string for display or use in prompts.
+        """
+        lines = []
         if self.company_name:
-            parts.append(f"Company Name: {self.company_name}")
-        if self.website:
-            parts.append(f"Website: {self.website}")
+            lines.append(f"Company Name: {self.company_name}")
         if self.industry:
-            parts.append(f"Industry: {self.industry}")
-        if self.employee_count:
-            parts.append(f"Employee Count: {self.employee_count}")
+            lines.append(f"Industry: {self.industry}")
+        if self.website:
+            lines.append(f"Website: {self.website}")
+        if self.email_address:
+            lines.append(f"Email: {self.email_address}")
+        if self.phone_number:
+            lines.append(f"Phone: {self.phone_number}")
         if self.address:
-            addr_parts = [self.address.street, self.address.city, self.address.region, self.address.postal_code, self.address.country]
-            addr_str = ", ".join(filter(None, addr_parts))
-            if addr_str:
-                parts.append(f"Address: {addr_str}")
+            addr_parts = []
+            if self.address.street:
+                addr_parts.append(self.address.street)
+            if self.address.city:
+                addr_parts.append(self.address.city)
+            if self.address.region:
+                addr_parts.append(self.address.region)
+            if self.address.postal_code:
+                addr_parts.append(self.address.postal_code)
+            if self.address.country:
+                addr_parts.append(self.address.country)
+            if addr_parts:
+                lines.append(f"Address: {', '.join(addr_parts)}")
+        if self.employee_count:
+            lines.append(f"Employee Count: {self.employee_count}")
+        if self.opening_hrs:
+            lines.append(f"Opening Hours: {self.opening_hrs}")
         if self.products_services:
-            parts.append(f"Products/Services: {self.products_services}")
+            lines.append(f"Products/Services: {self.products_services}")
         if self.tone_of_voice:
-            parts.append(f"Tone of Voice: {self.tone_of_voice}")
+            lines.append(f"Tone of Voice: {self.tone_of_voice}")
+        if self.vat_number:
+            lines.append(f"VAT Number: {self.vat_number}")
         if self.email_signature:
-            parts.append(f"Email Signature: {self.email_signature}")
-        if self.other_details:
-            parts.append(f"Other Details: {self.other_details}")
-        return "\n".join(parts)
+            lines.append(f"Email Signature: {self.email_signature}")
+        
+        return "\n".join(lines) if lines else "No company information collected yet."
 
-__all__ = [
-    "QuestionType",
-    "Option",
-    "Question",
-    "Answer",
-    "Quiz",
-    "Address",
-    "CompanyInfo",
-]
+class Question(BaseModel):
+    id: str = Field(..., description="Unique identifier for the question")
+    text: str = Field(..., description="Question text shown to the user")
+    helper_text: Optional[str] = None
+    order: Optional[int] = None	
 
+class Answer(BaseModel):
+    question_id: str
+    value: Any
 
+class Quiz(BaseModel):
+    id: Optional[str] = None
+    questions: List[Question] = Field(default_factory=list)
+    answers: Optional[List[Answer]] = None
+    created_at: datetime = Field(default_factory=datetime.now)

@@ -11,33 +11,8 @@ from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 
-from models import Question
+from models import Question, CompanyInfo
 
-
-# Additional Pydantic models for LLM outputs
-class QuizComplete(BaseModel):
-    """Model indicating quiz completion."""
-    done: bool = Field(description="Whether the quiz is complete")
-
-class ExtractedCompanyInfo(BaseModel):
-    """Model for extracted company information (flat structure for LLM output)."""
-    company_name: Optional[str] = Field(default=None, description="Company name")
-    website: Optional[str] = Field(default=None, description="Company website URL")
-    industry: Optional[str] = Field(default=None, description="Industry sector")
-    opening_hrs: Optional[str] = Field(default=None, description="Business opening hours")
-    employee_count: Optional[int] = Field(default=None, description="Number of employees")
-    address_street: Optional[str] = Field(default=None, description="Street address")
-    address_city: Optional[str] = Field(default=None, description="City")
-    address_region: Optional[str] = Field(default=None, description="Region or state")
-    address_postal_code: Optional[str] = Field(default=None, description="Postal/ZIP code")
-    address_country: Optional[str] = Field(default=None, description="Country")
-    products_services: Optional[str] = Field(default=None, description="Products or services offered")
-    tone_of_voice: Optional[str] = Field(default=None, description="Preferred communication tone")
-    email_address: Optional[str] = Field(default=None, description="Company email address")
-    email_signature: Optional[str] = Field(default=None, description="Email signature")
-    phone_number: Optional[str] = Field(default=None, description="Contact phone number")
-    vat_number: Optional[str] = Field(default=None, description="VAT/Tax number")
-    other_details: Optional[str] = Field(default=None, description="Any other relevant details about the company")
 
 class Prompts:
     """
@@ -47,8 +22,6 @@ class Prompts:
     
     # Create parsers - using Question model from models.py
     question_parser = PydanticOutputParser(pydantic_object=Question)
-    completion_parser = PydanticOutputParser(pydantic_object=QuizComplete)
-    company_info_parser = PydanticOutputParser(pydantic_object=ExtractedCompanyInfo)
     
     @staticmethod
     def get_question_generator() -> ChatPromptTemplate:
@@ -56,43 +29,54 @@ class Prompts:
         Get the question generator prompt with format instructions.
         """
         return ChatPromptTemplate.from_messages([
-            ("system", """Sei un esperto nella raccolta di informazioni aziendali tramite domande strutturate.
-Il tuo obiettivo è raccogliere informazioni complete su un'azienda per costruirne il profilo, che servirà a costruire risposte ad email in ingresso all'azienda.
+            ("system", """**Sei un esperto nella raccolta di informazioni aziendali finalizzate alla generazione automatica di risposte email.
+Il tuo compito è condurre un quiz dinamico che profili l’azienda ponendo domande mirate, con l’obiettivo di raccogliere tutte le informazioni necessarie affinché un modello linguistico possa rispondere in modo autonomo, coerente e accurato alle email in arrivo per conto dell’azienda.**
 
-Genera la domanda successiva da porre in base a:
-1. Le informazioni già raccolte
-2. Campi comuni del profilo aziendale (nome, settore, sito web, indirizzo, prodotti/servizi, tono di voce, ecc.)
-3. Flusso logico: poni domande di follow-up in base alle risposte precedenti
+## Linee guida per la generazione della prossima domanda
+1. Scopo principale: ogni domanda deve mirare a ottenere informazioni che saranno direttamente utili per comprendere il tono, i servizi, le politiche, i prodotti o i processi aziendali necessari a redigere risposte email efficaci.
+2. Adattività: formula la prossima domanda in base a:
+ -Le informazioni statiche già note sull’azienda.
+ -Le risposte precedenti, per creare un flusso logico e progressivo.
+ -Eventuali lacune informative ancora presenti nel profilo aziendale.
+3. Stile delle domande:
+ -Chiare, specifiche e orientate all’obiettivo (mai troppo generiche).
+ -Formulate in modo naturale, come se fossi un consulente che vuole capire come rappresentare l’azienda nelle comunicazioni.
+ -Se opportuno, proponi domande di follow-up per chiarire o approfondire risposte precedenti.
+4. Se hai già informazioni sufficienti, restituisci un JSON con "done": true.
+             
+## Contesto
 
-Numero di domande attuale: {current_count}/{max_questions}
-
-Se abbiamo raggiunto {max_questions} domande o abbiamo informazioni sufficienti, restituisci un JSON con "done": true.
-In caso contrario, genera la domanda successiva.
-
-Domande e risposte precedenti:
+### Informazioni aziendali statiche:    
+{company_info}
+### Domande e risposte precedenti:
 {history}
-
+### Numero di domande poste: 
+{current_count}/{max_questions}
+             
 {format_instructions}"""),
             ("user", "Genera la prossima domanda.")
         ]).partial(format_instructions=Prompts.question_parser.get_format_instructions())
     
+    #TODO metti come input le company info e le q&a, e ottieni come output un markdown completo dell'azienda
     @staticmethod
-    def get_company_info_extractor() -> ChatPromptTemplate:
+    def get_quiz_info_extractor() -> ChatPromptTemplate:
         """
-        Get the company info extraction prompt with format instructions.
+        Get the quiz info extraction prompt with format instructions.
         """
         return ChatPromptTemplate.from_messages([
-            ("system", """Sei un esperto nell'estrazione di informazioni aziendali strutturate dai dati di Q&A.
+            ("system", """Sei un esperto nella creazione di profili aziendali dettagliati in formato Markdown, progettati per essere utilizzati da un modello AI per rispondere automaticamente alle email aziendali.
 
-Estrai tutte le informazioni aziendali disponibili dalle domande e risposte fornite.
-Non inventare informazioni che non puoi ricavare. Poni a null per tutti i campi che non possono essere determinati dai dati.
+Il tuo compito è:
+1.	Estrarre tutte le informazioni rilevanti sull’azienda a partire da:
+ - Informazioni aziendali statiche fornite.
+ - Domande e risposte fornite (da usare come fonte di conoscenza e inferenza, non come FAQ).
+2.	Generare un file Markdown completo e strutturato in base a queste informazioni, pronto per essere utilizzato da un modello AI per rispondere alle email."""),
+        ("user", """Informazioni aziendali statiche:
+{company_info}
+         
+         Domande e Risposte:
+{qa_data}""")
+        ])
 
-{format_instructions}"""),
-        ("user", """Domande e Risposte:
-{qa_data}
 
-Estrai le informazioni aziendali:""")
-        ]).partial(format_instructions=Prompts.company_info_parser.get_format_instructions())
-
-
-__all__ = ["Prompts", "QuizComplete", "ExtractedCompanyInfo"]
+__all__ = ["Prompts"]

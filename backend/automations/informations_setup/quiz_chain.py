@@ -4,8 +4,8 @@ import os
 
 from langchain_openai import ChatOpenAI
 
-from models import Quiz, Question, QuestionType, Option, Answer, CompanyInfo, Address
-from prompts import Prompts, ExtractedCompanyInfo
+from models import Question, Answer, Quiz, CompanyInfo, Address
+from prompts import Prompts
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -18,7 +18,7 @@ class QuizChain:
     Maximum of 20 questions will be asked.
     """
     
-    MAX_QUESTIONS = 20
+    MAX_QUESTIONS = 5
     
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -32,38 +32,20 @@ class QuizChain:
             temperature=0.7,
             api_key=api_key or os.getenv("OPENAI_API_KEY")
         )
-        
-    def should_continue(self, current_count: int, answers: List[Answer]) -> bool:
+    
+    def generate_next_question(self, questions: List[Question], answers: List[Answer], company_info: Optional[CompanyInfo] = None) -> Optional[Question]:
         """
-        Determine if we should continue asking questions.
+        Generate the next question based on previous answers and current company info.
         
         Args:
-            current_count: Number of questions asked so far
-            answers: List of answers collected
-            
-        Returns:
-            True if should continue, False otherwise
-        """
-        if current_count >= self.MAX_QUESTIONS:
-            return False
-        
-        # TODO Could add logic to check if we have minimum required info, examining answers
-        return True
-
-    def generate_next_question(self, questions: List[Question], answers: List[Answer]) -> Optional[Question]:
-        """
-        Generate the next question based on previous answers.
-        
-        Args:
+            questions: List of questions asked so far
             answers: List of previous answers
+            company_info: Current state of company information collected
             
         Returns:
             Next Question object or None if quiz is complete
         """
         current_count = len(answers)
-        
-        if not self.should_continue(current_count, answers):
-            return None
         
         # Format history
         history = "\n".join([
@@ -71,12 +53,19 @@ class QuizChain:
             for i, ans in enumerate(answers)
         ]) if answers else "No questions asked yet."
         
+        # Format company info
+        if company_info:
+            company_info_str = company_info.model_dump_json(indent=2, exclude_none=True)
+        else:
+            company_info_str = "Nessuna informazione raccolta."
+        
         # Create the chain with Pydantic parser
         chain = (
             {
                 "current_count": lambda _: current_count + 1,
                 "max_questions": lambda _: self.MAX_QUESTIONS,
-                "history": lambda _: history
+                "history": lambda _: history,
+                "company_info": lambda _: company_info_str
             }
             | Prompts.get_question_generator()
             | self.llm
@@ -88,7 +77,6 @@ class QuizChain:
             result: Question = chain.invoke({})
             questions.append(result)
         except Exception as e:
-            # Try to detect completion signal
             print(f"Quiz may be complete or error occurred: {e}")
             return None
         
@@ -98,6 +86,45 @@ class QuizChain:
         
         # Result is already a Question object from models.py, return it directly
         return result
+
+    def extract_total_company_info(self, company_info: CompanyInfo, quiz: Quiz) -> str:
+        """
+        Extract complete company information from previous informations and quiz.
+        
+        Args:
+            company_info: Current state of company information statically collected
+            quiz: Quiz object containing questions
+            answers: List of answers provided
+            
+        Returns:
+            CompanyInfo object with extracted information in MarkDown format
+        """
+
+        answers = quiz.answers
+        questions = quiz.questions
+        # Format Q&A data
+        qa_data = "\n".join([
+            f"Q: {questions[i].text}\nA: {answers[i].value}"
+            for i in range(len(answers)) if i < len(questions)
+        ]) if answers else "No data yet."
+        
+        # Create the extraction chain
+        chain = (
+            {
+                "company_info": lambda _: company_info.model_dump_json(indent=2, exclude_none=True),
+                "qa_data": lambda _: qa_data
+            }
+            | Prompts.get_quiz_info_extractor()
+            | self.llm
+        )
+        
+        # Extract company info
+        try:
+            result = chain.invoke({})
+            return result.content if hasattr(result, 'content') else str(result)
+        except Exception as e:
+            print(f"Error extracting company info: {e}")
+            return ""
     
     def run_interactive_quiz(self) -> Quiz:
         """
@@ -109,13 +136,39 @@ class QuizChain:
         print(f"=== Company Information Quiz ===")
         print(f"Maximum {self.MAX_QUESTIONS} questions will be asked.\n")
         
+
+
+        company_address = Address(
+            street="Via Roma, 10",
+            city="Milano",
+            region="Lombardia",
+            postal_code="20121",
+            country="Italia"
+        )
+        company_info = CompanyInfo(
+            company_name="Soluzioni Tecniche s.r.l.",
+            website="https://www.soluzionitecniche.it",
+            industry="Tecnologia e servizi industriali",
+            opening_hrs="Lun-Ven 09:00-17:00",
+            employee_count=35,
+            address=company_address,
+            products_services="Progettazione, produzione e assistenza tecnica di componenti industriali",
+            tone_of_voice="Professionale e cordiale",
+            email_address="info@soluzionitecniche.it",
+            email_signature="Cordiali saluti,\nSoluzioni Tecniche Team",
+            phone_number="+39-02-12345678",
+            vat_number="IT12345678901"
+        )
+
         quiz = Quiz(id="company_info_quiz", questions=[])
+        quiz_date = datetime.now().strftime("%Y%m%d%H%M")
+        company_name_clean = company_info.company_name.replace(" ", "_").replace(".", "").lower()
         answers: List[Answer] = []
         questions: List[Question] = []
         
         while len(answers) < self.MAX_QUESTIONS:
-            # Generate next question
-            question = self.generate_next_question(questions, answers)
+            # Generate next question with current company info
+            question = self.generate_next_question(questions, answers, company_info)
 
             if question is None:
                 print("\n✓ Quiz complete!")
@@ -130,79 +183,27 @@ class QuizChain:
             if question.helper_text:
                 print(f"  ({question.helper_text})")
             
-            # Display options if applicable
-            if question.options:
-                for opt in question.options:
-                    print(f"  - {opt.id}: {opt.value}")
-            
             # Get answer
-            if question.type == QuestionType.CHOICE_MULTI:
-                user_input = input("Your answer (comma-separated option IDs): ").strip()
-                value = [v.strip() for v in user_input.split(",")]
-            else:
-                user_input = input("Your answer: ").strip()
-                value = user_input
+            value = input("Your answer: ").strip()
             
             # Store answer
             answer = Answer(question_id=question.id, value=value)
             answers.append(answer)
             quiz.answers = answers
-            
+
+            with open(f"automations/informations_setup/logs/{company_name_clean}_{quiz_date}_quiz.log", "a") as log_file:
+                log_file.write(f"Q: {question.text}\nA: {value}\n\n")
+
             print(f"✓ Answer recorded: {value}")
-        
+
+        # After quiz completion, extract final company info and save to markdown
+        company_info_md = self.extract_total_company_info(company_info, quiz)
+
+        # Save the company info to a markdown file
+        with open(f"automations/informations_setup/logs/{company_name_clean}_{quiz_date}_info_.md", "w") as md_file:
+            md_file.write(company_info_md)
+
         return quiz
-    
-    def extract_company_info(self, quiz: Quiz, answers: List[Answer]) -> CompanyInfo:
-        """
-        Extract structured CompanyInfo from quiz answers using LLM.
-        
-        Args:
-            quiz: The quiz object with questions
-            answers: List of answers provided
-            
-        Returns:
-            CompanyInfo object populated with extracted data
-        """
-        # Format Q&A data
-        qa_data = []
-        answer_dict = {a.question_id: a.value for a in answers}
-        for q in quiz.questions:
-            if q.id in answer_dict:
-                qa_data.append(f"Q: {q.text}\nA: {answer_dict[q.id]}")
-        
-        qa_text = "\n\n".join(qa_data)
-        
-        # Use Pydantic parser for structured extraction
-        chain = Prompts.get_company_info_extractor() | self.llm | Prompts.company_info_parser
-        result: ExtractedCompanyInfo = chain.invoke({"qa_data": qa_text})
-        
-        # Convert ExtractedCompanyInfo to CompanyInfo
-        address = Address(
-            street=result.address_street,
-            city=result.address_city,
-            region=result.address_region,
-            postal_code=result.address_postal_code,
-            country=result.address_country
-        ) if any([result.address_street, result.address_city, result.address_region, 
-                  result.address_postal_code, result.address_country]) else None
-        
-        company_info = CompanyInfo(
-            company_name=result.company_name,
-            website=result.website,
-            industry=result.industry,
-            opening_hrs=result.opening_hrs,
-            employee_count=result.employee_count,
-            address=address,
-            products_services=result.products_services,
-            tone_of_voice=result.tone_of_voice,
-            email_address=result.email_address,
-            email_signature=result.email_signature,
-            phone_number=result.phone_number,
-            vat_number=result.vat_number,
-            other_details=result.other_details
-        )
-        
-        return company_info
 
 
 def main():
@@ -223,11 +224,6 @@ def main():
     # Note: To extract company info, you'd need the answers list
     # This is just a demonstration
     print("\nQuiz completed successfully!")
-
-    # Extract company information basing on the quiz ran
-    company_info = quiz_chain.extract_company_info(quiz, quiz.answers or [])
-    print("\nExtracted Company Information:")
-    print(company_info.to_prompt_snippet())
 
 
 
