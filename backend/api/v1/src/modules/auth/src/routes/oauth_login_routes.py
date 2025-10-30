@@ -16,22 +16,25 @@ async def oauth_login_route(provider_name: str, request: Request):
     try:
         subscription_id = None
         services = None
+        email = None
         
         # Prova prima a leggere come form data
         if request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
             form_data = await request.form()
             subscription_id = form_data.get("subscription_id")
             services = form_data.get("services", "all")  # default to "all"
+            email = form_data.get("email")  # Può essere None
         else:
             # Prova come JSON
             json_data = await request.json()
             subscription_id = json_data.get("subscription_id")
             services = json_data.get("services", "all")  # default to "all"
+            email = json_data.get("email")  # Può essere None
         
         if not subscription_id:
             raise HTTPException(status_code=400, detail="Missing subscription_id")
         
-        oauth_request = OAuthLoginRequest(subscription_id=subscription_id, services=services)
+        oauth_request = OAuthLoginRequest(subscription_id=subscription_id, services=services, email=email)
         return await oauth_login(provider_name, oauth_request, request)
         
     except Exception as e:

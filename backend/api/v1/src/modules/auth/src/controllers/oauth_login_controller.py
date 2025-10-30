@@ -27,6 +27,7 @@ subscription_service_dao = SubscriptionServiceDAO()
 class OAuthLoginRequest(BaseModel):
     subscription_id: str
     services: str  # "all" o "calendar"
+    email: str = None  # Email opzionale per services="calendar"
 
 
 async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, request: Request):
@@ -36,12 +37,13 @@ async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, requ
     try:
         subscription_id = oauth_request.subscription_id
         services = oauth_request.services
-        logger.info(f"Starting OAuth login for provider: {provider_name}, subscription_id: {subscription_id}, services: {services}")
+        email = oauth_request.email
+        logger.info(f"Starting OAuth login for provider: {provider_name}, subscription_id: {subscription_id}, services: {services}, email: {email}")
         
         if provider_name.lower() == "google":
-            return await _google_login(subscription_id, services, request)
+            return await _google_login(subscription_id, services, email, request)
         elif provider_name.lower() == "microsoft":
-            return await _microsoft_login(subscription_id, services, request)
+            return await _microsoft_login(subscription_id, services, email, request)
         else:
             raise HTTPException(status_code=400, detail="Unsupported provider")
             
@@ -50,19 +52,20 @@ async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, requ
         raise HTTPException(status_code=500, detail="Internal server error during OAuth login")
 
 
-async def _google_login(subscription_id: str, services: str, request: Request):
+async def _google_login(subscription_id: str, services: str, email: str, request: Request):
     """
-    Gestisce il login Google con subscription_id e services.
+    Gestisce il login Google con subscription_id, services e email.
     """
     flow = create_google_flow(services)
     
-    # Crea uno stato personalizzato che include subscription_id e services
+    # Crea uno stato personalizzato che include subscription_id, services e email
     import json
     import base64
     import time
     custom_state = {
         "subscription_id": subscription_id,
         "services": services,
+        "email": email,  # Può essere None
         "timestamp": str(int(time.time()))
     }
     encoded_state = base64.urlsafe_b64encode(json.dumps(custom_state).encode()).decode()
@@ -83,17 +86,18 @@ async def _google_login(subscription_id: str, services: str, request: Request):
         "message": "Google OAuth URL generated successfully"
     })
 
-async def _microsoft_login(subscription_id: str, services: str, request: Request):
+async def _microsoft_login(subscription_id: str, services: str, email: str, request: Request):
     """
-    Gestisce il login Microsoft con subscription_id e services.
+    Gestisce il login Microsoft con subscription_id, services e email.
     """
-    # Crea uno stato personalizzato che include subscription_id e services (come Google)
+    # Crea uno stato personalizzato che include subscription_id, services e email (come Google)
     import json
     import base64
     import time
     custom_state = {
         "subscription_id": subscription_id,
         "services": services,
+        "email": email,  # Può essere None
         "timestamp": str(int(time.time()))
     }
     encoded_state = base64.urlsafe_b64encode(json.dumps(custom_state).encode()).decode()
@@ -118,9 +122,10 @@ async def google_callback(request: Request):
     try:
         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
         
-        # Prova a recuperare subscription_id e services dallo stato OAuth
+        # Prova a recuperare subscription_id, services e email dallo stato OAuth
         subscription_id = None
         services = None
+        payload_email = None
         state = request.query_params.get("state")
         
         if state:
@@ -130,7 +135,8 @@ async def google_callback(request: Request):
                 decoded_state = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
                 subscription_id = decoded_state.get("subscription_id")
                 services = decoded_state.get("services")
-                logger.info(f"Retrieved from OAuth state - subscription_id: {subscription_id}, services: {services}")
+                payload_email = decoded_state.get("email")  # Email dal payload
+                logger.info(f"Retrieved from OAuth state - subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}")
             except Exception as e:
                 logger.warning(f"Could not decode OAuth state: {e}")
         
@@ -139,12 +145,14 @@ async def google_callback(request: Request):
             subscription_id = request.query_params.get("subscription_id") or request.cookies.get("subscription_id")
         if not services:
             services = request.query_params.get("services") or request.cookies.get("services") or "all"  # default to "all"
+        if not payload_email: # TODO possibile errore visto che None è corretto
+            payload_email = request.query_params.get("email") or request.cookies.get("email")
         
         if not subscription_id:
             logger.error("Missing subscription_id from state, query params and cookies")
             raise HTTPException(status_code=400, detail="Missing subscription_id from login session")
         
-        logger.info(f"Using subscription_id: {subscription_id}, services: {services}")
+        logger.info(f"Using subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}")
         
         flow = create_google_flow(services)
         
@@ -170,7 +178,7 @@ async def google_callback(request: Request):
             logger.error(f"Failed to fetch user info: {e}")
             raise HTTPException(status_code=400, detail="Invalid Google token")
 
-        email = user_info["email"]
+        email = user_info["email"]  # Email dall'account Google autenticato
         logger.info(f"Authenticated Google user: {email}")
 
         # Verifica che abbiamo tutti i dati necessari
@@ -185,13 +193,21 @@ async def google_callback(request: Request):
         refresh_token = credentials.refresh_token
         expiry = credentials.expiry
 
-        logger.info(f"Saving credentials for {email} with subscription_id: {subscription_id}")
+        # Determina quale email usare per il salvataggio nel database
+        if services == "calendar":
+            # Per calendar-only, usa l'email dal payload se fornita
+            db_email = payload_email
+        else:
+            # Per "all" o se non c'è payload_email, usa l'email dell'account autenticato
+            db_email = email
+
+        logger.info(f"Saving credentials for {db_email} with subscription_id: {subscription_id}")
 
         # Crea la watch Gmail SOLO se services è "all"
         history_id = None
         if services == "all":
             try:
-                logger.info(f"Creating Gmail watch for {email} (services: {services})")
+                logger.info(f"Creating Gmail watch for {email} (services: {services})")  # Usa sempre l'email autenticata per la watch
                 response = create_watch_for_user(access_token=access_token, refresh_token=refresh_token, user_email=email)
                 logger.info(f"Gmail watch response: {response}")
                 
@@ -209,9 +225,9 @@ async def google_callback(request: Request):
         try:
             # Ora utilizziamo i parametri aggiornati del DAO
             if services == "calendar":
-                logger.info(f"Saving Google credentials for calendar-only access (email: {email})")
+                logger.info(f"Saving Google credentials for calendar-only access (email: {db_email})")
                 result = subscription_service_dao.save_google_credentials(
-                    email=email, 
+                    email=db_email,  # Usa l'email dal payload per calendar-only
                     subscription_id=subscription_id, 
                     access_token=access_token, 
                     refresh_token=refresh_token, 
@@ -219,9 +235,9 @@ async def google_callback(request: Request):
                     history_id=history_id  # Sarà None per calendar-only
                 )
             else:
-                logger.info(f"Saving Google credentials for full access (email: {email})")
+                logger.info(f"Saving Google credentials for full access (email: {db_email})")
                 result = subscription_service_dao.save_google_credentials(
-                    email=email, 
+                    email=db_email,  # Usa l'email dell'account autenticato per full access
                     subscription_id=subscription_id, 
                     access_token=access_token, 
                     refresh_token=refresh_token, 
@@ -231,13 +247,14 @@ async def google_callback(request: Request):
             if result is False:
                 logger.error("Errore nel salvataggio delle credenziali Google nel database")
                 raise HTTPException(status_code=500, detail="Errore nel salvataggio delle credenziali Google")
-            logger.info(f"Credentials saved successfully for {email}")
+            logger.info(f"Credentials saved successfully for {db_email}")
         except Exception as save_error:
             logger.error(f"Database error saving credentials: {save_error}")
             raise HTTPException(status_code=500, detail="Errore database nel salvataggio credenziali")
 
         token_data = {
-            "email": email,
+            "email": db_email,  # Email usata nel database
+            "authenticated_email": email,  # Email dell'account Google autenticato
             "subscription_id": subscription_id,
             "services": services,
             "provider": "google",
@@ -247,7 +264,7 @@ async def google_callback(request: Request):
             "expiry": str(credentials.expiry) if credentials.expiry else None
         }
 
-        logger.info(f"Google authentication completed successfully for {email}")
+        logger.info(f"Google authentication completed successfully for {email}, saved as {db_email}")
         
         # Restituisci HTML che chiude il popup e invia messaggio al parent
         html_content = f"""
@@ -406,9 +423,10 @@ async def microsoft_callback(request: Request):
     Gestisce il callback dopo il login Microsoft.
     """
     try:
-        # Prova a recuperare subscription_id e services dallo stato OAuth (come Google)
+        # Prova a recuperare subscription_id, services e email dallo stato OAuth (come Google)
         subscription_id = None
         services = None
+        payload_email = None
         state = request.query_params.get("state")
         
         if state:
@@ -418,7 +436,8 @@ async def microsoft_callback(request: Request):
                 decoded_state = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
                 subscription_id = decoded_state.get("subscription_id")
                 services = decoded_state.get("services")
-                logger.info(f"Retrieved from Microsoft OAuth state - subscription_id: {subscription_id}, services: {services}")
+                payload_email = decoded_state.get("email")  # Email dal payload
+                logger.info(f"Retrieved from Microsoft OAuth state - subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}")
             except Exception as e:
                 logger.warning(f"Could not decode Microsoft OAuth state: {e}")
         
@@ -427,13 +446,16 @@ async def microsoft_callback(request: Request):
             subscription_id = request.query_params.get("subscription_id") or request.cookies.get("subscription_id")
         if not services:
             services = request.query_params.get("services") or request.cookies.get("services") or "all"  # default to "all"
+        # TODO possibile errore visto che None è corretto
+        if not payload_email:
+            payload_email = request.query_params.get("email") or request.cookies.get("email")
         
         if not subscription_id:
             logger.error("Missing subscription_id from state, query params and cookies")
             raise HTTPException(status_code=400, detail="Missing subscription_id from login session")
         
         logger.info(f"Microsoft callback URL: {request.url}")
-        logger.info(f"Using subscription_id: {subscription_id}, services: {services}")
+        logger.info(f"Using subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}")
         
         # Controlla se c'è un errore da Microsoft
         error = request.query_params.get("error")
@@ -466,12 +488,22 @@ async def microsoft_callback(request: Request):
             user_info_response.raise_for_status()
             user_info = user_info_response.json()
 
-        email = user_info.get("userPrincipalName")
+        email = user_info.get("userPrincipalName")  # Email dall'account Microsoft autenticato
         user_id = user_info.get("id")
         refresh_token = tokens.get("refresh_token")
         expiry = tokens.get("expires_in")
 
         logger.info(f"Authenticated Microsoft user: {email}")
+
+        # Determina quale email usare per il salvataggio nel database
+        if services == "calendar":
+            # Per calendar-only, usa l'email dal payload se fornita
+            db_email = payload_email
+        else:
+            # Per "all" o se non c'è payload_email, usa l'email dell'account autenticato
+            db_email = email
+
+        logger.info(f"Saving Microsoft credentials for {db_email} with subscription_id: {subscription_id}") 
 
         # Crea la subscription per ricevere notifiche email SOLO se services è "all"
         subscription = None
@@ -491,7 +523,7 @@ async def microsoft_callback(request: Request):
         if services == "calendar":
             logger.info(f"Saving Microsoft credentials for calendar-only access (email: {email})")
             result = subscription_service_dao.save_microsoft_credentials(
-                email=email, 
+                email=db_email, 
                 subscription_id=subscription_id,
                 access_token=access_token,
                 refresh_token=refresh_token,
@@ -502,7 +534,7 @@ async def microsoft_callback(request: Request):
         else:
             logger.info(f"Saving Microsoft credentials for full access (email: {email})")
             result = subscription_service_dao.save_microsoft_credentials(
-                email=email, 
+                email=db_email, 
                 subscription_id=subscription_id,
                 access_token=access_token,
                 refresh_token=refresh_token,
