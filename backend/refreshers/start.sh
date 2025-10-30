@@ -1,6 +1,9 @@
 #!/usr/bin/env sh
 set -e  # Exit on error
 
+# Wait a bit for basic container setup
+sleep 5
+
 # Forward SIGTERM/SIGINT to children so docker stop exits cleanly
 term_handler() {
   echo "Caught termination signal, stopping children..."
@@ -13,6 +16,8 @@ trap term_handler TERM INT
 # Default intervals if not provided
 : "${REFRESH_INTERVAL_MINUTES_TOKENS:=15}"
 : "${REFRESH_INTERVAL_HOURS_SUBSCRIPTIONS:=3}"
+: "${INITIAL_DELAY_SECONDS:=30}"
+: "${CLEANUP_ORPHAN_SUBSCRIPTIONS:=true}"
 
 # Start the three refreshers in background in their own subshells (so cd doesn't leak)
 (
@@ -29,6 +34,8 @@ ms_token_pid=$!
 
 (
   cd /app/microsoft_subscription_refresher && \
+  INITIAL_DELAY_SECONDS="${INITIAL_DELAY_SECONDS}" \
+  CLEANUP_ORPHAN_SUBSCRIPTIONS="${CLEANUP_ORPHAN_SUBSCRIPTIONS}" \
   PYTHONPATH="/app/microsoft_subscription_refresher:/app" exec python -u -m src.main
 ) &
 ms_sub_pid=$!

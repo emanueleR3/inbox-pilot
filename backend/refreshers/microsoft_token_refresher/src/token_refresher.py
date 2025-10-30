@@ -1,5 +1,6 @@
 from src.db_client import get_tokens_expiring_soon, update_user_tokens
 from src.utils.microsoft_client import refresh_microsoft_token
+from src.utils.logger import Logger
 
 async def refresh_microsoft_tokens():
     expiring_tokens = await get_tokens_expiring_soon(threshold_minutes=15)
@@ -18,7 +19,7 @@ async def refresh_microsoft_tokens():
                 new_refresh_token
             )
 
-            print(f"✅ Token Microsoft rinnovato per utente {token['user_id']}")
+            Logger.log_info(f"### MICROSOFT ✅ Token rinnovato con successo per utente {token['email']}")
 
         except Exception as e:
-            print(f"❌ Errore nel rinnovo token Microsoft per utente {token['user_id']}: {e}")
+            Logger.log_error(f"### MICROSOFT ❌ Errore nel rinnovo del token per utente {token['email']}: {str(e)}")

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, HTTPException, status
 from src.core.dependecy import get_current_user
 from src.modules.auth.src.controllers.user_controller import UserController
 
@@ -13,7 +13,7 @@ router = APIRouter(tags=["Autenticazione Supa"])
 controller = UserController()
 
 @router.get(
-    "/getUser/{email}",
+    "/get-user/{email}",
     summary="Recupera un utente tramite email",
     description="Restituisce i dati dell’utente corrispondente all’indirizzo email fornito.",
     responses={
@@ -36,28 +36,85 @@ def get_user_by_email(email: str):
     return controller.get_user_by_email(email)
 
 @router.post(
-    "/createAccount",
+    "/create-account",
+    status_code=status.HTTP_201_CREATED,
     summary="Crea un nuovo account utente",
-    description="Crea un nuovo utente fornendo un'email e una password.",
+    description="""
+    Crea un nuovo utente con la sua sottoscrizione associata.
+    """,
     responses={
-        200: {
-            "description": "Registrazione completata con successo",
+        201: {
+            "description": "Account creato con successo",
             "content": {
                 "application/json": {
                     "example": {
                         "message": "Registrazione completata",
-                        "result": {"user_id": "abc123", "email": "user@example.com"},
+                        "result": {
+                            "user_id": "abc123",
+                            "email": "user@example.com",
+                            "subscription": {
+                                "subscription_id": "sub_xyz789",
+                                "name": "TechVision Srl",
+                                "plan": "premium",
+                                "active": True
+                            }
+                        }
                     }
                 }
-            },
+            }
         },
-        400: {"description": "Email già registrata o password non valida"},
-    },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "value": {"detail": "Email e password sono richiesti"}
+                        },
+                        "missing_subscription": {
+                            "value": {"detail": "I dati della sottoscrizione sono richiesti"}
+                        },
+                        "weak_password": {
+                            "value": {"detail": "Password troppo debole. Usa almeno 6 caratteri"}
+                        }
+                    }
+                }
+            }
+        },
+        409: {
+            "description": "Conflitto",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Un utente con questa email esiste già"}
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante la creazione dell'account"}
+                }
+            }
+        }
+    }
 )
 def create_user_with_sub(
     payload: dict = Body(
         ...,
-        example={"email": "user@example.com", "password": "strongpassword123"},
+        example={
+            "email": "user@example.com", 
+            "password": "strongpassword123",
+            "subscription": {
+                "name": "TechVision Srl",
+                "vat_number": "IT12345678901",
+                "city": "Milano",
+                "address": "Via Roma 42",
+                "active": True,
+                "current_period_end": "2025-12-31T23:59:59Z",
+                "plan": "premium",
+            }
+        },
         description="Email e password per la registrazione del nuovo utente.",
     )
 ):
@@ -65,9 +122,107 @@ def create_user_with_sub(
     return {"message": "Registrazione completata", "result": result}
 
 @router.post(
+    "/add-new-user",
+    status_code=status.HTTP_201_CREATED,
+    summary="Crea un nuovo account non admin",
+    description="""
+    Crea un nuovo utente con la sua sottoscrizione associata.
+    """,
+    responses={
+        201: {
+            "description": "Account creato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Registrazione completata",
+                        "result": {
+                            True
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "value": {"detail": "Email e password sono richiesti"}
+                        },
+                        "missing_subscription": {
+                            "value": {"detail": "I dati della sottoscrizione sono richiesti"}
+                        },
+                        "weak_password": {
+                            "value": {"detail": "Password troppo debole. Usa almeno 6 caratteri"}
+                        }
+                    }
+                }
+            }
+        },
+        409: {
+            "description": "Conflitto",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Un utente con questa email esiste già"}
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante la creazione dell'account"}
+                }
+            }
+        }
+    }
+)
+def add_new_user(
+    payload: dict = Body(
+        ...,
+        example={
+            "email": "user@example.com", 
+            "password": "strongpassword123",
+            "subscription": "sub_id"
+        },
+        description="Email e password per la registrazione del nuovo utente.",
+    )
+):
+    result = controller.add_new_user(payload)
+    return {"message": "Registrazione completata", "result": result}
+
+@router.get(
+    "/get-users-subscription/{subscription_id}",
+    status_code=200,
+    summary="Recupera tutti gli utenti di una sottoscrizione",
+    description="""
+    Questa endpoint restituisce tutti gli utenti (`id`, `email`) 
+    associati a una specifica sottoscrizione.
+
+    🔹 Usa la relazione `users_has_subscriptions` nel database  
+    🔹 Filtra gli utenti registrati in Supabase Auth
+    """,
+    responses={
+        200: {"description": "Lista di utenti trovata con successo"},
+        400: {"description": "ID sottoscrizione mancante o non valido"},
+        404: {"description": "Nessun utente trovato per questa sottoscrizione"},
+        500: {"description": "Errore interno del server"}
+    }
+)
+def get_users_by_subscription(subscription_id: str):
+    return controller.get_users_by_subscription(subscription_id)
+
+@router.post(
     "/login",
     summary="Login utente",
-    description="Esegue il login di un utente fornendo email e password.",
+    description="""
+    Esegue il login di un utente fornendo email e password.
+    
+    - Richiede email e password validi
+    - Verifica le credenziali contro Supabase Auth
+    - Restituisce un token di sessione in caso di successo
+    """,
     responses={
         200: {
             "description": "Login effettuato con successo",
@@ -75,13 +230,48 @@ def create_user_with_sub(
                 "application/json": {
                     "example": {
                         "message": "Login effettuato",
-                        "session": {"access_token": "jwt_token_example"},
+                        "session": {
+                            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                            "refresh_token": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                            "expires_in": 3600,
+                            "token_type": "bearer"
+                        }
                     }
                 }
-            },
+            }
         },
-        401: {"description": "Credenziali non valide"},
-    },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "value": {"detail": "Email e password sono richiesti"}
+                        },
+                        "unverified": {
+                            "value": {"detail": "Email non verificata. Controlla la tua casella email"}
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Autenticazione fallita",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Email o password non corretti"}
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante l'autenticazione"}
+                }
+            }
+        }
+    }
 )
 def login_user(
     payload: dict = Body(
@@ -90,11 +280,13 @@ def login_user(
         description="Credenziali per accedere al proprio account.",
     )
 ):
-    session = controller.login_user(payload)
-    return {"message": "Login effettuato", "session": session}
+    result = controller.login_user(payload)
+    return {"message": "Login effettuato", "result": result}
+
+
 
 @router.post(
-    "/magicLink",
+    "/magic-link",
     summary="Invia un link magico per l'accesso",
     description="Invia via email un link magico per effettuare il login senza password.",
     responses={
@@ -121,7 +313,7 @@ def magic_link_login(
     return controller.send_magic_link(payload)
 
 @router.post(
-    "/resetPassword",
+    "/reset-password",
     summary="Richiedi il reset della password",
     description="Invia un'email con le istruzioni per resettare la password.",
     responses={
@@ -148,7 +340,7 @@ def reset_password(
     return controller.reset_password(payload)
 
 @router.post(
-    "/updatePassword",
+    "/update-password",
     summary="Aggiorna la password dell'utente",
     description="Permette di aggiornare la password fornendo quella vecchia e la nuova.",
     responses={
@@ -193,7 +385,8 @@ def update_password(
     },
 )
 def logout(current_user=Depends(get_current_user)):
-    return controller.logout()
+    controller.logout()
+    return {"message": "Logout effettutato"}
 
 @router.delete(
     "/delete/{user_id}",
@@ -213,4 +406,5 @@ def logout(current_user=Depends(get_current_user)):
     },
 )
 def delete_user(user_id: str, current_user=Depends(get_current_user)):
-    return controller.delete_account(user_id)
+    controller.delete_account(user_id)
+    return {"message": "Account cancellato"}

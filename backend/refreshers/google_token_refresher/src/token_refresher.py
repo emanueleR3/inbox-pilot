@@ -1,5 +1,6 @@
 from src.db_client import get_tokens_expiring_soon, update_user_tokens
 from src.utils.google_client import refresh_google_token
+from src.utils.logger import Logger
 
 async def refresh_google_tokens():
     expiring_tokens = await get_tokens_expiring_soon(threshold_minutes=15)
@@ -12,6 +13,6 @@ async def refresh_google_tokens():
 
             await update_user_tokens(token["email"], access_token, expires_in)
 
-            print(f"✅ Token rinnovato per utente {token['user_id']}")
+            Logger.log_info(f"✅ Token rinnovato con successo per utente {token['email']}")
         except Exception as e:
-            print(f"❌ Errore nel rinnovo token per utente {token['user_id']}: {e}")
+            Logger.log_error(f"❌ Errore nel rinnovo del token per utente {token['email']}: {str(e)}")

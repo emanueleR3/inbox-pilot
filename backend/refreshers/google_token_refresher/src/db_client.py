@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from cryptography.fernet import Fernet
 import base64
 import hashlib
+from src.utils.logger import Logger
 
 # Carica le variabili d'ambiente
 load_dotenv()
@@ -28,7 +29,7 @@ def _get_cipher():
     if _cipher is None:
         with _cipher_lock:
             if _cipher is None:  # double-checked locking
-                encryption_key_str = os.getenv("ENCRYPTION_KEY")
+                encryption_key_str = os.getenv("ENCRYPTION_KEY_TOKEN")
                 if not encryption_key_str:
                     raise ValueError("ENCRYPTION_KEY non trovata nelle variabili d'ambiente")
                 
@@ -97,10 +98,10 @@ async def get_tokens_expiring_soon(threshold_minutes=15) -> List[Dict]:
         # - hashed_access_token e hashed_refresh_token non null (hanno token Google)
         # - expiry_token <= threshold_time (scadono presto)
         # - activated = true (account attivato)
-        response = supabase.table("subscription_services").select("*").not_.is_("expiry_token", "null").not_.is_("hashed_access_token", "null").not_.is_("hashed_refresh_token", "null").lte("expiry_token", threshold_iso).eq("activated", True).execute()
+        response = supabase.table("subscription_services").select("*").not_.is_("expiry_token", "null").not_.is_("hashed_access_token", "null").not_.is_("hashed_refresh_token", "null").lte("expiry_token", threshold_iso).eq("activated", True).or_("email_provider.eq.google,calendar_provider.eq.google").execute()
         
         if not response.data:
-            print(f"ℹ️ Nessun token Google in scadenza nei prossimi {threshold_minutes} minuti")
+            Logger.log_info("### GOOGLE ⏰✅ Nessun token Google in scadenza trovato.")
             return []
         
         expiring_tokens = []
@@ -119,7 +120,7 @@ async def get_tokens_expiring_soon(threshold_minutes=15) -> List[Dict]:
                 
                 # Verifica che i token essenziali siano presenti
                 if not refresh_token:
-                    print(f"⚠️ Refresh token mancante per {record.get('email')}")
+                    Logger.log_error(f"### GOOGLE ❌ Token di refresh mancante per {record.get('email')}, salto questo record.")
                     continue
                 
                 # Crea il dizionario nel formato richiesto dal token_refresher
@@ -138,17 +139,17 @@ async def get_tokens_expiring_soon(threshold_minutes=15) -> List[Dict]:
                 time_to_expiry = expires_at - datetime.utcnow().replace(tzinfo=expires_at.tzinfo)
                 minutes_to_expiry = int(time_to_expiry.total_seconds() / 60)
                 
-                print(f"⏰ Token in scadenza per {record.get('email')}: scade tra {minutes_to_expiry} minuti")
+                Logger.log_info(f"### GOOGLE 📅 Token per {record.get('email')} scade tra {minutes_to_expiry} minuti.")
                 
             except Exception as e:
-                print(f"❌ Errore nella decrittazione/elaborazione token per {record.get('email')}: {str(e)}")
+                Logger.log_error(f"### GOOGLE ❌ Errore nel processamento del record per {record.get('email')}: {str(e)}")
                 continue
         
         print(f"📊 Totale token Google in scadenza: {len(expiring_tokens)}")
         return expiring_tokens
         
     except Exception as e:
-        print(f"❌ Errore nel recupero dei token in scadenza: {str(e)}")
+        Logger.log_error(f"### GOOGLE ❌ Errore nel recupero dei token in scadenza: {str(e)}")
         return []
 
 async def update_user_tokens(email: str, access_token: str, expires_in: int) -> bool:
@@ -183,17 +184,17 @@ async def update_user_tokens(email: str, access_token: str, expires_in: int) -> 
         response = supabase.table("subscription_services").update(update_data).eq("email", email).execute()
         
         if not response.data:
-            print(f"❌ Nessun record trovato per email: {email}")
+            Logger.log_error(f"### GOOGLE ❌ Nessun record aggiornato per email: {email}")
             return False
         
         updated_record = response.data[0]
         email = updated_record.get("email", "unknown")
         
-        print(f"✅ Token aggiornato con successo per {email}")
-        print(f"   Nuova scadenza: {new_expiry.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        Logger.log_info(f"### GOOGLE ✅ Token aggiornato per utente {email}.")
+        Logger.log_info(f"   Nuova scadenza: {new_expiry.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         
         return True
         
     except Exception as e:
-        print(f"❌ Errore nell'aggiornamento dei token per email: {email}: {str(e)}")
+        Logger.log_error(f"### GOOGLE ❌ Errore nell'aggiornamento del token per {email}: {str(e)}")
         return False

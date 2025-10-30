@@ -1,59 +1,135 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from supabase_auth.errors import AuthApiError
-from src.core.model.user import UserRead, UserReadSub
+from src.core.model.user import UserRead, UserReadSub, UserReadSubs
+from src.core.model.subscription import SubscriptionRead
 from src.core.redis_client import get_redis_client
-#from src.core.model.subscription_service import SubscriptionServiceCrate
 from src.core.DAO.subscription_dao import SubscriptionDAO
-#from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
-from src.core.database import get_supabase_client
+from src.core.database import get_supabase_client, get_fresh_supabase_client
+import time
 
 class UserDAO:
     def __init__(self):
         self.supabase = get_supabase_client()
-    
-    def create_user(self, email: str, password: str):
-        try:
-            response = self.supabase.auth.sign_up({"email": email, "password": password})
-            if not response.user:
-                raise ValueError("Utente non creato da Supabase Auth")
-            return UserRead(id=response.user.id, email=response.user.email)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Errore nella registrazione utente: {str(e)}")
+        self.supabase_auth = get_fresh_supabase_client() 
 
-    def link_user_subscription(self, user_id: str, subscription_id: str):
-        try:
-            result = self.supabase.table("users_has_subscriptions").insert({
-                "user_id": user_id,
-                "subscription_id": subscription_id
-            }).execute()
-            if not result.data:
-                raise ValueError("Nessun dato restituito da Supabase dopo l'inserimento della relazione")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Errore nella creazione della relazione user-subscription: {str(e)}")
-
-    def create_user_with_sub(self, email: str, password: str, subscription_data: dict):
-        try:
-            user = self.create_user(email, password)
-            subscription = SubscriptionDAO().create_subscription(subscription_data)
-
-            self.link_user_subscription(user.id, subscription.subscription_id)
-
-            #configuration_data["subscription_id"] = subscription.subscription_id
-            #configuration_data["email"] = email
-
-            #TODO: DA SPEZZARE 
-            #configuration = SubscriptionServiceDAO().create_configuration(configuration_data)
-
-            return UserReadSub.model_construct(
-                id=user.id,
-                email=user.email,
-                subscription=subscription,
-                #configuration=configuration
+    def get_users_by_subscription(self, subscription_id: str) -> list[UserRead]:
+            link_response = (
+                self.supabase
+                    .table("users_has_subscriptions")
+                    .select("user_id")
+                    .eq("subscription_id", subscription_id)
+                    .execute()
             )
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Errore interno durante la creazione utente+subscription+config: {str(e)}")
+
+            if not link_response.data:
+                return []
+
+            user_ids = [row["user_id"] for row in link_response.data]
+
+            users_response = self.supabase.auth.admin.list_users()
+
+            if isinstance(users_response, list):
+                users = users_response
+
+            if not users:
+                return []
+
+            result = []
+            for u in users:
+                if getattr(u, "id", None) in user_ids:
+                    result.append(UserRead(id=u.id, email=u.email))
+
+            return result
+
+    def get_subscriptions_by_user(self, user_id: str) -> list[SubscriptionRead]:            
+        link_response = (
+            self.supabase
+                .table("users_has_subscriptions")
+                .select("subscription_id")
+                .eq("user_id", user_id)
+                .execute()
+            )
+
+        if not link_response.data:
+            return []
+
+        subscription_ids = [row["subscription_id"] for row in link_response.data]
+
+        subs_response = (
+            self.supabase
+            .table("subscriptions")
+            .select("subscription_id, name, vat_number, city, address, active, current_period_end, plan")
+            .in_("subscription_id", subscription_ids)
+            .execute()
+        )
+
+        if not subs_response.data:
+            return []
+
+        subscriptions = [
+            SubscriptionRead(
+                subscription_id=sub["subscription_id"],
+                name=sub["name"],
+                vat_number=sub.get("vat_number"),
+                city=sub["city"],
+                address=sub["address"],
+                active=sub["active"],
+                current_period_end=sub["current_period_end"],
+                plan=sub.get("plan"),
+            )
+            for sub in subs_response.data
+        ]
+
+        return subscriptions
+
+    def login_with_password(self, email: str, password: str) -> UserReadSubs:
+        response = self.supabase_auth.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
+
+        subscriptions = self.get_subscriptions_by_user(response.session.user.id)
+
+        return UserReadSubs(
+            id = response.session.user.id,
+            email = response.session.user.email,
+            subscriptions=subscriptions,
+            jwt=response.session.access_token,
+            sub_selected=0
+        )
+    
+    def create_user(self, email: str, password: str) -> UserRead:
+        response = self.supabase_auth.auth.sign_up(
+            {
+                "email": email,
+                "password": password,
+            }
+        )
+
+        return UserRead(id=response.user.id, email=response.user.email)      
+
+    def link_user_subscription(self, user_id: str, subscription_id: str) -> bool:
+        self.supabase.table("users_has_subscriptions").insert({
+            "user_id": user_id,
+            "subscription_id": subscription_id
+        }).execute()
+
+        return True
+
+    def create_user_with_sub(self, email: str, password: str, subscription_data: dict) -> UserReadSubs:
+        subscription = SubscriptionDAO().create_subscription(subscription_data)
+        user = self.create_user(email, password)
+
+        self.link_user_subscription(user.id, subscription.subscription_id)
+
+        response = self.login_with_password(email, password)
+
+        return response
+    
+    def add_new_user(self, email: str, password: str, subscription_id: str) -> bool:
+        user = self.create_user(email, password)
+        return self.link_user_subscription(user.id, subscription_id)
+
 
     def get_user_by_email(self, email: str):
         # 1) Try Redis cache first
@@ -81,47 +157,14 @@ class UserDAO:
 
         raise HTTPException(status_code=404, detail=f"Utente con email {email} non trovato")
     
-    def login_with_password(self, email: str, password: str):
-        response = self.supabase.auth.sign_in_with_password({"email": email, "password": password})
-
-        if not response.user:
-            raise HTTPException(status_code=401, detail="Credenziali non valide")
-        
+    def login_with_magic_link(self, email: str):
+        response = self.supabase.auth.sign_in_with_otp({
+            "email": email, 
+            "options": {"redirect_to":  "https://corretto.pro/dashboard"}
+        })
         return response.session
 
-    def login_with_magic_link(self, email: str):
-        response = self.supabase.auth.sign_in_with_otp({"email": email})
-
-        if not response:
-            raise HTTPException(status_code=400, detail="Errore durante l'invio del magic link")
-        
-        return {"message": f"Email di login inviata a {email}"}
-
-    def delete_user(self, user_id: str):
-        try:
-            #TODO: FIXARE NON FUNZIONA
-            self.supabase.auth.delete_user(user_id)
-            return {"message": f"Utente eliminato"}
-        except AuthApiError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    def send_password_reset(self, email: str):
-        try:
-            self.supabase.auth.reset_password_email(email)
-            return {"message": f"Email di reset inviata a {email}"}
-        except AuthApiError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    def update_password(self, new_password: str):
-        try:
-            self.supabase.auth.update_user({"password": new_password})
-            return {"message": f"Password aggiornata correttamente"}
-        except AuthApiError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        
     def logout(self):
-        try:
-            self.supabase.auth.sign_out()
-            return {"message": f"Logout effettuato con successo"}
-        except AuthApiError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        return self.supabase_auth.auth.sign_out()
+    
+

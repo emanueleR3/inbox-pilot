@@ -1,4 +1,4 @@
-from supabase import create_client, Client
+from supabase import create_client, Client 
 from src.core.config import settings
 from threading import Lock
 
@@ -12,3 +12,7 @@ def get_supabase_client() -> Client:
             if _supabase_client is None:  # double-checked locking
                 _supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
     return _supabase_client
+
+def get_fresh_supabase_client() -> Client:
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    

@@ -1,9 +1,12 @@
 import imaplib
 import email
+import ssl
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
 from typing import List, Dict
 import re
+from datetime import datetime, timedelta
+from src.utils.logger import log_info, log_error
 
 class ImapClient:
     def __init__(self, host: str, port: int, username: str, password: str, use_ssl: bool = True):
@@ -15,13 +18,39 @@ class ImapClient:
         self.conn = None
 
     def connect(self):
-        if self.use_ssl:
-            self.conn = imaplib.IMAP4_SSL(self.host, self.port)
-        else:
-            self.conn = imaplib.IMAP4(self.host, self.port)
+        try:
+            if self.use_ssl:
+                # Crea un contesto SSL personalizzato per gestire server con configurazioni SSL più vecchie
+                ssl_context = ssl.create_default_context()
+                # Imposta il livello di sicurezza per permettere chiavi DH più piccole
+                ssl_context.set_ciphers('DEFAULT:@SECLEVEL=1')
+                # Consenti protocolli TLS più vecchi se necessario
+                ssl_context.minimum_version = ssl.TLSVersion.TLSv1
+                
+                self.conn = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=ssl_context)
+            else:
+                self.conn = imaplib.IMAP4(self.host, self.port)
 
-        self.conn.login(self.username, self.password)
-        self.conn.select("INBOX")   # di default seleziono la inbox (TODO pensare eventualmente di andare a controllare anche la spam)
+            self.conn.login(self.username, self.password)
+            self.conn.select("INBOX")   # di default seleziono la inbox (TODO pensare eventualmente di andare a controllare anche la spam)
+            
+        except ssl.SSLError as e:
+            # Prova con un contesto SSL ancora più permissivo
+            try:
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                ssl_context.set_ciphers('ALL:@SECLEVEL=0')
+                
+                self.conn = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=ssl_context)
+                self.conn.login(self.username, self.password)
+                self.conn.select("INBOX")
+            except Exception as fallback_e:
+                log_error(f"Errore SSL per {self.host}: {str(fallback_e)}")
+                raise
+        except Exception as e:
+            log_error(f"Errore connessione IMAP per {self.username}: {str(e)}")
+            raise
 
     def _decode_header(self, header_value):
         """
@@ -78,37 +107,84 @@ class ImapClient:
         
         return body_text, body_html
 
+    def _clean_message_id(self, message_id: str) -> str:
+        """
+        Rimuove i caratteri < > dai Message-ID se presenti.
+        Esempi:
+        - "<123456@gmail.com>" -> "123456@gmail.com"
+        - "<VI1PR02MB5216BB2DDAE4C17080150FD380FBA@VI1PR02MB5216.eurprd02.prod.outlook.com>" -> "VI1PR02MB5216BB2DDAE4C17080150FD380FBA@VI1PR02MB5216.eurprd02.prod.outlook.com"
+        - "123456@gmail.com" -> "123456@gmail.com"
+        """
+        if not message_id:
+            return message_id
+        
+        # Rimuovi < > se presenti all'inizio e alla fine
+        if message_id.startswith('<') and message_id.endswith('>'):
+            return message_id[1:-1]
+        # Rimuovi solo < all'inizio se presente (per casi come il tuo esempio)
+        elif message_id.startswith('<'):
+            return message_id[1:]
+        # Rimuovi solo > alla fine se presente
+        elif message_id.endswith('>'):
+            return message_id[:-1]
+        
+        return message_id
+
     def _extract_message_id(self, msg):
         """
-        Estrae il Message-ID dell'email.
+        Estrae il Message-ID dell'email e rimuove < > se presenti.
         """
         message_id = msg.get("Message-ID", "")
-        return message_id.strip("<>") if message_id else ""
+        return self._clean_message_id(message_id)
 
     def _extract_thread_id(self, msg):
         """
-        Estrae il Thread-ID se disponibile, altrimenti usa References o In-Reply-To.
+        Estrae il Thread-ID usando sempre l'header IMAP standard In-Reply-To.
+        Se In-Reply-To non è presente, restituisce "no" (per messaggi che iniziano una nuova conversazione).
+        Rimuove < > se presenti.
         """
-        # Prima prova con Thread-Index (Outlook) o Thread-Topic
-        thread_id = msg.get("Thread-Index") or msg.get("Thread-Topic")
-        
-        if not thread_id:
-            # Prova con References (RFC standard)
-            references = msg.get("References", "")
-            if references:
-                # Prende il primo Message-ID dalle references
-                refs = re.findall(r'<([^>]+)>', references)
-                thread_id = refs[0] if refs else ""
-            else:
-                # Fallback su In-Reply-To
-                in_reply_to = msg.get("In-Reply-To", "")
-                thread_id = in_reply_to.strip("<>") if in_reply_to else ""
+        # Usa sempre In-Reply-To come standard IMAP per il threading
+        in_reply_to = msg.get("In-Reply-To", "")
+        if in_reply_to:
+            thread_id = self._clean_message_id(in_reply_to)
+        else:
+            thread_id = "no"
         
         return thread_id
 
+    def _is_email_recent(self, date_str: str) -> bool:
+        """
+        Controlla se un'email è stata inviata dopo ieri.
+        
+        Args:
+            date_str: Stringa data dell'email
+            
+        Returns:
+            True se l'email è recente (inviata dopo ieri), False altrimenti
+        """
+        if not date_str:
+            return False
+            
+        try:
+            parsed_date = parsedate_to_datetime(date_str)
+            # Calcola la data di ieri a mezzanotte
+            yesterday = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+            
+            # Converte anche parsed_date in timezone naive se necessario per il confronto
+            if parsed_date.tzinfo is not None:
+                # Converte in UTC e poi rimuove timezone info per il confronto
+                parsed_date = parsed_date.utctimetuple()
+                parsed_date = datetime(*parsed_date[:6])
+            
+            return parsed_date > yesterday
+        except Exception as e:
+            log_error(f"Errore nel parsing della data {date_str}: {str(e)}")
+            # In caso di errore nel parsing, consideriamo l'email come recente per sicurezza
+            return True
+
     def fetch_unseen_messages(self) -> List[Dict]:
         """
-        Recupera i messaggi non letti con tutti i dati disponibili.
+        Recupera i messaggi non letti inviati dopo ieri.
         """
         status, messages = self.conn.search(None, "UNSEEN")
         if status != "OK":
@@ -129,6 +205,11 @@ class ImapClient:
             cc_address = self._decode_header(msg.get("Cc", ""))
             bcc_address = self._decode_header(msg.get("Bcc", ""))
             date_str = msg.get("Date", "")
+            
+            # Controlla se l'email è recente (inviata dopo ieri)
+            if not self._is_email_recent(date_str):
+                log_info(f"Email {mail_id.decode()} ignorata (data: {date_str})")
+                continue  # Salta le email vecchie
             
             # Converte la data in formato timestamp
             timestamp = ""
@@ -175,7 +256,8 @@ class ImapClient:
 
     def close(self):
         try:
-            self.conn.close()
-            self.conn.logout()
-        except:
-            pass
+            if self.conn:
+                self.conn.close()
+                self.conn.logout()
+        except Exception as e:
+            log_error(f"Errore durante chiusura connessione IMAP per {self.username}: {str(e)}")

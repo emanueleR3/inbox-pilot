@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
+
 class Subscription(BaseModel):
     name: str
     vat_number: Optional[str] = None
