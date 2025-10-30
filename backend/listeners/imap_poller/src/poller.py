@@ -26,7 +26,7 @@ async def poll_account(account):
         new_mails = client.fetch_unseen_messages()
 
         for mail in new_mails:
-            log_info(f"📩 Nuova mail da {mail['from']} per {account['email']} | {mail['subject']}")
+            log_info(f"📩 Nuova mail da {mail['from']} per {account['email']} | {mail['subject']}")        
             
             message_payload = {
                 "provider": "imap",

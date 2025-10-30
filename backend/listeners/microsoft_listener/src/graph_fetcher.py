@@ -7,6 +7,7 @@ GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 def parse_microsoft_message(graph_data: dict, user_email: str) -> dict:
     """
     Converte il messaggio di Microsoft Graph nel formato standard per RabbitMQ.
+    Usa gli header MIME standard come Gmail e IMAP.
     """
     try:
         # Estrai i campi principali
@@ -26,13 +27,29 @@ def parse_microsoft_message(graph_data: dict, user_email: str) -> dict:
         body_content = graph_data.get("body", {})
         body_text = body_content.get("content", "")
         
-        # Se è HTML, potresti voler estrarre solo il testo (opzionale)
-        if body_content.get("contentType") == "html":
-            # Per ora mantieni l'HTML così com'è
-            pass
-        
         # Data di ricezione
         received_datetime = graph_data.get("receivedDateTime", "")
+        
+        # Estrai gli header MIME se disponibili
+        internet_message_headers = graph_data.get("internetMessageHeaders", [])
+        headers = {}
+        if internet_message_headers:
+            headers = {h.get("name", "").lower(): h.get("value", "") for h in internet_message_headers}
+        
+        # Usa internetMessageId come Message-ID standard (già presente nel payload principale)
+        message_id = graph_data.get("internetMessageId", "")
+        # Rimuovi < > se presenti (come fatto per Gmail)
+        if message_id and message_id.startswith('<') and message_id.endswith('>'):
+            message_id = message_id[1:-1]
+        
+        # Cerca In-Reply-To negli header MIME (case-insensitive)
+        thread_id = headers.get("in-reply-to", "")
+        # Rimuovi < > se presenti
+        if thread_id and thread_id.startswith('<') and thread_id.endswith('>'):
+            thread_id = thread_id[1:-1]
+        # Se non c'è In-Reply-To, usa "no" come fatto per Gmail e IMAP
+        if not thread_id:
+            thread_id = "no"
         
         return {
             "provider": "microsoft",
@@ -42,8 +59,8 @@ def parse_microsoft_message(graph_data: dict, user_email: str) -> dict:
             "subject": subject,
             "body_text": body_text,
             "date": received_datetime,
-            "message_id": graph_data.get("id", ""),
-            "thread_id": graph_data.get("conversationId", ""),
+            "message_id": message_id,  # Usa internetMessageId (header MIME standard)
+            "thread_id": thread_id,   # Usa In-Reply-To header MIME o "no" se è None
             "labels": [],  # Microsoft non usa labels come Gmail
             "timestamp": received_datetime
         }
@@ -63,7 +80,7 @@ async def fetch_new_message(subscription_id: str, message_id: str, actual_user_i
         access_token = credentials.get("access_token")
         user_email = credentials.get("email", actual_user_id)
 
-        url = f"{GRAPH_BASE_URL}/users/{actual_user_id}/messages/{message_id}"
+        url = f"{GRAPH_BASE_URL}/users/{actual_user_id}/messages/{message_id}?$select=*,internetMessageHeaders"
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, headers={"Authorization": f"Bearer {access_token}"})

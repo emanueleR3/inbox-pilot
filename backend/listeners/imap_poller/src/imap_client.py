@@ -116,22 +116,12 @@ class ImapClient:
 
     def _extract_thread_id(self, msg):
         """
-        Estrae il Thread-ID se disponibile, altrimenti usa References o In-Reply-To.
+        Estrae il Thread-ID usando sempre l'header IMAP standard In-Reply-To.
+        Se In-Reply-To non è presente, restituisce "no" (per messaggi che iniziano una nuova conversazione).
         """
-        # Prima prova con Thread-Index (Outlook) o Thread-Topic
-        thread_id = msg.get("Thread-Index") or msg.get("Thread-Topic")
-        
-        if not thread_id:
-            # Prova con References (RFC standard)
-            references = msg.get("References", "")
-            if references:
-                # Prende il primo Message-ID dalle references
-                refs = re.findall(r'<([^>]+)>', references)
-                thread_id = refs[0] if refs else ""
-            else:
-                # Fallback su In-Reply-To
-                in_reply_to = msg.get("In-Reply-To", "")
-                thread_id = in_reply_to.strip("<>") if in_reply_to else ""
+        # Usa sempre In-Reply-To come standard IMAP per il threading
+        in_reply_to = msg.get("In-Reply-To", "")
+        thread_id = in_reply_to.strip("<>") if in_reply_to else "no"
         
         return thread_id
 
