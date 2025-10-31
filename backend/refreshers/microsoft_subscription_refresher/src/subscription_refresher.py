@@ -62,7 +62,7 @@ async def cleanup_all_orphan_subscriptions():
     Logger.log_info("### MICROSOFT SUBSCRIPTION 🧹 Inizio pulizia globale subscription orfane (INBOUND 📥 + OUTBOUND 📤)...")
     
     # Ottieni tutte le subscription dal database (sia inbound che outbound)
-    expiring = await get_subscriptions_expiring_soon(threshold_minutes=30)  # Prendi tutte quelle che scadono nei prossimi 30 minuti
+    expiring = await get_subscriptions_expiring_soon(threshold_minutes=60*24*30)  # Prendi tutte quelle che scadono nei prossimi 30 giorni
     
     # Raggruppa per utente (stesso access token)
     users_processed = set()
