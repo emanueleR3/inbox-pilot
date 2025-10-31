@@ -62,7 +62,8 @@ async def cleanup_all_orphan_subscriptions():
     Logger.log_info("### MICROSOFT SUBSCRIPTION 🧹 Inizio pulizia globale subscription orfane (INBOUND 📥 + OUTBOUND 📤)...")
     
     # Ottieni tutte le subscription dal database (sia inbound che outbound)
-    expiring = await get_subscriptions_expiring_soon(threshold_minutes=60*24*30)  # Prendi tutte quelle che scadono nei prossimi 30 giorni
+    # Usa log_expiring=False perché con threshold di 30 giorni non sono realmente "in scadenza"
+    expiring = await get_subscriptions_expiring_soon(threshold_minutes=60*24*30, log_expiring=False)
     
     # Raggruppa per utente (stesso access token)
     users_processed = set()
@@ -126,8 +127,6 @@ async def refresh_expiring_subscriptions():
     Rinnova le subscription Microsoft in scadenza, gestendo sia inbound che outbound.
     """
     expiring = await get_subscriptions_expiring_soon(threshold_minutes=15)
-
-    Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🔄 Trovate {len(expiring)} subscription in scadenza da rinnovare")
 
     for sub in expiring:
         try:

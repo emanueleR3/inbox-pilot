@@ -66,13 +66,14 @@ def get_supabase_client() -> Client:
                 _supabase_client = create_client(supabase_url, supabase_key)
     return _supabase_client
 
-async def get_subscriptions_expiring_soon(threshold_minutes=15) -> List[Dict]:
+async def get_subscriptions_expiring_soon(threshold_minutes=15, log_expiring=True) -> List[Dict]:
     """
     Ritorna le subscription Microsoft (inbound e outbound) che scadranno entro X minuti.
     Restituisce sia le subscription inbound che outbound separatamente.
     
     Args:
         threshold_minutes (int): Minuti prima della scadenza per considerare una subscription "in scadenza"
+        log_expiring (bool): Se True, logga le subscription come "in scadenza". Se False, logga solo il recupero
         
     Returns:
         List[Dict]: Lista di subscription in scadenza con tipo (inbound/outbound)
@@ -125,10 +126,11 @@ async def get_subscriptions_expiring_soon(threshold_minutes=15) -> List[Dict]:
                             "user_subscription_id": user_subscription_id
                         })
                         
-                        hours_to_expiry = (expiry_dt - datetime.now(timezone.utc)).total_seconds() / 3600
-                        Logger.log_info(f"### MICROSOFT SUBSCRIPTION ⏰ 📥 Subscription INBOUND (Inbox) in scadenza per {email}: scade tra {hours_to_expiry:.1f} ore")
-                        Logger.log_info(f"   🆔 Subscription ID: {inbound_sub_id}")
-                        Logger.log_info(f"   📅 Scadenza: {expiry_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                        if log_expiring:
+                            hours_to_expiry = (expiry_dt - datetime.now(timezone.utc)).total_seconds() / 3600
+                            Logger.log_info(f"### MICROSOFT SUBSCRIPTION ⏰ 📥 Subscription INBOUND (Inbox) in scadenza per {email}: scade tra {hours_to_expiry:.1f} ore")
+                            Logger.log_info(f"   🆔 Subscription ID: {inbound_sub_id}")
+                            Logger.log_info(f"   📅 Scadenza: {expiry_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
                 
                 # Controlla subscription outbound
                 outbound_sub_id = record.get("microsoft_subscription_id_outbound")
@@ -148,21 +150,30 @@ async def get_subscriptions_expiring_soon(threshold_minutes=15) -> List[Dict]:
                             "user_subscription_id": user_subscription_id
                         })
                         
-                        hours_to_expiry = (expiry_dt - datetime.now(timezone.utc)).total_seconds() / 3600
-                        Logger.log_info(f"### MICROSOFT SUBSCRIPTION ⏰ 📤 Subscription OUTBOUND (SentItems) in scadenza per {email}: scade tra {hours_to_expiry:.1f} ore")
-                        Logger.log_info(f"   🆔 Subscription ID: {outbound_sub_id}")
-                        Logger.log_info(f"   📅 Scadenza: {expiry_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                        if log_expiring:
+                            hours_to_expiry = (expiry_dt - datetime.now(timezone.utc)).total_seconds() / 3600
+                            Logger.log_info(f"### MICROSOFT SUBSCRIPTION ⏰ 📤 Subscription OUTBOUND (SentItems) in scadenza per {email}: scade tra {hours_to_expiry:.1f} ore")
+                            Logger.log_info(f"   🆔 Subscription ID: {outbound_sub_id}")
+                            Logger.log_info(f"   📅 Scadenza: {expiry_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
                 
             except Exception as e:
                 Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nel processamento delle subscription per {record.get('email')}: {str(e)}")
                 continue
         
-        Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📊 Totale subscription in scadenza: {len(expiring_subscriptions)}")
-        if expiring_subscriptions:
-            inbound_count = len([s for s in expiring_subscriptions if s.get('subscription_type') == 'inbound'])
-            outbound_count = len([s for s in expiring_subscriptions if s.get('subscription_type') == 'outbound'])
-            Logger.log_info(f"   📥 INBOUND (Inbox): {inbound_count}")
-            Logger.log_info(f"   📤 OUTBOUND (SentItems): {outbound_count}")
+        if log_expiring:
+            Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📊 Totale subscription in scadenza: {len(expiring_subscriptions)}")
+            if expiring_subscriptions:
+                inbound_count = len([s for s in expiring_subscriptions if s.get('subscription_type') == 'inbound'])
+                outbound_count = len([s for s in expiring_subscriptions if s.get('subscription_type') == 'outbound'])
+                Logger.log_info(f"   📥 INBOUND (Inbox): {inbound_count}")
+                Logger.log_info(f"   📤 OUTBOUND (SentItems): {outbound_count}")
+        else:
+            Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📋 Totale subscription recuperate (threshold: {threshold_minutes} min): {len(expiring_subscriptions)}")
+            if expiring_subscriptions:
+                inbound_count = len([s for s in expiring_subscriptions if s.get('subscription_type') == 'inbound'])
+                outbound_count = len([s for s in expiring_subscriptions if s.get('subscription_type') == 'outbound'])
+                Logger.log_info(f"   📥 INBOUND (Inbox): {inbound_count}")
+                Logger.log_info(f"   📤 OUTBOUND (SentItems): {outbound_count}")
         return expiring_subscriptions
         
     except Exception as e:
