@@ -504,7 +504,17 @@ async def microsoft_callback(request: Request):
             try:
                 logger.info(f"Creating Microsoft Graph subscription for {email} (services: {services})")
                 subscription = await create_subscription_for_user(access_token, user_id)
-                logger.info(f"Microsoft subscription created for {email}: {subscription.get('id')}")
+                
+                # Log dettagliato delle subscription create
+                if isinstance(subscription, list):
+                    logger.info(f"Microsoft subscriptions created for {email}: {len(subscription)} subscription(s)")
+                    for sub in subscription:
+                        folder_type = sub.get("folder_type", "unknown")
+                        sub_id = sub.get("id", "unknown")
+                        logger.info(f"  - {folder_type.upper()} subscription: {sub_id}")
+                else:
+                    logger.info(f"Microsoft subscription created for {email}: {subscription}")
+                    
             except Exception as sub_error:
                 logger.error(f"Failed to create Microsoft subscription for {email}: {sub_error}")
                 logger.warning("Continuing authentication process despite subscription creation failure")

@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 from threading import Lock
 from typing import List, Dict
@@ -80,9 +80,9 @@ async def get_subscriptions_expiring_soon(threshold_minutes=15) -> List[Dict]:
     try:
         supabase = get_supabase_client()
         
-        # Calcola il timestamp di soglia
-        threshold_time = datetime.utcnow() + timedelta(minutes=threshold_minutes)
-        threshold_iso = threshold_time.isoformat() + "+00:00"
+        # Calcola il timestamp di soglia (timezone-aware per UTC)
+        threshold_time = datetime.now(timezone.utc) + timedelta(minutes=threshold_minutes)
+        threshold_iso = threshold_time.isoformat().replace("+00:00", "Z")
         
         # Query per ottenere tutte le subscription Microsoft attive
         response = supabase.table("subscription_services").select("*").not_.is_("hashed_access_token", "null").eq("activated", True).eq("email_provider", "microsoft").execute()
@@ -125,7 +125,7 @@ async def get_subscriptions_expiring_soon(threshold_minutes=15) -> List[Dict]:
                             "user_subscription_id": user_subscription_id
                         })
                         
-                        hours_to_expiry = (expiry_dt - datetime.utcnow().replace(tzinfo=expiry_dt.tzinfo)).total_seconds() / 3600
+                        hours_to_expiry = (expiry_dt - datetime.now(timezone.utc)).total_seconds() / 3600
                         Logger.log_info(f"### MICROSOFT SUBSCRIPTION ⏰ 📥 Subscription INBOUND (Inbox) in scadenza per {email}: scade tra {hours_to_expiry:.1f} ore")
                         Logger.log_info(f"   🆔 Subscription ID: {inbound_sub_id}")
                         Logger.log_info(f"   📅 Scadenza: {expiry_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
@@ -148,7 +148,7 @@ async def get_subscriptions_expiring_soon(threshold_minutes=15) -> List[Dict]:
                             "user_subscription_id": user_subscription_id
                         })
                         
-                        hours_to_expiry = (expiry_dt - datetime.utcnow().replace(tzinfo=expiry_dt.tzinfo)).total_seconds() / 3600
+                        hours_to_expiry = (expiry_dt - datetime.now(timezone.utc)).total_seconds() / 3600
                         Logger.log_info(f"### MICROSOFT SUBSCRIPTION ⏰ 📤 Subscription OUTBOUND (SentItems) in scadenza per {email}: scade tra {hours_to_expiry:.1f} ore")
                         Logger.log_info(f"   🆔 Subscription ID: {outbound_sub_id}")
                         Logger.log_info(f"   📅 Scadenza: {expiry_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
