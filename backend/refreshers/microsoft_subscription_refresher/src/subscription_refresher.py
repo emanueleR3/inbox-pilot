@@ -127,6 +127,8 @@ async def refresh_expiring_subscriptions():
     """
     expiring = await get_subscriptions_expiring_soon(threshold_minutes=15)
 
+    Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🔄 Trovate {len(expiring)} subscription in scadenza da rinnovare")
+
     for sub in expiring:
         try:
             subscription_type = sub.get("subscription_type", "inbound")
