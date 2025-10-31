@@ -55,16 +55,37 @@ async def process_pubsub_message(data: dict):
         sender_email = _extract_email_from_header(payload.get('from', ''))
         labels = payload.get('labels', [])
         
-        # Se il mittente è la stessa email dell'account, salta questo messaggio
-        if sender_email and sender_email.lower() == email.lower():
-            print(f"🚫 Messaggio saltato - inviato dalla stessa email ({sender_email}): {payload.get('subject', 'N/A')}")
+        # Se il mittente è la stessa email dell'account o ha label SENT, salta questo messaggio
+        '''
+        if (sender_email and sender_email.lower() == email.lower()) or 'SENT' in labels:
+            print(f"🚫 Messaggio saltato - inviato dalla stessa email o label SENT: {payload.get('subject', 'N/A')}")
             continue
-        
-        # Salta anche i messaggi con label SENT (email inviate)
-        if 'SENT' in labels:
-            print(f"🚫 Messaggio saltato - ha label SENT: {payload.get('subject', 'N/A')}")
-            continue
-            
+        '''
+
+        # TODO CONTROLLARE ID
+        '''
+        -> Esiste il campo In-Reply-To ?
+        TRUE { vedere in history a quale thread fa riferimento
+          -> il message_id è in history ?
+           - TRUE {
+            -- scarta
+           }
+           - FALSE {
+             -> Il sender della mail è uguale alla mail admin ?
+               - TRUE { 
+                 -- set human_response a true e notifica
+                 -- aggiorna summary e category (IA) e i vari campi
+               }
+               - FALSE {
+                 -- aggiorna campi e lancia l'automazione
+               }	 
+           }
+        }
+        FALSE { 
+           -- salvo thread_id, started_at, history, subject, sender_email, cc_emails, [SUMMARY DOPO AUTO], last_message_id, last_message_at, attachment_emails_id, [CATEGORY DOPO AUTO], human_response, last_sender_email
+        }
+        '''
+
         # Salta i messaggi con label DRAFT (bozze)
         if 'DRAFT' in labels:
             print(f"🚫 Messaggio saltato - ha label DRAFT: {payload.get('subject', 'N/A')}")

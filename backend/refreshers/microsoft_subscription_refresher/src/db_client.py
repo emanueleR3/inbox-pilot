@@ -68,13 +68,14 @@ def get_supabase_client() -> Client:
 
 async def get_subscriptions_expiring_soon(threshold_minutes=15) -> List[Dict]:
     """
-    Ritorna le subscription Microsoft che scadranno entro X ore.
+    Ritorna le subscription Microsoft (inbound e outbound) che scadranno entro X minuti.
+    Restituisce sia le subscription inbound che outbound separatamente.
     
     Args:
         threshold_minutes (int): Minuti prima della scadenza per considerare una subscription "in scadenza"
         
     Returns:
-        List[Dict]: Lista di subscription in scadenza nel formato richiesto dal subscription_refresher
+        List[Dict]: Lista di subscription in scadenza con tipo (inbound/outbound)
     """
     try:
         supabase = get_supabase_client()
@@ -83,17 +84,11 @@ async def get_subscriptions_expiring_soon(threshold_minutes=15) -> List[Dict]:
         threshold_time = datetime.utcnow() + timedelta(minutes=threshold_minutes)
         threshold_iso = threshold_time.isoformat() + "+00:00"
         
-        # Query per ottenere tutte le subscription Microsoft che scadranno presto
-        # Filtriamo per:
-        # - microsoft_subscription_id non null (hanno subscription Microsoft)
-        # - microsoft_expiration_datetime non null (hanno data di scadenza)
-        # - microsoft_expiration_datetime <= threshold_time (scadono presto)
-        # - hashed_access_token non null (hanno token di accesso)
-        # - activated = true (account attivato)
-        response = supabase.table("subscription_services").select("*").not_.is_("microsoft_subscription_id", "null").not_.is_("microsoft_expiration_datetime", "null").not_.is_("hashed_access_token", "null").lte("microsoft_expiration_datetime", threshold_iso).eq("activated", True).eq("email_provider", "microsoft").execute()
+        # Query per ottenere tutte le subscription Microsoft attive
+        response = supabase.table("subscription_services").select("*").not_.is_("hashed_access_token", "null").eq("activated", True).eq("email_provider", "microsoft").execute()
         
         if not response.data:
-            Logger.log_info("### MICROSOFT SUBSCRIPTION ⏰✅ Nessuna subscription Microsoft in scadenza trovata.")
+            Logger.log_info("### MICROSOFT SUBSCRIPTION ⏰✅ Nessuna subscription Microsoft attiva trovata.")
             return []
         
         expiring_subscriptions = []
@@ -102,53 +97,78 @@ async def get_subscriptions_expiring_soon(threshold_minutes=15) -> List[Dict]:
             try:
                 # Decrittografa l'access token
                 access_token = ""
-                
                 if record.get("hashed_access_token"):
                     access_token = _decrypt_token(record["hashed_access_token"])
                 
-                # Verifica che i campi essenziali siano presenti
-                if not access_token or not record.get("microsoft_subscription_id"):
-                    Logger.log_error(f"### MICROSOFT SUBSCRIPTION ⚠️ Dati essenziali mancanti per {record.get('email')}")
+                if not access_token:
+                    Logger.log_error(f"### MICROSOFT SUBSCRIPTION ⚠️ Access token mancante per {record.get('email')}")
                     continue
                 
-                # Crea il dizionario nel formato richiesto dal subscription_refresher
-                subscription_data = {
-                    "subscription_id": record.get("microsoft_subscription_id"),    # Microsoft subscription ID
-                    "access_token": access_token,                                  # Access token decrittato
-                    "expirationDateTime": record.get("microsoft_expiration_datetime"), # Data scadenza subscription
-                    "email": record.get("email"),                                  # Email utente (per riferimento)
-                    "service_id": record.get("service_id"),                       # ID del servizio (per aggiornamenti)
-                    "user_subscription_id": record.get("subscription_id")         # ID subscription utente
-                }
+                email = record.get("email")
+                user_subscription_id = record.get("subscription_id")
                 
-                expiring_subscriptions.append(subscription_data)
+                # Controlla subscription inbound
+                inbound_sub_id = record.get("microsoft_subscription_id_inbound")
+                inbound_expiry = record.get("microsoft_expiration_datetime_inbound")
                 
-                # Parsing della data per il log
-                expires_at = datetime.fromisoformat(record.get("microsoft_expiration_datetime").replace("Z", "+00:00"))
-                time_to_expiry = expires_at - datetime.utcnow().replace(tzinfo=expires_at.tzinfo)
-                hours_to_expiry = time_to_expiry.total_seconds() / 3600
+                if inbound_sub_id and inbound_expiry:
+                    # Verifica se la subscription inbound è in scadenza
+                    expiry_dt = datetime.fromisoformat(inbound_expiry.replace("Z", "+00:00"))
+                    if expiry_dt <= threshold_time:
+                        expiring_subscriptions.append({
+                            "subscription_id": inbound_sub_id,
+                            "subscription_type": "inbound",
+                            "access_token": access_token,
+                            "expirationDateTime": inbound_expiry,
+                            "email": email,
+                            "service_id": record.get("service_id"),
+                            "user_subscription_id": user_subscription_id
+                        })
+                        
+                        hours_to_expiry = (expiry_dt - datetime.utcnow().replace(tzinfo=expiry_dt.tzinfo)).total_seconds() / 3600
+                        Logger.log_info(f"### MICROSOFT SUBSCRIPTION ⏰ Subscription INBOUND in scadenza per {email}: scade tra {hours_to_expiry:.1f} ore")
                 
-                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ⏰ Subscription Microsoft in scadenza per {record.get('email')}: scade tra {hours_to_expiry:.1f} ore")
-                Logger.log_info(f"   Email: {record.get('email')}, Scadenza: {expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                # Controlla subscription outbound
+                outbound_sub_id = record.get("microsoft_subscription_id_outbound")
+                outbound_expiry = record.get("microsoft_expiration_datetime_outbound")
+                
+                if outbound_sub_id and outbound_expiry:
+                    # Verifica se la subscription outbound è in scadenza
+                    expiry_dt = datetime.fromisoformat(outbound_expiry.replace("Z", "+00:00"))
+                    if expiry_dt <= threshold_time:
+                        expiring_subscriptions.append({
+                            "subscription_id": outbound_sub_id,
+                            "subscription_type": "outbound",
+                            "access_token": access_token,
+                            "expirationDateTime": outbound_expiry,
+                            "email": email,
+                            "service_id": record.get("service_id"),
+                            "user_subscription_id": user_subscription_id
+                        })
+                        
+                        hours_to_expiry = (expiry_dt - datetime.utcnow().replace(tzinfo=expiry_dt.tzinfo)).total_seconds() / 3600
+                        Logger.log_info(f"### MICROSOFT SUBSCRIPTION ⏰ Subscription OUTBOUND in scadenza per {email}: scade tra {hours_to_expiry:.1f} ore")
                 
             except Exception as e:
-                Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nel processamento della subscription per {record.get('email')}: {str(e)}")
+                Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nel processamento delle subscription per {record.get('email')}: {str(e)}")
                 continue
         
-        Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📊 Totale delle subscription in scadenza: {len(expiring_subscriptions)}")
+        Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📊 Totale subscription in scadenza: {len(expiring_subscriptions)}")
         return expiring_subscriptions
         
     except Exception as e:
         Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nel recupero delle subscription in scadenza: {str(e)}")
         return []
 
-async def update_subscription_expiration(subscription_id: str, new_expiration: str) -> bool:
+async def update_subscription_expiration(subscription_id: str, new_expiration: str, subscription_type: str = "inbound") -> bool:
     """
     Aggiorna nel database la nuova data di scadenza per una subscription Microsoft.
+    Supporta sia subscription inbound che outbound.
     
     Args:
         subscription_id (str): Microsoft subscription ID
         new_expiration (str): Nuova data di scadenza in formato ISO
+        subscription_type (str): Tipo di subscription ("inbound" o "outbound")
         
     Returns:
         bool: True se l'aggiornamento è avvenuto con successo, False altrimenti
@@ -156,7 +176,7 @@ async def update_subscription_expiration(subscription_id: str, new_expiration: s
     try:
         supabase = get_supabase_client()
         
-        # Normalizza la data di scadenza (assicurati che sia in formato ISO corretto)
+        # Normalizza la data di scadenza
         if new_expiration.endswith('Z'):
             normalized_expiration = new_expiration.replace('Z', '+00:00')
         elif not new_expiration.endswith('+00:00') and not new_expiration.endswith('-'):
@@ -171,15 +191,26 @@ async def update_subscription_expiration(subscription_id: str, new_expiration: s
             Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Formato data non valido per subscription {subscription_id}: {new_expiration}")
             return False
         
+        # Determina il campo da aggiornare in base al tipo di subscription
+        if subscription_type == "inbound":
+            field_subscription_id = "microsoft_subscription_id_inbound"
+            field_expiration = "microsoft_expiration_datetime_inbound"
+        elif subscription_type == "outbound":
+            field_subscription_id = "microsoft_subscription_id_outbound"
+            field_expiration = "microsoft_expiration_datetime_outbound"
+        else:
+            Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Tipo di subscription non valido: {subscription_type}")
+            return False
+        
         # Aggiorna il record nel database
         update_data = {
-            "microsoft_expiration_datetime": normalized_expiration
+            field_expiration: normalized_expiration
         }
         
-        response = supabase.table("subscription_services").update(update_data).eq("microsoft_subscription_id", subscription_id).execute()
+        response = supabase.table("subscription_services").update(update_data).eq(field_subscription_id, subscription_id).execute()
         
         if not response.data:
-            Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Nessun record trovato per subscription ID: {subscription_id}")
+            Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Nessun record trovato per subscription {subscription_type} ID: {subscription_id}")
             return False
         
         updated_record = response.data[0]
@@ -188,13 +219,13 @@ async def update_subscription_expiration(subscription_id: str, new_expiration: s
         # Parsing della nuova data per il log
         new_expiry_dt = datetime.fromisoformat(normalized_expiration)
         
-        Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Subscription aggiornata con successo per {email}.")
+        Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Subscription {subscription_type.upper()} aggiornata con successo per {email}.")
         Logger.log_info(f"   Subscription ID: {subscription_id}")
         Logger.log_info(f"   Nuova scadenza: {new_expiry_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         
         return True
         
     except Exception as e:
-        Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nell'aggiornamento della subscription {subscription_id}: {str(e)}")
+        Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nell'aggiornamento della subscription {subscription_type} {subscription_id}: {str(e)}")
         return False
 
