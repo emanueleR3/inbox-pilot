@@ -1,6 +1,7 @@
 from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel
+from typing import Optional
 from src.core.logger import setup_logger
 from src.modules.auth.src.utils.google_oauth_client import create_google_flow
 from src.modules.auth.src.utils.microsoft_oauth_client import (
@@ -16,6 +17,8 @@ import os
 import requests
 import httpx
 import json
+import base64
+import time
 
 # Assicurati che la variabile sia impostata
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -27,7 +30,7 @@ subscription_service_dao = SubscriptionServiceDAO()
 class OAuthLoginRequest(BaseModel):
     subscription_id: str
     services: str  # "all" o "calendar"
-    email: str = None  # Email opzionale per services="calendar"
+    email: Optional[str] = None  # Email opzionale per services="calendar"
 
 
 async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, request: Request):
@@ -59,9 +62,6 @@ async def _google_login(subscription_id: str, services: str, email: str, request
     flow = create_google_flow(services)
     
     # Crea uno stato personalizzato che include subscription_id, services e email
-    import json
-    import base64
-    import time
     custom_state = {
         "subscription_id": subscription_id,
         "services": services,
@@ -91,9 +91,6 @@ async def _microsoft_login(subscription_id: str, services: str, email: str, requ
     Gestisce il login Microsoft con subscription_id, services e email.
     """
     # Crea uno stato personalizzato che include subscription_id, services e email (come Google)
-    import json
-    import base64
-    import time
     custom_state = {
         "subscription_id": subscription_id,
         "services": services,
@@ -130,8 +127,6 @@ async def google_callback(request: Request):
         
         if state:
             try:
-                import json
-                import base64
                 decoded_state = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
                 subscription_id = decoded_state.get("subscription_id")
                 services = decoded_state.get("services")
@@ -431,8 +426,6 @@ async def microsoft_callback(request: Request):
         
         if state:
             try:
-                import json
-                import base64
                 decoded_state = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
                 subscription_id = decoded_state.get("subscription_id")
                 services = decoded_state.get("services")
