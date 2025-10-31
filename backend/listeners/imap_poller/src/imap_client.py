@@ -7,6 +7,7 @@ from typing import List, Dict
 import re
 from datetime import datetime, timedelta
 from src.utils.logger import log_info, log_error
+from src.utils.mail_parser import clean_email_body, extract_plain_text_from_html
 
 class ImapClient:
     def __init__(self, host: str, port: int, username: str, password: str, use_ssl: bool = True):
@@ -72,13 +73,27 @@ class ImapClient:
 
     def _extract_email_body(self, msg):
         """
-        Estrae il corpo del messaggio (testo e HTML se disponibili).
+        Estrae il corpo del messaggio (testo e HTML se disponibili) con supporto per strutture annidate.
         """
         body_text = ""
         body_html = ""
         
-        if msg.is_multipart():
-            for part in msg.walk():
+        def _decode_payload(part, content_type):
+            """Helper per decodificare il payload di una parte."""
+            try:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    charset = part.get_content_charset() or "utf-8"
+                    return payload.decode(charset, errors="ignore")
+            except Exception as e:
+                log_error(f"Errore decodifica payload {content_type}: {str(e)}")
+            return ""
+        
+        def _extract_from_multipart(msg_part, found_text="", found_html=""):
+            """Estrae ricorsivamente il contenuto dalle parti multipart."""
+            nonlocal body_text, body_html
+            
+            for part in msg_part.walk():
                 content_type = part.get_content_type()
                 content_disposition = str(part.get("Content-Disposition", ""))
                 
@@ -86,24 +101,46 @@ class ImapClient:
                 if "attachment" in content_disposition:
                     continue
                 
-                if content_type == "text/plain":
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        body_text = payload.decode(part.get_content_charset() or "utf-8", errors="ignore")
-                elif content_type == "text/html":
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        body_html = payload.decode(part.get_content_charset() or "utf-8", errors="ignore")
+                # Salta il container multipart stesso
+                if part.is_multipart():
+                    continue
+                
+                if content_type == "text/plain" and not found_text:
+                    decoded_content = _decode_payload(part, content_type)
+                    if decoded_content:
+                        found_text = decoded_content
+                        # Se preferiamo text/plain, usalo subito
+                        if not body_text:
+                            body_text = decoded_content
+                
+                elif content_type == "text/html" and not found_html:
+                    decoded_content = _decode_payload(part, content_type)
+                    if decoded_content:
+                        found_html = decoded_content
+                        # Se non abbiamo ancora text/plain, usa HTML
+                        if not body_text:
+                            body_html = decoded_content
+            
+            return found_text, found_html
+        
+        if msg.is_multipart():
+            # Gestisce messaggi multipart con strutture annidate
+            text_content, html_content = _extract_from_multipart(msg)
+            
+            # Preferisce text/plain se disponibile, altrimenti HTML
+            body_text = text_content if text_content else ""
+            body_html = html_content if html_content else ""
+            
         else:
             # Messaggio semplice (non multipart)
             content_type = msg.get_content_type()
-            payload = msg.get_payload(decode=True)
-            if payload:
-                decoded_payload = payload.decode(msg.get_content_charset() or "utf-8", errors="ignore")
+            decoded_content = _decode_payload(msg, content_type)
+            
+            if decoded_content:
                 if content_type == "text/plain":
-                    body_text = decoded_payload
+                    body_text = decoded_content
                 elif content_type == "text/html":
-                    body_html = decoded_payload
+                    body_html = decoded_content
         
         return body_text, body_html
 
@@ -220,8 +257,16 @@ class ImapClient:
                 except:
                     timestamp = date_str
 
-            # Estrae il corpo del messaggio
+            # Estrae il corpo del messaggio e lo pulisce
             body_text, body_html = self._extract_email_body(msg)
+            
+            # Pulisce il corpo del messaggio
+            if body_text:
+                body_text = clean_email_body(body_text)
+            elif body_html:
+                # Se non c'è text/plain, estrae il testo dall'HTML
+                body_text = extract_plain_text_from_html(body_html)
+                body_html = clean_email_body(body_html)
             
             # Estrae Message-ID e Thread-ID
             message_id = self._extract_message_id(msg)

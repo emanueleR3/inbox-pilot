@@ -4,6 +4,70 @@ from src.utils.logger import log_info, log_error
 
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
+def _extract_body_content(body_content: dict) -> str:
+    """
+    Estrae il contenuto del corpo del messaggio da Microsoft Graph.
+    Gestisce sia text/plain che text/html, preferendo text/plain.
+    """
+    import re
+    import html
+    
+    def _clean_text(text: str) -> str:
+        """Pulisce il testo rimuovendo caratteri indesiderati."""
+        if not text:
+            return ""
+        
+        # Rimuove caratteri di controllo e normalizza gli spazi
+        cleaned = re.sub(r'[\r\n\t]+', '\n', text)
+        cleaned = re.sub(r' +', ' ', cleaned)
+        
+        # Rimuove righe vuote multiple consecutive
+        cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
+        
+        # Rimuove spazi all'inizio e fine delle righe
+        lines = [line.strip() for line in cleaned.split('\n')]
+        cleaned = '\n'.join(lines)
+        
+        return cleaned.strip()
+    
+    def _html_to_text(html_content: str) -> str:
+        """Converte HTML in testo semplice."""
+        if not html_content:
+            return ""
+        
+        # Rimuove script e style
+        text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Sostituisce i br con newline
+        text = re.sub(r'<br[^>]*>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'</p>', '\n\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'</div>', '\n', text, flags=re.IGNORECASE)
+        
+        # Rimuove tutti i tag HTML
+        text = re.sub(r'<[^>]+>', '', text)
+        
+        # Decodifica entità HTML
+        text = html.unescape(text)
+        
+        return _clean_text(text)
+    
+    if not body_content:
+        return ""
+    
+    content = body_content.get("content", "")
+    content_type = body_content.get("contentType", "").lower()
+    
+    if not content:
+        return ""
+    
+    # Se è HTML, converte in testo
+    if content_type == "html":
+        return _html_to_text(content)
+    
+    # Se è testo, pulisce e ritorna
+    return _clean_text(content)
+
 def parse_microsoft_message(graph_data: dict, user_email: str) -> dict:
     """
     Converte il messaggio di Microsoft Graph nel formato standard per RabbitMQ.
@@ -23,9 +87,9 @@ def parse_microsoft_message(graph_data: dict, user_email: str) -> dict:
             to_addresses.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
         to_field = ", ".join(to_addresses)
         
-        # Estrai il corpo del messaggio
+        # Estrai il corpo del messaggio usando la nuova funzione
         body_content = graph_data.get("body", {})
-        body_text = body_content.get("content", "")
+        body_text = _extract_body_content(body_content)
         
         # Data di ricezione
         received_datetime = graph_data.get("receivedDateTime", "")

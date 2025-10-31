@@ -34,13 +34,7 @@ def extract_email_addresses(address_string: str) -> List[Dict[str, str]]:
 
 def clean_email_body(body_text: str) -> str:
     """
-    Pulisce il corpo dell'email rimuovendo caratteri indesiderati.
-    
-    Args:
-        body_text: Testo del corpo dell'email
-    
-    Returns:
-        Testo pulito
+    Pulisce il corpo dell'email rimuovendo caratteri indesiderati e normalizzando il testo.
     """
     if not body_text:
         return ""
@@ -48,9 +42,40 @@ def clean_email_body(body_text: str) -> str:
     # Rimuove caratteri di controllo e normalizza gli spazi
     cleaned = re.sub(r'[\r\n\t]+', '\n', body_text)
     cleaned = re.sub(r' +', ' ', cleaned)
-    cleaned = cleaned.strip()
     
-    return cleaned
+    # Rimuove righe vuote multiple consecutive
+    cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
+    
+    # Rimuove spazi all'inizio e fine delle righe
+    lines = [line.strip() for line in cleaned.split('\n')]
+    cleaned = '\n'.join(lines)
+    
+    # Rimuove quoted-printable artifacts comuni
+    cleaned = re.sub(r'=\d{2}', '', cleaned)  # Rimuove =20, =3D, etc.
+    cleaned = re.sub(r'=\n', '', cleaned)     # Rimuove soft line breaks
+    
+    return cleaned.strip()
+
+def extract_plain_text_from_html(html_content: str) -> str:
+    """
+    Estrae il testo semplice da contenuto HTML.
+    Rimuove tag HTML e decodifica entità HTML.
+    """
+    if not html_content:
+        return ""
+    
+    import html
+    
+    # Rimuove tag HTML comuni
+    text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', '', text)
+    
+    # Decodifica entità HTML
+    text = html.unescape(text)
+    
+    # Pulisce il testo risultante
+    return clean_email_body(text)
 
 def extract_urls_from_text(text: str) -> List[str]:
     """
