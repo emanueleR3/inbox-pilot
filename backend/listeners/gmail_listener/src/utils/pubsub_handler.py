@@ -1,9 +1,54 @@
 import asyncio
 import json
+import os
+import re
+import html
 from src.gmail_fetcher import fetch_messages_for_user
 from src.broker_client import RabbitMQPublisher 
 
 publisher = RabbitMQPublisher()
+
+# Log della configurazione filtri all'avvio
+def _log_filter_configuration():
+    """Log della configurazione dei filtri categorie Gmail."""
+    print("📋 CONFIGURAZIONE FILTRI GMAIL:")
+    print(f"   CATEGORY_PROMOTIONS: {'🚫 BLOCCATO' if os.getenv('CATEGORY_PROMOTIONS', 'false').lower() == 'true' else '✅ PERMESSO'}")
+    print(f"   CATEGORY_SOCIAL: {'🚫 BLOCCATO' if os.getenv('CATEGORY_SOCIAL', 'false').lower() == 'true' else '✅ PERMESSO'}")
+    print(f"   CATEGORY_UPDATES: {'🚫 BLOCCATO' if os.getenv('CATEGORY_UPDATES', 'false').lower() == 'true' else '✅ PERMESSO'}")
+    print(f"   CATEGORY_FORUMS: {'🚫 BLOCCATO' if os.getenv('CATEGORY_FORUMS', 'false').lower() == 'true' else '✅ PERMESSO'}")
+
+# Log della configurazione all'import
+_log_filter_configuration()
+
+def _should_filter_message_by_category(labels: list) -> bool:
+    """
+    Determina se un messaggio deve essere filtrato basandosi sulle categorie Gmail e i filtri env.
+    
+    Args:
+        labels: Lista delle labels del messaggio Gmail
+        
+    Returns:
+        True se il messaggio deve essere scartato, False se deve essere processato
+    """
+    if not labels:
+        return False  # Se non ci sono labels, processa il messaggio
+    
+    # Mapping delle categorie Gmail alle variabili d'ambiente
+    # true = filtra (blocca), false = permetti
+    category_filters = {
+        'CATEGORY_PROMOTIONS': os.getenv('CATEGORY_PROMOTIONS', 'false').lower() == 'true',
+        'CATEGORY_SOCIAL': os.getenv('CATEGORY_SOCIAL', 'false').lower() == 'true', 
+        'CATEGORY_UPDATES': os.getenv('CATEGORY_UPDATES', 'false').lower() == 'true',
+        'CATEGORY_FORUMS': os.getenv('CATEGORY_FORUMS', 'false').lower() == 'true'
+    }
+    
+    # Controlla se il messaggio ha una delle categorie filtrate
+    for label in labels:
+        if label in category_filters and category_filters[label]:
+            print(f"🚫 Messaggio filtrato per categoria: {label} (filtro attivo)")
+            return True  # Scarta il messaggio
+    
+    return False  # Processa il messaggio
 
 async def process_pubsub_message(data: dict):
     """
@@ -66,19 +111,23 @@ async def process_pubsub_message(data: dict):
         if 'DRAFT' in labels:
             print(f"🚫 Messaggio saltato - ha label DRAFT: {payload.get('subject', 'N/A')}")
             continue
+        
+        # Filtra per categoria basandosi sui filtri env
+        if _should_filter_message_by_category(labels):
+            continue  # Il messaggio è già loggato nella funzione di filtro
             
         filtered_messages.append(payload)
 
     # Se non ci sono messaggi da processare dopo il filtro
     if not filtered_messages:
-        print(f"📭 [{email}] Nessun messaggio da processare dopo il filtro (tutti erano dalla stessa email)")
+        print(f"📭 [{email}] Nessun messaggio da processare dopo il filtro (filtrati per email stessa/categorie)")
         return
 
     # Invia solo i messaggi filtrati a RabbitMQ
     for payload in filtered_messages:
         await publisher.publish_message(payload)
 
-    print(f"✅ [{email}] Processati {len(filtered_messages)}/{len(messages)} messaggi → inviati a RabbitMQ (saltati {len(messages) - len(filtered_messages)} messaggi dalla stessa email)")
+    print(f"✅ [{email}] Processati {len(filtered_messages)}/{len(messages)} messaggi → inviati a RabbitMQ (filtrati {len(messages) - len(filtered_messages)} messaggi per email stessa/categorie)")
 
 def _serialize_gmail_message(user_email: str, message: dict, history_id: str) -> dict:
     """
