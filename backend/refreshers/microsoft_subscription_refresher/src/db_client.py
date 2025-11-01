@@ -253,3 +253,35 @@ async def update_subscription_expiration(subscription_id: str, new_expiration: s
         Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nell'aggiornamento della subscription {subscription_type} {subscription_id}: {str(e)}")
         return False
 
+async def get_all_subscription_ids_for_email(email: str) -> List[str]:
+    """
+    Ottiene tutti gli ID delle subscription Microsoft (inbound e outbound) per un determinato email.
+    
+    Args:
+        email (str): Email dell'utente
+        
+    Returns:
+        List[str]: Lista di tutti gli ID delle subscription dell'utente
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select("microsoft_subscription_id_inbound, microsoft_subscription_id_outbound").eq("email", email).eq("activated", True).eq("email_provider", "microsoft").execute()
+        
+        if not response.data:
+            Logger.log_warning(f"### MICROSOFT SUBSCRIPTION ⚠️ Nessuna subscription Microsoft trovata per {email}")
+            return []
+        
+        subscription_ids = []
+        for record in response.data:
+            if record.get("microsoft_subscription_id_inbound"):
+                subscription_ids.append(record["microsoft_subscription_id_inbound"])
+            if record.get("microsoft_subscription_id_outbound"):
+                subscription_ids.append(record["microsoft_subscription_id_outbound"])
+        
+        Logger.log_info(f"### MICROSOFT SUBSCRIPTION 📋 Trovate {len(subscription_ids)} subscription per {email}: {subscription_ids}")
+        return subscription_ids
+        
+    except Exception as e:
+        Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nel recupero subscription per {email}: {str(e)}")
+        return []

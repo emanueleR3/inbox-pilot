@@ -1,6 +1,6 @@
 import httpx
 from src.utils.graph_client import renew_subscription
-from src.db_client import get_subscriptions_expiring_soon, update_subscription_expiration
+from src.db_client import get_subscriptions_expiring_soon, update_subscription_expiration, get_all_subscription_ids_for_email
 from src.utils.logger import Logger
 
 async def delete_orphan_subscription(access_token: str, subscription_id: str):
@@ -143,8 +143,10 @@ async def refresh_expiring_subscriptions():
             # Prima di rinnovare, lista tutte le subscription per questo token per trovare orfane
             all_subs = await list_all_microsoft_subscriptions(sub["access_token"])
             
-            # Filtra le subscription che non sono nel nostro database
-            our_subscription_ids = [subscription_id]  # Solo la subscription corrente
+            # Filtra le subscription che non sono nel nostro database - ottieni TUTTE le subscription di questo utente
+            # Recupera tutti gli ID delle subscription di questo email dal database
+            all_user_subscription_ids = await get_all_subscription_ids_for_email(email)
+            our_subscription_ids = all_user_subscription_ids if all_user_subscription_ids else [subscription_id]
             orphan_subscriptions = [s for s in all_subs if s.get('id') not in our_subscription_ids and s.get('resource', '').startswith('/users/')]
             
             if orphan_subscriptions:
