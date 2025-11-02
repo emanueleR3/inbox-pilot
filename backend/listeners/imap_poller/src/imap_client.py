@@ -235,11 +235,24 @@ class ImapClient:
             for folder in folders:
                 # Decodifica la risposta (formato: (flags) delimiter folder_name)
                 folder_str = folder.decode() if isinstance(folder, bytes) else folder
-                # Estrae il nome della cartella dalla risposta IMAP
-                folder_name = folder_str.split('"')[-2] if '"' in folder_str else folder_str.split()[-1]
-                folder_names.append(folder_name)
+                log_info(f"📁 Raw folder response: {folder_str}")
+                
+                # Parse della risposta IMAP LIST: (flags) "delimiter" "folder_name"
+                # Esempi:
+                # (\HasNoChildren) "." "INBOX.Sent"
+                # (\HasNoChildren) "/" "Sent"
+                parts = folder_str.split('"')
+                if len(parts) >= 3:
+                    # L'ultimo elemento quoted è il nome della cartella
+                    folder_name = parts[-2] if len(parts) >= 3 else parts[-1]
+                else:
+                    # Fallback: prendi l'ultima parte separata da spazio
+                    folder_name = folder_str.split()[-1].strip('"')
+                
+                if folder_name and folder_name not in ['.', '..']:
+                    folder_names.append(folder_name)
             
-            log_info(f"Cartelle trovate per {self.username}: {folder_names}")
+            log_info(f"📁 Cartelle parsate per {self.username}: {folder_names}")
             return folder_names
             
         except Exception as e:
@@ -281,25 +294,43 @@ class ImapClient:
             "Sent",
             "Sent Messages", 
             "Sent Items",
-            "Gesendet",      # Gmail DE
-            "Enviados",      # Gmail ES
-            "Inviata",       # Gmail IT
-            "Envoyés",       # Gmail FR
-            "Отправленные",  # Gmail RU
-            "已发送",         # Gmail CN
-            "INBOX.Sent",    # Alcune configurazioni
-            "[Gmail]/Sent Mail",  # Gmail IMAP
-            "Drafts/Sent"    # Alcune configurazioni meno comuni
+            "INBOX.Sent",         # Formato gerarchico comune
+            "INBOX.Sent Messages",
+            "INBOX.Sent Items", 
+            "Posta inviata",      # Italiano generico
+            "Elementi inviati",   # Outlook IT
+            "Inviata",           # Gmail IT breve
+            "Gesendet",          # Gmail DE
+            "Enviados",          # Gmail ES
+            "Envoyés",           # Gmail FR
+            "Отправленные",      # Gmail RU
+            "已发送",             # Gmail CN
+            "[Gmail]/Sent Mail", # Gmail IMAP standard
+            "Drafts/Sent",       # Alcune configurazioni meno comuni
+            # Provider universitari italiani
+            "INBOX.Posta inviata",
+            "INBOX.Elementi inviati",
+            "Sent Mail",
+            "Outbox"
         ]
         
         available_folders = self.list_folders()
         
+        # Cerca corrispondenza esatta prima
         for sent_name in possible_sent_folders:
             if sent_name in available_folders:
-                log_info(f"Cartella Sent trovata: '{sent_name}' per {self.username}")
+                log_info(f"📤 Cartella Sent trovata (corrispondenza esatta): '{sent_name}' per {self.username}")
                 return sent_name
         
-        log_error(f"Nessuna cartella Sent trovata per {self.username}. Cartelle disponibili: {available_folders}")
+        # Se non trova corrispondenza esatta, cerca substring (case insensitive)
+        for folder in available_folders:
+            folder_lower = folder.lower()
+            for sent_pattern in ["sent", "inviata", "inviati", "elementi"]:
+                if sent_pattern in folder_lower:
+                    log_info(f"📤 Cartella Sent trovata (pattern matching): '{folder}' per {self.username}")
+                    return folder
+        
+        log_error(f"❌ Nessuna cartella Sent trovata per {self.username}. Cartelle disponibili: {available_folders}")
         return ""
 
     def fetch_unseen_messages(self, folder_name: str = "INBOX") -> List[Dict]:
@@ -615,7 +646,17 @@ class ImapClient:
     def close(self):
         try:
             if self.conn:
-                self.conn.close()
+                # Verifica lo stato della connessione prima di chiudere
+                try:
+                    # Se siamo in stato SELECTED, chiudi la cartella prima
+                    self.conn.close()
+                except:
+                    # Se CLOSE fallisce, probabilmente siamo in stato AUTH
+                    # In questo caso, vai direttamente al logout
+                    pass
+                
+                # Logout sempre
                 self.conn.logout()
+                log_info(f"✅ Connessione IMAP chiusa correttamente per {self.username}")
         except Exception as e:
             log_error(f"Errore durante chiusura connessione IMAP per {self.username}: {str(e)}")

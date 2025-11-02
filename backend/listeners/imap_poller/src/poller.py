@@ -86,7 +86,7 @@ async def poll_account_outbound(account):
         email = account["email"]
         
         # Recupera info sull'ultimo messaggio inviato processato
-        last_sent_info = await get_last_sent_message_info(email)
+        last_sent_info = get_last_sent_message_info(email)
         last_timestamp = last_sent_info.get("timestamp")
         last_message_id = last_sent_info.get("message_id")
         
@@ -148,7 +148,7 @@ async def poll_account_outbound(account):
             
             # Aggiorna il timestamp dell'ultimo messaggio processato
             if latest_message:
-                await update_last_sent_message_info(
+                update_last_sent_message_info(
                     email,
                     latest_message.get("message_id", ""),
                     latest_message.get("timestamp", "")
@@ -163,7 +163,7 @@ async def poll_account_outbound(account):
             
             most_recent = client.get_most_recent_sent_message()
             if most_recent:
-                await update_last_sent_message_info(
+                update_last_sent_message_info(
                     email,
                     most_recent.get("message_id", ""),
                     most_recent.get("timestamp", "")

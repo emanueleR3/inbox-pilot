@@ -127,7 +127,7 @@ async def get_all_imap_accounts() -> List[Dict]:
         log_error(f"❌ Errore nel recupero degli account IMAP: {str(e)}")
         return []
 
-async def get_last_sent_message_info(email: str) -> Dict:
+def get_last_sent_message_info(email: str) -> Dict:
     """
     Recupera info sull'ultimo messaggio inviato processato per un account IMAP.
     
@@ -156,7 +156,7 @@ async def get_last_sent_message_info(email: str) -> Dict:
         log_error(f"❌ Errore nel recupero ultimo messaggio inviato per {email}: {str(e)}")
         return {"message_id": None, "timestamp": None}
 
-async def update_last_sent_message_info(email: str, message_id: str, timestamp: str):
+def update_last_sent_message_info(email: str, message_id: str, timestamp: str):
     """
     Aggiorna le info dell'ultimo messaggio inviato processato per un account IMAP.
     
