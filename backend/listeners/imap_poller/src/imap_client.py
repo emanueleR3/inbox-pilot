@@ -33,7 +33,7 @@ class ImapClient:
                 self.conn = imaplib.IMAP4(self.host, self.port)
 
             self.conn.login(self.username, self.password)
-            self.conn.select("INBOX")   # di default seleziono la inbox (TODO pensare eventualmente di andare a controllare anche la spam)
+            # Non selezioniamo più automaticamente INBOX - facciamo questo nei metodi specifici
             
         except ssl.SSLError as e:
             # Prova con un contesto SSL ancora più permissivo
@@ -45,7 +45,6 @@ class ImapClient:
                 
                 self.conn = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=ssl_context)
                 self.conn.login(self.username, self.password)
-                self.conn.select("INBOX")
             except Exception as fallback_e:
                 log_error(f"Errore SSL per {self.host}: {str(fallback_e)}")
                 raise
@@ -219,10 +218,101 @@ class ImapClient:
             # In caso di errore nel parsing, consideriamo l'email come recente per sicurezza
             return True
 
-    def fetch_unseen_messages(self) -> List[Dict]:
+    def list_folders(self) -> List[str]:
         """
-        Recupera i messaggi non letti inviati dopo ieri.
+        Lista tutte le cartelle disponibili nell'account IMAP.
+        
+        Returns:
+            List[str]: Lista dei nomi delle cartelle
         """
+        try:
+            status, folders = self.conn.list()
+            if status != "OK":
+                log_error(f"Errore nel listing delle cartelle per {self.username}")
+                return []
+            
+            folder_names = []
+            for folder in folders:
+                # Decodifica la risposta (formato: (flags) delimiter folder_name)
+                folder_str = folder.decode() if isinstance(folder, bytes) else folder
+                # Estrae il nome della cartella dalla risposta IMAP
+                folder_name = folder_str.split('"')[-2] if '"' in folder_str else folder_str.split()[-1]
+                folder_names.append(folder_name)
+            
+            log_info(f"Cartelle trovate per {self.username}: {folder_names}")
+            return folder_names
+            
+        except Exception as e:
+            log_error(f"Errore nel listing cartelle per {self.username}: {str(e)}")
+            return []
+
+    def select_folder(self, folder_name: str) -> bool:
+        """
+        Seleziona una cartella specifica.
+        
+        Args:
+            folder_name: Nome della cartella da selezionare
+            
+        Returns:
+            bool: True se la selezione è riuscita, False altrimenti
+        """
+        try:
+            status, count = self.conn.select(folder_name)
+            if status == "OK":
+                log_info(f"Cartella '{folder_name}' selezionata per {self.username}")
+                return True
+            else:
+                log_error(f"Errore nella selezione cartella '{folder_name}' per {self.username}: {status}")
+                return False
+        except Exception as e:
+            log_error(f"Errore nella selezione cartella '{folder_name}' per {self.username}: {str(e)}")
+            return False
+
+    def get_sent_folder_name(self) -> str:
+        """
+        Determina il nome della cartella Sent per questo provider.
+        Diversi provider usano nomi diversi per la cartella delle email inviate.
+        
+        Returns:
+            str: Nome della cartella Sent o stringa vuota se non trovata
+        """
+        # Lista dei possibili nomi per la cartella Sent
+        possible_sent_folders = [
+            "Sent",
+            "Sent Messages", 
+            "Sent Items",
+            "Gesendet",      # Gmail DE
+            "Enviados",      # Gmail ES
+            "Inviata",       # Gmail IT
+            "Envoyés",       # Gmail FR
+            "Отправленные",  # Gmail RU
+            "已发送",         # Gmail CN
+            "INBOX.Sent",    # Alcune configurazioni
+            "[Gmail]/Sent Mail",  # Gmail IMAP
+            "Drafts/Sent"    # Alcune configurazioni meno comuni
+        ]
+        
+        available_folders = self.list_folders()
+        
+        for sent_name in possible_sent_folders:
+            if sent_name in available_folders:
+                log_info(f"Cartella Sent trovata: '{sent_name}' per {self.username}")
+                return sent_name
+        
+        log_error(f"Nessuna cartella Sent trovata per {self.username}. Cartelle disponibili: {available_folders}")
+        return ""
+
+    def fetch_unseen_messages(self, folder_name: str = "INBOX") -> List[Dict]:
+        """
+        Recupera i messaggi non letti da una cartella specifica inviati dopo ieri.
+        
+        Args:
+            folder_name: Nome della cartella da cui recuperare i messaggi (default: INBOX)
+        """
+        # Seleziona la cartella richiesta
+        if not self.select_folder(folder_name):
+            return []
+            
         status, messages = self.conn.search(None, "UNSEEN")
         if status != "OK":
             return []
@@ -295,6 +385,229 @@ class ImapClient:
             emails.append(email_data)
 
         return emails
+
+    def fetch_sent_messages(self) -> List[Dict]:
+        """
+        Recupera i messaggi inviati dalla cartella Sent.
+        Restituisce solo i messaggi inviati dopo ieri.
+        
+        Returns:
+            List[Dict]: Lista di messaggi inviati
+        """
+        sent_folder = self.get_sent_folder_name()
+        if not sent_folder:
+            log_error(f"Impossibile trovare cartella Sent per {self.username}")
+            return []
+        
+        return self.fetch_unseen_messages(sent_folder)
+
+    def fetch_sent_messages_since(self, since_timestamp: str = None, is_first_polling: bool = False) -> List[Dict]:
+        """
+        Recupera i messaggi inviati dalla cartella Sent più recenti di un timestamp specifico.
+        
+        Args:
+            since_timestamp: ISO timestamp dell'ultimo messaggio processato (None per primo polling)
+            is_first_polling: True se è il primo polling per questo account
+            
+        Returns:
+            List[Dict]: Lista di messaggi inviati più recenti
+        """
+        sent_folder = self.get_sent_folder_name()
+        if not sent_folder:
+            log_error(f"Impossibile trovare cartella Sent per {self.username}")
+            return []
+        
+        # Seleziona la cartella Sent
+        if not self.select_folder(sent_folder):
+            return []
+        
+        try:
+            # Logica per il primo polling
+            if is_first_polling:
+                log_info(f"📤 Primo polling per {self.username} - cerco messaggi degli ultimi 2 minuti")
+                # Per il primo polling: prendi solo messaggi degli ultimi 2 minuti
+                two_minutes_ago = datetime.now() - timedelta(minutes=2)
+                imap_date = two_minutes_ago.strftime("%d-%b-%Y")
+                search_criteria = f'SINCE "{imap_date}"'
+            elif since_timestamp:
+                try:
+                    # Converte timestamp in formato IMAP per ricerca
+                    since_date = datetime.fromisoformat(since_timestamp.replace('Z', '+00:00'))
+                    imap_date = since_date.strftime("%d-%b-%Y")
+                    search_criteria = f'SINCE "{imap_date}"'
+                    log_info(f"📤 Polling incrementale per {self.username} - cerco messaggi dal {imap_date}")
+                except:
+                    # Se il parsing fallisce, usa gli ultimi 2 giorni
+                    yesterday = (datetime.now() - timedelta(days=2)).strftime("%d-%b-%Y")
+                    search_criteria = f'SINCE "{yesterday}"'
+                    log_info(f"📤 Fallback per {self.username} - cerco messaggi dal {yesterday}")
+            else:
+                # Default: prendi i messaggi degli ultimi 2 giorni
+                yesterday = (datetime.now() - timedelta(days=2)).strftime("%d-%b-%Y")
+                search_criteria = f'SINCE "{yesterday}"'
+                log_info(f"📤 Polling default per {self.username} - cerco messaggi dal {yesterday}")
+            
+            status, messages = self.conn.search(None, search_criteria)
+            if status != "OK":
+                log_error(f"Errore nella ricerca messaggi inviati per {self.username}")
+                return []
+
+            mail_ids = messages[0].split()
+            emails = []
+            now = datetime.now()
+            two_minutes_ago = now - timedelta(minutes=2)
+            
+            log_info(f"📤 Trovati {len(mail_ids)} messaggi nella cartella Sent per {self.username}")
+            
+            for mail_id in mail_ids:
+                _, msg_data = self.conn.fetch(mail_id, "(RFC822)")
+                raw_email = msg_data[0][1]
+                msg = email.message_from_bytes(raw_email)
+
+                # Estrae tutti i dati dell'email
+                subject = self._decode_header(msg.get("Subject", ""))
+                from_address = self._decode_header(msg.get("From", ""))
+                to_address = self._decode_header(msg.get("To", ""))
+                cc_address = self._decode_header(msg.get("Cc", ""))
+                bcc_address = self._decode_header(msg.get("Bcc", ""))
+                date_str = msg.get("Date", "")
+                
+                # Converte la data in formato timestamp
+                timestamp = ""
+                parsed_date = None
+                if date_str:
+                    try:
+                        parsed_date = parsedate_to_datetime(date_str)
+                        timestamp = parsed_date.isoformat()
+                    except:
+                        timestamp = date_str
+
+                # Logica specifica per primo polling
+                if is_first_polling:
+                    # Per il primo polling: prendi solo messaggi degli ultimi 2 minuti
+                    if parsed_date:
+                        # Converte in timezone naive per confronto
+                        msg_date_naive = parsed_date.replace(tzinfo=None) if parsed_date.tzinfo else parsed_date
+                        if msg_date_naive < two_minutes_ago:
+                            log_info(f"📤 Primo polling: messaggio {mail_id.decode()} troppo vecchio ({msg_date_naive}), saltato")
+                            continue
+                        else:
+                            log_info(f"📤 Primo polling: messaggio {mail_id.decode()} recente ({msg_date_naive}), processato")
+                elif since_timestamp and parsed_date:
+                    # Per polling incrementali: salta i messaggi più vecchi dell'ultimo processato
+                    try:
+                        since_dt = datetime.fromisoformat(since_timestamp.replace('Z', '+00:00'))
+                        msg_dt = parsed_date.replace(tzinfo=None) if parsed_date.tzinfo else parsed_date
+                        since_dt_naive = since_dt.replace(tzinfo=None) if since_dt.tzinfo else since_dt
+                        
+                        if msg_dt <= since_dt_naive:
+                            continue  # Salta questo messaggio
+                    except:
+                        pass  # In caso di errore, processa il messaggio
+
+                # Estrae il corpo del messaggio e lo pulisce
+                body_text, body_html = self._extract_email_body(msg)
+                
+                # Pulisce il corpo del messaggio
+                if body_text:
+                    body_text = clean_email_body(body_text)
+                elif body_html:
+                    body_text = extract_plain_text_from_html(body_html)
+                    body_html = clean_email_body(body_html)
+                
+                # Estrae Message-ID e Thread-ID
+                message_id = self._extract_message_id(msg)
+                thread_id = self._extract_thread_id(msg)
+
+                email_data = {
+                    "id": mail_id.decode(),
+                    "message_id": message_id,
+                    "thread_id": thread_id,
+                    "from": from_address,
+                    "to": to_address,
+                    "cc": cc_address,
+                    "bcc": bcc_address,
+                    "subject": subject,
+                    "date": date_str,
+                    "timestamp": timestamp,
+                    "body_text": body_text,
+                    "body_html": body_html,
+                    "raw": raw_email,
+                    "folder": sent_folder,  # Indica che è dalla cartella Sent
+                    "is_outbound": True,    # Flag per indicare che è un messaggio inviato
+                    # Metadati aggiuntivi
+                    "content_type": msg.get_content_type(),
+                    "charset": msg.get_content_charset() or "utf-8",
+                    "size": len(raw_email) if raw_email else 0
+                }
+
+                emails.append(email_data)
+
+            log_info(f"📤 Selezionati {len(emails)} messaggi inviati per {self.username}")
+            return emails
+            
+        except Exception as e:
+            log_error(f"Errore nel recupero messaggi inviati per {self.username}: {str(e)}")
+            return []
+
+    def get_most_recent_sent_message(self) -> Dict:
+        """
+        Recupera il messaggio inviato più recente dalla cartella Sent.
+        Utilizzato per inizializzare il tracking quando non ci sono messaggi recenti.
+        
+        Returns:
+            Dict: Dati del messaggio più recente o dict vuoto se non trovato
+        """
+        sent_folder = self.get_sent_folder_name()
+        if not sent_folder:
+            return {}
+        
+        # Seleziona la cartella Sent
+        if not self.select_folder(sent_folder):
+            return {}
+        
+        try:
+            # Cerca tutti i messaggi dell'ultima settimana
+            one_week_ago = (datetime.now() - timedelta(days=7)).strftime("%d-%b-%Y")
+            status, messages = self.conn.search(None, f'SINCE "{one_week_ago}"')
+            
+            if status != "OK" or not messages[0]:
+                log_info(f"📤 Nessun messaggio recente trovato nella cartella Sent per {self.username}")
+                return {}
+
+            mail_ids = messages[0].split()
+            if not mail_ids:
+                return {}
+            
+            # Prendi l'ultimo messaggio (più recente)
+            latest_mail_id = mail_ids[-1]
+            _, msg_data = self.conn.fetch(latest_mail_id, "(RFC822)")
+            raw_email = msg_data[0][1]
+            msg = email.message_from_bytes(raw_email)
+
+            # Estrae solo i dati essenziali
+            date_str = msg.get("Date", "")
+            message_id = self._extract_message_id(msg)
+            
+            timestamp = ""
+            if date_str:
+                try:
+                    parsed_date = parsedate_to_datetime(date_str)
+                    timestamp = parsed_date.isoformat()
+                except:
+                    timestamp = date_str
+
+            log_info(f"📤 Messaggio più recente per {self.username}: {message_id} (data: {date_str})")
+            
+            return {
+                "message_id": message_id,
+                "timestamp": timestamp,
+                "date": date_str
+            }
+            
+        except Exception as e:
+            log_error(f"Errore nel recupero messaggio più recente per {self.username}: {str(e)}")
+            return {}
 
     def mark_as_seen(self, mail_id):
         self.conn.store(mail_id, '+FLAGS', '\\Seen')

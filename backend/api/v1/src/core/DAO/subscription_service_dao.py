@@ -377,7 +377,12 @@ class SubscriptionServiceDAO:
         microsoft_expiration_datetime_outbound = None,
         oauth_user_id: str = None,
         config_completed: bool = False,
-        activated: bool = False
+        activated: bool = False,
+        quiz_q_a: dict = None,
+        last_sent_message_id: str = None,
+        last_sent_timestamp: datetime = None,
+        last_received_message_id: str = None,
+        last_received_timestamp: datetime = None
     ) -> dict | None:
         """
         Crea un nuovo record nella tabella subscription_services.
@@ -415,7 +420,12 @@ class SubscriptionServiceDAO:
                 "microsoft_expiration_datetime_outbound": microsoft_expiration_datetime_outbound.isoformat() if microsoft_expiration_datetime_outbound else None,
                 "oauth_user_id": oauth_user_id,
                 "config_completed": config_completed,
-                "activated": activated
+                "activated": activated,
+                "quiz_q_a": quiz_q_a,
+                "last_sent_message_id": last_sent_message_id,
+                "last_sent_timestamp": last_sent_timestamp.isoformat() if last_sent_timestamp else None,
+                "last_received_message_id": last_received_message_id,
+                "last_received_timestamp": last_received_timestamp.isoformat() if last_received_timestamp else None
             }
 
             
