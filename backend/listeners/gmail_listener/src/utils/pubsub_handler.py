@@ -1,5 +1,8 @@
 import asyncio
 import json
+import os
+import re
+import html
 from src.gmail_fetcher import fetch_messages_for_user
 from src.broker_client import RabbitMQPublisher 
 
@@ -52,16 +55,37 @@ async def process_pubsub_message(data: dict):
         sender_email = _extract_email_from_header(payload.get('from', ''))
         labels = payload.get('labels', [])
         
-        # Se il mittente è la stessa email dell'account, salta questo messaggio
-        if sender_email and sender_email.lower() == email.lower():
-            print(f"🚫 Messaggio saltato - inviato dalla stessa email ({sender_email}): {payload.get('subject', 'N/A')}")
+        # Se il mittente è la stessa email dell'account o ha label SENT, salta questo messaggio
+        '''
+        if (sender_email and sender_email.lower() == email.lower()) or 'SENT' in labels:
+            print(f"🚫 Messaggio saltato - inviato dalla stessa email o label SENT: {payload.get('subject', 'N/A')}")
             continue
-        
-        # Salta anche i messaggi con label SENT (email inviate)
-        if 'SENT' in labels:
-            print(f"🚫 Messaggio saltato - ha label SENT: {payload.get('subject', 'N/A')}")
-            continue
-            
+        '''
+
+        # TODO CONTROLLARE ID
+        '''
+        -> Esiste il campo In-Reply-To ?
+        TRUE { vedere in history a quale thread fa riferimento
+          -> il message_id è in history ?
+           - TRUE {
+            -- scarta
+           }
+           - FALSE {
+             -> Il sender della mail è uguale alla mail admin ?
+               - TRUE { 
+                 -- set human_response a true e notifica
+                 -- aggiorna summary e category (IA) e i vari campi
+               }
+               - FALSE {
+                 -- aggiorna campi e lancia l'automazione
+               }	 
+           }
+        }
+        FALSE { 
+           -- salvo thread_id, started_at, history, subject, sender_email, cc_emails, [SUMMARY DOPO AUTO], last_message_id, last_message_at, attachment_emails_id, [CATEGORY DOPO AUTO], human_response, last_sender_email
+        }
+        '''
+
         # Salta i messaggi con label DRAFT (bozze)
         if 'DRAFT' in labels:
             print(f"🚫 Messaggio saltato - ha label DRAFT: {payload.get('subject', 'N/A')}")
@@ -91,6 +115,10 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     
     # Estrai il corpo del messaggio
     body_text = _extract_message_body(message.get("payload", {}))
+    
+    # Pulisce il corpo del messaggio
+    if body_text:
+        body_text = _clean_gmail_body(body_text)
     
     # Cerca message-id in modo case-insensitive e rimuovi < >
     message_id = headers_lower.get("message-id")
@@ -158,41 +186,111 @@ def _extract_email_from_header(from_header: str) -> str:
     
     return ""
 
+def _clean_gmail_body(body_text: str) -> str:
+    """
+    Pulisce il corpo del messaggio Gmail rimuovendo caratteri indesiderati.
+    """
+    import re
+    import html
+    
+    if not body_text:
+        return ""
+    
+    # Decodifica entità HTML se presenti
+    cleaned = html.unescape(body_text)
+    
+    # Rimuove quoted-printable artifacts
+    cleaned = re.sub(r'=\d{2}', '', cleaned)  # Rimuove =20, =3D, etc.
+    cleaned = re.sub(r'=\n', '', cleaned)     # Rimuove soft line breaks
+    
+    # Se sembra essere HTML, estrae il testo
+    if '<' in cleaned and '>' in cleaned:
+        # Rimuove script e style
+        cleaned = re.sub(r'<script[^>]*>.*?</script>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'<style[^>]*>.*?</style>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Sostituisce i br con newline
+        cleaned = re.sub(r'<br[^>]*>', '\n', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'</p>', '\n\n', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'</div>', '\n', cleaned, flags=re.IGNORECASE)
+        
+        # Rimuove tutti i tag HTML
+        cleaned = re.sub(r'<[^>]+>', '', cleaned)
+    
+    # Rimuove caratteri di controllo e normalizza gli spazi
+    cleaned = re.sub(r'[\r\n\t]+', '\n', cleaned)
+    cleaned = re.sub(r' +', ' ', cleaned)
+    
+    # Rimuove righe vuote multiple consecutive
+    cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
+    
+    # Rimuove spazi all'inizio e fine delle righe
+    lines = [line.strip() for line in cleaned.split('\n')]
+    cleaned = '\n'.join(lines)
+    
+    return cleaned.strip()
+
 def _extract_message_body(payload: dict) -> str:
     """
-    Estrae il corpo del messaggio dal payload Gmail.
+    Estrae il corpo del messaggio dal payload Gmail con supporto per strutture annidate.
     """
     import base64
     
-    # Se il messaggio ha parts multiple (multipart)
-    if "parts" in payload:
-        for part in payload["parts"]:
-            # Cerca la parte text/plain
-            if part.get("mimeType") == "text/plain" and part.get("body", {}).get("data"):
-                try:
-                    body_data = part["body"]["data"]
-                    decoded = base64.urlsafe_b64decode(body_data + '==').decode('utf-8')
-                    return decoded
-                except Exception:
-                    continue
-            
-            # Se non trova text/plain, prova text/html
-            elif part.get("mimeType") == "text/html" and part.get("body", {}).get("data"):
-                try:
-                    body_data = part["body"]["data"]
-                    decoded = base64.urlsafe_b64decode(body_data + '==').decode('utf-8')
-                    return decoded
-                except Exception:
-                    continue
-    
-    # Se il messaggio è semplice (non multipart)
-    elif payload.get("body", {}).get("data"):
+    def _decode_body_data(body_data: str) -> str:
+        """Helper per decodificare i dati base64 del corpo del messaggio."""
         try:
-            body_data = payload["body"]["data"]
+            # Aggiungi padding se necessario e decodifica
             decoded = base64.urlsafe_b64decode(body_data + '==').decode('utf-8')
             return decoded
         except Exception:
-            pass
+            return ""
+    
+    def _extract_from_parts(parts: list, prefer_plain=True) -> str:
+        """
+        Estrae ricorsivamente il contenuto dalle parti del messaggio.
+        Args:
+            parts: Lista delle parti del messaggio
+            prefer_plain: Se True, preferisce text/plain a text/html
+        """
+        plain_text = ""
+        html_text = ""
+        
+        for part in parts:
+            mime_type = part.get("mimeType", "")
+            
+            # Se questa parte ha sottoparti, esplora ricorsivamente
+            if "parts" in part:
+                nested_result = _extract_from_parts(part["parts"], prefer_plain)
+                if nested_result:
+                    return nested_result
+            
+            # Se è text/plain e ha dati
+            elif mime_type == "text/plain" and part.get("body", {}).get("data"):
+                body_data = part["body"]["data"]
+                plain_text = _decode_body_data(body_data)
+                if plain_text and prefer_plain:
+                    return plain_text
+            
+            # Se è text/html e ha dati
+            elif mime_type == "text/html" and part.get("body", {}).get("data"):
+                body_data = part["body"]["data"]
+                html_text = _decode_body_data(body_data)
+                if html_text and not prefer_plain:
+                    return html_text
+        
+        # Ritorna il migliore contenuto trovato
+        return plain_text or html_text
+    
+    # Se il messaggio ha parti multiple (multipart)
+    if "parts" in payload:
+        result = _extract_from_parts(payload["parts"])
+        if result:
+            return result
+    
+    # Se il messaggio è semplice (non multipart)
+    elif payload.get("body", {}).get("data"):
+        body_data = payload["body"]["data"]
+        return _decode_body_data(body_data)
     
     return ""
 

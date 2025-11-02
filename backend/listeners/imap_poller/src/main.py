@@ -13,7 +13,7 @@ async def main():
     log_info("🔗 Listener IMAP connesso al broker")
 
     while True:
-        print("### IMAP 📧 Avvio polling IMAP per tutte le caselle...")
+        print("### IMAP 📧 Avvio polling IMAP per tutte le caselle (INBOX + Sent)...")
         await poll_all_accounts()
         print(f"### IMAP 💤 Attesa di {POLL_INTERVAL_MINUTES} minuti per il prossimo ciclo...")
         await asyncio.sleep(POLL_INTERVAL_MINUTES * 60)

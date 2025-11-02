@@ -1,6 +1,6 @@
 import httpx
 from src.utils.graph_client import renew_subscription
-from src.db_client import get_subscriptions_expiring_soon, update_subscription_expiration
+from src.db_client import get_subscriptions_expiring_soon, update_subscription_expiration, get_all_subscription_ids_for_email
 from src.utils.logger import Logger
 
 async def delete_orphan_subscription(access_token: str, subscription_id: str):
@@ -57,59 +57,100 @@ async def list_all_microsoft_subscriptions(access_token: str):
 async def cleanup_all_orphan_subscriptions():
     """
     Pulisce tutte le subscription orfane per tutti gli utenti.
+    Ora gestisce sia subscription inbound che outbound.
     """
-    Logger.log_info("### MICROSOFT SUBSCRIPTION 🧹 Inizio pulizia globale subscription orfane...")
+    Logger.log_info("### MICROSOFT SUBSCRIPTION 🧹 Inizio pulizia globale subscription orfane (INBOUND 📥 + OUTBOUND 📤)...")
     
-    # Ottieni tutte le subscription dal database
-    expiring = await get_subscriptions_expiring_soon(threshold_minutes=60*24*30)  # Prendi tutte quelle che scadono nei prossimi 30 giorni
+    # Ottieni tutte le subscription dal database (sia inbound che outbound)
+    # Usa log_expiring=False perché con threshold di 30 giorni non sono realmente "in scadenza"
+    expiring = await get_subscriptions_expiring_soon(threshold_minutes=60*24*30, log_expiring=False)
+    
+    # Raggruppa per utente (stesso access token)
+    users_processed = set()
     
     for sub in expiring:
         try:
-            Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🔍 Controllo subscription orfane per {sub.get('email', 'unknown')}")
+            email = sub.get('email', 'unknown')
+            access_token = sub["access_token"]
+            
+            # Evita di processare lo stesso utente più volte
+            if email in users_processed:
+                continue
+            users_processed.add(email)
+            
+            Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🔍 Controllo subscription orfane per {email} (INBOUND 📥 + OUTBOUND 📤)")
             
             # Lista tutte le subscription per questo token
-            all_subs = await list_all_microsoft_subscriptions(sub["access_token"])
+            all_subs = await list_all_microsoft_subscriptions(access_token)
+            
+            # Ottieni tutte le subscription di questo utente dal database
+            our_subscription_ids = []
+            inbound_count = 0
+            outbound_count = 0
+            
+            # Raccogli tutte le subscription inbound e outbound per questo utente
+            user_subs = [s for s in expiring if s.get('email') == email]
+            for user_sub in user_subs:
+                our_subscription_ids.append(user_sub['subscription_id'])
+                if user_sub.get('subscription_type') == 'inbound':
+                    inbound_count += 1
+                elif user_sub.get('subscription_type') == 'outbound':
+                    outbound_count += 1
+            
+            Logger.log_info(f"   🎯 Subscription registrate: {inbound_count} INBOUND 📥 + {outbound_count} OUTBOUND 📤")
             
             # Filtra le subscription che non sono nel nostro database
-            our_subscription_id = sub['subscription_id']
-            orphan_subscriptions = [s for s in all_subs if s.get('id') != our_subscription_id and s.get('resource', '').startswith('/users/')]
+            orphan_subscriptions = [s for s in all_subs if s.get('id') not in our_subscription_ids and s.get('resource', '').startswith('/users/')]
             
             if orphan_subscriptions:
-                Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🗑️ Trovate {len(orphan_subscriptions)} subscription orfane per {sub.get('email', 'unknown')}")
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🗑️ Trovate {len(orphan_subscriptions)} subscription orfane per {email}")
                 
                 # Elimina le subscription orfane
                 deleted_count = 0
                 for orphan in orphan_subscriptions:
                     orphan_id = orphan.get('id')
-                    success = await delete_orphan_subscription(sub["access_token"], orphan_id)
+                    success = await delete_orphan_subscription(access_token, orphan_id)
                     if success:
                         deleted_count += 1
                 
-                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Eliminate {deleted_count}/{len(orphan_subscriptions)} subscription orfane per {sub.get('email', 'unknown')}")
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Eliminate {deleted_count}/{len(orphan_subscriptions)} subscription orfane per {email}")
             else:
-                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Nessuna subscription orfana trovata per {sub.get('email', 'unknown')}")
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Nessuna subscription orfana trovata per {email}")
                 
         except Exception as e:
             Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nella pulizia subscription orfane per {sub.get('email', 'unknown')}: {str(e)}")
     
-    Logger.log_info("### MICROSOFT SUBSCRIPTION 🧹 Pulizia globale subscription orfane completata")
+    Logger.log_info("### MICROSOFT SUBSCRIPTION 🧹 Pulizia globale subscription orfane completata (INBOUND 📥 + OUTBOUND 📤)")
 
 async def refresh_expiring_subscriptions():
+    """
+    Rinnova le subscription Microsoft in scadenza, gestendo sia inbound che outbound.
+    """
     expiring = await get_subscriptions_expiring_soon(threshold_minutes=15)
 
     for sub in expiring:
         try:
-            Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🔄 Tentativo di rinnovo per subscription: {sub['subscription_id']} (email: {sub.get('email', 'unknown')})")
+            subscription_type = sub.get("subscription_type", "inbound")
+            subscription_id = sub["subscription_id"]
+            email = sub.get("email", "unknown")
             
-            # Prima di rinnovare, lista tutte le subscription per questo token
+            # Emoji diversi per subscription inbound e outbound
+            type_emoji = "📥" if subscription_type == "inbound" else "📤"
+            folder_type = "Inbox" if subscription_type == "inbound" else "SentItems"
+            
+            Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🔄 {type_emoji} Tentativo di rinnovo subscription {subscription_type.upper()} ({folder_type}): {subscription_id} (email: {email})")
+            
+            # Prima di rinnovare, lista tutte le subscription per questo token per trovare orfane
             all_subs = await list_all_microsoft_subscriptions(sub["access_token"])
             
-            # Filtra le subscription che non sono nel nostro database
-            our_subscription_id = sub['subscription_id']
-            orphan_subscriptions = [s for s in all_subs if s.get('id') != our_subscription_id and s.get('resource', '').startswith('/users/')]
+            # Filtra le subscription che non sono nel nostro database - ottieni TUTTE le subscription di questo utente
+            # Recupera tutti gli ID delle subscription di questo email dal database
+            all_user_subscription_ids = await get_all_subscription_ids_for_email(email)
+            our_subscription_ids = all_user_subscription_ids if all_user_subscription_ids else [subscription_id]
+            orphan_subscriptions = [s for s in all_subs if s.get('id') not in our_subscription_ids and s.get('resource', '').startswith('/users/')]
             
             if orphan_subscriptions:
-                Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🧹 Trovate {len(orphan_subscriptions)} subscription orfane per {sub.get('email', 'unknown')}")
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION 🧹 Trovate {len(orphan_subscriptions)} subscription orfane per {email}")
                 
                 # Elimina le subscription orfane
                 deleted_count = 0
@@ -119,23 +160,43 @@ async def refresh_expiring_subscriptions():
                     if success:
                         deleted_count += 1
                 
-                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Eliminate {deleted_count}/{len(orphan_subscriptions)} subscription orfane per {sub.get('email', 'unknown')}")
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Eliminate {deleted_count}/{len(orphan_subscriptions)} subscription orfane per {email}")
             else:
-                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Nessuna subscription orfana trovata per {sub.get('email', 'unknown')}")
+                Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Nessuna subscription orfana trovata per {email}")
             
-            # Ora rinnova la subscription corretta
-            renewed = await renew_subscription(sub["access_token"], sub["subscription_id"])
+            # Rinnova la subscription corrente
+            renewed = await renew_subscription(sub["access_token"], subscription_id)
             new_expiration = renewed["expirationDateTime"]
 
-            await update_subscription_expiration(sub["subscription_id"], new_expiration)
-            Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ Subscription rinnovata con successo: {sub['subscription_id']}")
+            # Aggiorna la scadenza nel database specificando il tipo di subscription
+            await update_subscription_expiration(subscription_id, new_expiration, subscription_type)
+            
+            # Log dettagliato del successo con emoji specifici
+            type_emoji = "📥" if subscription_type == "inbound" else "📤"
+            folder_type = "Inbox" if subscription_type == "inbound" else "SentItems"
+            Logger.log_info(f"### MICROSOFT SUBSCRIPTION ✅ {type_emoji} Subscription {subscription_type.upper()} ({folder_type}) rinnovata con successo!")
+            Logger.log_info(f"   📧 Email: {email}")
+            Logger.log_info(f"   🆔 Subscription ID: {subscription_id}")
+            Logger.log_info(f"   📅 Nuova scadenza: {new_expiration}")
 
         except Exception as e:
-            Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ Errore nel rinnovo della subscription {sub['subscription_id']} (email: {sub.get('email', 'unknown')}): {str(e)}")
+            subscription_type = sub.get("subscription_type", "unknown")
+            subscription_id = sub.get("subscription_id", "unknown")
+            email = sub.get("email", "unknown")
+            
+            # Emoji diversi per subscription inbound e outbound negli errori
+            type_emoji = "📥" if subscription_type == "inbound" else "📤" if subscription_type == "outbound" else "❓"
+            folder_type = "Inbox" if subscription_type == "inbound" else "SentItems" if subscription_type == "outbound" else "Unknown"
+            
+            Logger.log_error(f"### MICROSOFT SUBSCRIPTION ❌ {type_emoji} Errore nel rinnovo subscription {subscription_type.upper()} ({folder_type})")
+            Logger.log_error(f"   📧 Email: {email}")
+            Logger.log_error(f"   🆔 Subscription ID: {subscription_id}")
+            Logger.log_error(f"   🚨 Errore: {str(e)}")
+            
             # Log più dettagliato per capire il tipo di errore
             if "ValidationError" in str(e):
-                Logger.log_error(f"### MICROSOFT SUBSCRIPTION 🔍 Errore di validazione webhook - Microsoft non riesce a validare l'endpoint")
+                Logger.log_error(f"### MICROSOFT SUBSCRIPTION 🔍 {type_emoji} Errore di validazione webhook - Microsoft non riesce a validare l'endpoint per {folder_type}")
             elif "400" in str(e):
-                Logger.log_error(f"### MICROSOFT SUBSCRIPTION 🔍 Errore 400 - Bad Request dal Graph API")
+                Logger.log_error(f"### MICROSOFT SUBSCRIPTION 🔍 {type_emoji} Errore 400 - Bad Request dal Graph API per {folder_type}")
             elif "401" in str(e):
-                Logger.log_error(f"### MICROSOFT SUBSCRIPTION 🔍 Errore 401 - Token di accesso scaduto o non valido")
+                Logger.log_error(f"### MICROSOFT SUBSCRIPTION 🔍 {type_emoji} Errore 401 - Token di accesso scaduto o non valido per {folder_type}")

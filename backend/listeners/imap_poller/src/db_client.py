@@ -126,3 +126,111 @@ async def get_all_imap_accounts() -> List[Dict]:
     except Exception as e:
         log_error(f"❌ Errore nel recupero degli account IMAP: {str(e)}")
         return []
+
+def get_last_received_message_info(email: str) -> Dict:
+    """
+    Recupera info sull'ultimo messaggio ricevuto processato per un account IMAP.
+    
+    Args:
+        email: Email dell'account
+        
+    Returns:
+        Dict con 'message_id' e 'timestamp' dell'ultimo messaggio processato
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select(
+            "last_received_message_id, last_received_timestamp"
+        ).eq("email", email).eq("email_provider", "imap").single().execute()
+        
+        if response.data:
+            return {
+                "message_id": response.data.get("last_received_message_id"),
+                "timestamp": response.data.get("last_received_timestamp")
+            }
+        
+        return {"message_id": None, "timestamp": None}
+        
+    except Exception as e:
+        log_error(f"❌ Errore nel recupero ultimo messaggio ricevuto per {email}: {str(e)}")
+        return {"message_id": None, "timestamp": None}
+
+def update_last_received_message_info(email: str, message_id: str, timestamp: str):
+    """
+    Aggiorna le info dell'ultimo messaggio ricevuto processato per un account IMAP.
+    
+    Args:
+        email: Email dell'account
+        message_id: ID del messaggio più recente processato
+        timestamp: Timestamp ISO del messaggio più recente
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").update({
+            "last_received_message_id": message_id,
+            "last_received_timestamp": timestamp
+        }).eq("email", email).eq("email_provider", "imap").execute()
+        
+        if response.data:
+            log_info(f"✅ Aggiornato ultimo messaggio ricevuto per {email}: {message_id} (timestamp: {timestamp})")
+        else:
+            log_error(f"❌ Errore nell'aggiornamento ultimo messaggio ricevuto per {email}")
+            
+    except Exception as e:
+        log_error(f"❌ Errore nell'aggiornamento ultimo messaggio ricevuto per {email}: {str(e)}")
+
+def get_last_sent_message_info(email: str) -> Dict:
+    """
+    Recupera info sull'ultimo messaggio inviato processato per un account IMAP.
+    
+    Args:
+        email: Email dell'account
+        
+    Returns:
+        Dict con 'message_id' e 'timestamp' dell'ultimo messaggio processato
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select(
+            "last_sent_message_id, last_sent_timestamp"
+        ).eq("email", email).eq("email_provider", "imap").single().execute()
+        
+        if response.data:
+            return {
+                "message_id": response.data.get("last_sent_message_id"),
+                "timestamp": response.data.get("last_sent_timestamp")
+            }
+        
+        return {"message_id": None, "timestamp": None}
+        
+    except Exception as e:
+        log_error(f"❌ Errore nel recupero ultimo messaggio inviato per {email}: {str(e)}")
+        return {"message_id": None, "timestamp": None}
+
+def update_last_sent_message_info(email: str, message_id: str, timestamp: str):
+    """
+    Aggiorna le info dell'ultimo messaggio inviato processato per un account IMAP.
+    
+    Args:
+        email: Email dell'account
+        message_id: ID del messaggio più recente processato
+        timestamp: Timestamp ISO del messaggio più recente
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").update({
+            "last_sent_message_id": message_id,
+            "last_sent_timestamp": timestamp
+        }).eq("email", email).eq("email_provider", "imap").execute()
+        
+        if response.data:
+            log_info(f"✅ Aggiornato ultimo messaggio inviato per {email}: {message_id} (timestamp: {timestamp})")
+        else:
+            log_error(f"❌ Errore nell'aggiornamento ultimo messaggio inviato per {email}")
+            
+    except Exception as e:
+        log_error(f"❌ Errore nell'aggiornamento ultimo messaggio inviato per {email}: {str(e)}")

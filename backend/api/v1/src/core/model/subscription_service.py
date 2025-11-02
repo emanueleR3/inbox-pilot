@@ -24,8 +24,10 @@ class SubscriptionServiceCrate(BaseModel):
     confidence_classification_threshold: float
     urgent_meeting_threshold: float
     history_id: str
-    microsoft_subscription_id: str | None
-    microsoft_expiration_datetime: datetime | None
+    microsoft_subscription_id_inbound: str | None
+    microsoft_subscription_id_outbound: str | None
+    microsoft_expiration_datetime_inbound: datetime | None
+    microsoft_expiration_datetime_outbound: datetime | None
     oauth_user_id: str | None
 
 class SubscriptionServiceRead(BaseModel):
@@ -48,8 +50,10 @@ class SubscriptionServiceRead(BaseModel):
     confidence_classification_threshold: float
     urgent_meeting_threshold: float
     history_id: str
-    microsoft_subscription_id: str | None
-    microsoft_expiration_datetime: datetime | None
+    microsoft_subscription_id_inbound: str | None
+    microsoft_subscription_id_outbound: str | None
+    microsoft_expiration_datetime_inbound: datetime | None
+    microsoft_expiration_datetime_outbound: datetime | None
     oauth_user_id: str | None
 
 class SubscriptionServiceConfigCrate(BaseModel):

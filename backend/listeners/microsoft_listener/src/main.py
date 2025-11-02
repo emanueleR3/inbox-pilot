@@ -4,6 +4,7 @@ import asyncio
 from src.graph_fetcher import fetch_new_message
 from src.utils.broker_publisher import publish_to_broker
 from src.utils.logger import log_info, log_error
+from src.db_client import get_subscription_type
 
 app = FastAPI()
 
@@ -54,6 +55,8 @@ async def receive_microsoft_notification(request: Request):
         return {"status": "ok"}
 
     tasks = []
+    subscription_types = {}  # Cache per i tipi di subscription
+    
     for i, notif in enumerate(notifications):
         
         # Estrai subscriptionId e dati del messaggio
@@ -71,8 +74,19 @@ async def receive_microsoft_notification(request: Request):
                 actual_user_id = parts[1]
 
         if message_id and subscription_id and actual_user_id:
-            # Usa il subscription_id per recuperare le credenziali e actual_user_id per l'API Graph
-            tasks.append(asyncio.create_task(fetch_new_message(subscription_id, message_id, actual_user_id)))
+            # Determina il tipo di subscription (inbound o outbound)
+            try:
+                if subscription_id not in subscription_types:
+                    subscription_types[subscription_id] = await get_subscription_type(subscription_id)
+                
+                is_outbound = subscription_types[subscription_id] == "outbound"
+                
+                # Usa il subscription_id per recuperare le credenziali e actual_user_id per l'API Graph
+                tasks.append(asyncio.create_task(
+                    fetch_new_message(subscription_id, message_id, actual_user_id, is_outbound)
+                ))
+            except Exception as e:
+                log_error(f"❌ MICROSOFT - Errore nel determinare il tipo di subscription {subscription_id}: {str(e)}")
         else:
             log_error(f"❌ MICROSOFT - Notifica {i+1} incompleta: subscriptionId={subscription_id}, actualUserId={actual_user_id}, messageId={message_id}")
  
@@ -105,11 +119,39 @@ async def receive_microsoft_notification(request: Request):
         log_error(f"❌ MICROSOFT - {other_errors} altri errori su {len(messages)} tentativi")
     
     if valid_messages:
-        # Pubblica le mail sul broker RabbitMQ
-        await publish_to_broker(valid_messages)
-        log_info(f"✅ MICROSOFT - {len(valid_messages)} messaggi inviati con successo a RabbitMQ")
+        # Separa i messaggi inbound e outbound
+        inbound_messages = [msg for msg in valid_messages if not msg.get('is_sent', False)]
+        outbound_messages = [msg for msg in valid_messages if msg.get('is_sent', False)]
+        
+        # Pubblica solo i messaggi inbound sul broker RabbitMQ
+        if inbound_messages:
+            await publish_to_broker(inbound_messages)
+            log_info(f"✅ MICROSOFT - {len(inbound_messages)} messaggi INBOUND inviati al broker RabbitMQ")
+        
+        # Log dei messaggi outbound solo per monitoraggio admin (non vanno al broker)
+        if outbound_messages:
+            log_info(f"📤 MICROSOFT - {len(outbound_messages)} messaggi OUTBOUND rilevati (solo monitoraggio admin)")
+        
+        # Log dettagliato per ogni messaggio processato
+        for msg in valid_messages:
+            message_type = "OUTBOUND" if msg.get('is_sent', False) else "INBOUND"
+            action = "MONITORATO" if msg.get('is_sent', False) else "INVIATO AL BROKER"
+            
+            print("="*80)
+            print(f"🎯 MICROSOFT - Messaggio {message_type} processato e {action}:")
+            print(f"📧 Provider: {msg.get('provider')}")
+            print(f"📧 User: {msg.get('user_email')}")
+            print(f"📧 Da: {msg.get('from')}")
+            print(f"📧 A: {msg.get('to')}")
+            print(f"📧 Oggetto: {msg.get('subject')}")
+            print(f"📧 Labels: {msg.get('labels', [])}")
+            print(f"📧 Timestamp: {msg.get('timestamp')}")
+            print("="*80)
+        
+        total_processed = len(inbound_messages) + len(outbound_messages)
+        log_info(f"✅ MICROSOFT - Totale messaggi processati: {total_processed} ({len(inbound_messages)} inbound + {len(outbound_messages)} outbound)")
     else:
-        log_info("⚠️ MICROSOFT - Nessun messaggio valido da inviare a RabbitMQ")
+        log_info("⚠️ MICROSOFT - Nessun messaggio valido da processare")
 
     return {"status": "ok"}
 

@@ -1,6 +1,7 @@
 from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel
+from typing import Optional
 from src.core.logger import setup_logger
 from src.modules.auth.src.utils.google_oauth_client import create_google_flow
 from src.modules.auth.src.utils.microsoft_oauth_client import (
@@ -16,6 +17,8 @@ import os
 import requests
 import httpx
 import json
+import base64
+import time
 
 # Assicurati che la variabile sia impostata
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -27,7 +30,7 @@ subscription_service_dao = SubscriptionServiceDAO()
 class OAuthLoginRequest(BaseModel):
     subscription_id: str
     services: str  # "all" o "calendar"
-    email: str = None  # Email opzionale per services="calendar"
+    email: Optional[str] = None  # Email opzionale per services="calendar"
 
 
 async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, request: Request):
@@ -59,9 +62,6 @@ async def _google_login(subscription_id: str, services: str, email: str, request
     flow = create_google_flow(services)
     
     # Crea uno stato personalizzato che include subscription_id, services e email
-    import json
-    import base64
-    import time
     custom_state = {
         "subscription_id": subscription_id,
         "services": services,
@@ -91,9 +91,6 @@ async def _microsoft_login(subscription_id: str, services: str, email: str, requ
     Gestisce il login Microsoft con subscription_id, services e email.
     """
     # Crea uno stato personalizzato che include subscription_id, services e email (come Google)
-    import json
-    import base64
-    import time
     custom_state = {
         "subscription_id": subscription_id,
         "services": services,
@@ -130,8 +127,6 @@ async def google_callback(request: Request):
         
         if state:
             try:
-                import json
-                import base64
                 decoded_state = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
                 subscription_id = decoded_state.get("subscription_id")
                 services = decoded_state.get("services")
@@ -431,8 +426,6 @@ async def microsoft_callback(request: Request):
         
         if state:
             try:
-                import json
-                import base64
                 decoded_state = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
                 subscription_id = decoded_state.get("subscription_id")
                 services = decoded_state.get("services")
@@ -511,7 +504,17 @@ async def microsoft_callback(request: Request):
             try:
                 logger.info(f"Creating Microsoft Graph subscription for {email} (services: {services})")
                 subscription = await create_subscription_for_user(access_token, user_id)
-                logger.info(f"Microsoft subscription created for {email}: {subscription.get('id')}")
+                
+                # Log dettagliato delle subscription create
+                if isinstance(subscription, list):
+                    logger.info(f"Microsoft subscriptions created for {email}: {len(subscription)} subscription(s)")
+                    for sub in subscription:
+                        folder_type = sub.get("folder_type", "unknown")
+                        sub_id = sub.get("id", "unknown")
+                        logger.info(f"  - {folder_type.upper()} subscription: {sub_id}")
+                else:
+                    logger.info(f"Microsoft subscription created for {email}: {subscription}")
+                    
             except Exception as sub_error:
                 logger.error(f"Failed to create Microsoft subscription for {email}: {sub_error}")
                 logger.warning("Continuing authentication process despite subscription creation failure")
@@ -519,7 +522,7 @@ async def microsoft_callback(request: Request):
             logger.info(f"Skipping Microsoft Graph subscription creation for {email} (services: {services})")
 
         # Salva nel database usando il subscription_id dalla richiesta
-        # Ora utilizziamo i parametri aggiornati del DAO
+        # Ora utilizziamo i parametri aggiornati del DAO per gestire entrambe le subscription
         if services == "calendar":
             logger.info(f"Saving Microsoft credentials for calendar-only access (email: {email})")
             result = subscription_service_dao.save_microsoft_credentials(
@@ -528,19 +531,35 @@ async def microsoft_callback(request: Request):
                 access_token=access_token,
                 refresh_token=refresh_token,
                 expiry=expiry,
-                microsoft_subscription_id=subscription.get("id") if subscription else None,  # Sarà None per calendar-only
-                microsoft_expiration_datetime=subscription.get("expirationDateTime") if subscription else None  # Sarà None per calendar-only
+                microsoft_subscription_id_inbound=None,  # Nessuna subscription per calendar-only
+                microsoft_subscription_id_outbound=None,  # Nessuna subscription per calendar-only
+                microsoft_expiration_datetime_inbound=None,
+                microsoft_expiration_datetime_outbound=None
             )
         else:
             logger.info(f"Saving Microsoft credentials for full access (email: {email})")
+            # Per full access, subscription è una lista con inbound e outbound
+            inbound_sub = None
+            outbound_sub = None
+            
+            if isinstance(subscription, list):
+                for sub in subscription:
+                    folder_type = sub.get("folder_type")
+                    if folder_type == "inbox":
+                        inbound_sub = sub
+                    elif folder_type == "sent":
+                        outbound_sub = sub
+            
             result = subscription_service_dao.save_microsoft_credentials(
                 email=db_email, 
                 subscription_id=subscription_id,
                 access_token=access_token,
                 refresh_token=refresh_token,
                 expiry=expiry,
-                microsoft_subscription_id=subscription.get("id") if subscription else None,  # Conterrà il valore reale per full access
-                microsoft_expiration_datetime=subscription.get("expirationDateTime") if subscription else None  # Conterrà il valore reale per full access
+                microsoft_subscription_id_inbound=inbound_sub.get("id") if inbound_sub else None,
+                microsoft_subscription_id_outbound=outbound_sub.get("id") if outbound_sub else None,
+                microsoft_expiration_datetime_inbound=inbound_sub.get("expirationDateTime") if inbound_sub else None,
+                microsoft_expiration_datetime_outbound=outbound_sub.get("expirationDateTime") if outbound_sub else None
             )
 
         if result is False:
