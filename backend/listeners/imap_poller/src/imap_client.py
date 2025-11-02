@@ -415,6 +415,234 @@ class ImapClient:
 
         return emails
 
+    def fetch_received_messages_since(self, since_timestamp: str = None, is_first_polling: bool = False, last_received_message_id: str = None) -> List[Dict]:
+        """
+        Recupera i messaggi ricevuti dalla cartella INBOX più recenti di un timestamp specifico.
+        
+        Args:
+            since_timestamp: ISO timestamp dell'ultimo messaggio processato (None per primo polling)
+            is_first_polling: True se è il primo polling per questo account
+            last_received_message_id: ID dell'ultimo messaggio già processato da escludere
+            
+        Returns:
+            List[Dict]: Lista di messaggi ricevuti più recenti
+        """
+        # Seleziona la cartella INBOX
+        if not self.select_folder("INBOX"):
+            return []
+        
+        try:
+            # Determina il criterio di ricerca basato sul timestamp
+            if since_timestamp:
+                # Usa il timestamp fornito per il polling incrementale
+                try:
+                    since_date = datetime.fromisoformat(since_timestamp.replace('Z', '+00:00'))
+                    imap_date = since_date.strftime("%d-%b-%Y")
+                    search_criteria = f'SINCE "{imap_date}"'
+                except:
+                    # Se il parsing fallisce, usa gli ultimi 2 giorni
+                    yesterday = (datetime.now() - timedelta(days=2)).strftime("%d-%b-%Y")
+                    search_criteria = f'SINCE "{yesterday}"'
+            else:
+                # Default: prendi i messaggi degli ultimi 2 giorni
+                yesterday = (datetime.now() - timedelta(days=2)).strftime("%d-%b-%Y")
+                search_criteria = f'SINCE "{yesterday}"'
+            
+            status, messages = self.conn.search(None, search_criteria)
+            if status != "OK":
+                log_error(f"Errore nella ricerca messaggi ricevuti per {self.username}")
+                return []
+
+            mail_ids = messages[0].split()
+            emails = []
+            now = datetime.now()
+            two_minutes_ago = now - timedelta(minutes=2)
+            
+            for mail_id in mail_ids:
+                _, msg_data = self.conn.fetch(mail_id, "(RFC822)")
+                raw_email = msg_data[0][1]
+                msg = email.message_from_bytes(raw_email)
+
+                # Estrae tutti i dati dell'email
+                subject = self._decode_header(msg.get("Subject", ""))
+                from_address = self._decode_header(msg.get("From", ""))
+                to_address = self._decode_header(msg.get("To", ""))
+                cc_address = self._decode_header(msg.get("Cc", ""))
+                bcc_address = self._decode_header(msg.get("Bcc", ""))
+                date_str = msg.get("Date", "")
+                
+                # Converte la data in formato timestamp PRESERVANDO il timezone originale
+                timestamp = ""
+                parsed_date = None
+                if date_str:
+                    try:
+                        parsed_date = parsedate_to_datetime(date_str)
+                        # PRESERVA il timezone originale della mail, non convertire in locale
+                        timestamp = parsed_date.isoformat()
+                    except:
+                        timestamp = date_str
+
+                # Logica specifica per primo polling
+                if is_first_polling:
+                    # Per il primo polling: prendi solo messaggi degli ultimi 2 minuti
+                    if parsed_date:
+                        # Converte entrambe le date a UTC per confronto equo
+                        try:
+                            if parsed_date.tzinfo:
+                                # La mail ha timezone - converte a UTC
+                                msg_date_utc = parsed_date.astimezone(timezone.utc)
+                            else:
+                                # La mail non ha timezone - assume sia già UTC
+                                msg_date_utc = parsed_date.replace(tzinfo=timezone.utc)
+                            
+                            # Converte two_minutes_ago a UTC
+                            now_utc = datetime.now(timezone.utc)
+                            two_minutes_ago_utc = now_utc - timedelta(minutes=2)
+                            
+                            if msg_date_utc < two_minutes_ago_utc:
+                                continue
+                        except:
+                            # Fallback: usa confronto naive come prima
+                            msg_date_naive = parsed_date.replace(tzinfo=None) if parsed_date.tzinfo else parsed_date
+                            if msg_date_naive < two_minutes_ago:
+                                continue
+                elif since_timestamp and parsed_date:
+                    # Per polling incrementali: salta i messaggi più vecchi dell'ultimo processato
+                    try:
+                        since_dt = datetime.fromisoformat(since_timestamp.replace('Z', '+00:00'))
+                        
+                        # Confronta preservando i timezone
+                        if since_dt.tzinfo and parsed_date.tzinfo:
+                            # Entrambi hanno timezone - confronto diretto
+                            if parsed_date <= since_dt:
+                                continue
+                        elif since_dt.tzinfo:
+                            # Solo since_dt ha timezone - converte a UTC per confronto
+                            since_dt_utc = since_dt.astimezone(datetime.now().astimezone().tzinfo)
+                            parsed_date_local = parsed_date.replace(tzinfo=datetime.now().astimezone().tzinfo)
+                            if parsed_date_local <= since_dt_utc:
+                                continue
+                        elif parsed_date.tzinfo:
+                            # Solo parsed_date ha timezone - converte since_dt al timezone di parsed_date
+                            since_dt_tz = since_dt.replace(tzinfo=parsed_date.tzinfo)
+                            if parsed_date <= since_dt_tz:
+                                continue
+                        else:
+                            # Nessuno ha timezone - confronto naive
+                            if parsed_date <= since_dt:
+                                continue
+                    except Exception as e:
+                        # In caso di errore nel confronto timezone, usa confronto naive come fallback
+                        try:
+                            since_dt_naive = datetime.fromisoformat(since_timestamp.replace('Z', '+00:00')).replace(tzinfo=None)
+                            parsed_date_naive = parsed_date.replace(tzinfo=None) if parsed_date.tzinfo else parsed_date
+                            if parsed_date_naive <= since_dt_naive:
+                                continue
+                        except:
+                            pass  # In caso di errore totale, processa il messaggio
+                
+                # Estrae Message-ID prima del controllo duplicati
+                message_id = self._extract_message_id(msg)
+                
+                # Se abbiamo un last_received_message_id, esclude quello specifico messaggio
+                if last_received_message_id and message_id == last_received_message_id:
+                    continue
+
+                # Estrae il corpo del messaggio e lo pulisce
+                body_text, body_html = self._extract_email_body(msg)
+                
+                # Pulisce il corpo del messaggio
+                if body_text:
+                    body_text = clean_email_body(body_text)
+                elif body_html:
+                    body_text = extract_plain_text_from_html(body_html)
+                    body_html = clean_email_body(body_html)
+                
+                # Estrae Thread-ID
+                thread_id = self._extract_thread_id(msg)
+
+                email_data = {
+                    "id": mail_id.decode(),
+                    "message_id": message_id,
+                    "thread_id": thread_id,
+                    "from": from_address,
+                    "to": to_address,
+                    "cc": cc_address,
+                    "bcc": bcc_address,
+                    "subject": subject,
+                    "date": date_str,
+                    "timestamp": timestamp,
+                    "body_text": body_text,
+                    "body_html": body_html,
+                    "raw": raw_email,
+                    "folder": "INBOX",  # Indica che è dalla cartella INBOX
+                    "is_inbound": True,    # Flag per indicare che è un messaggio ricevuto
+                    # Metadati aggiuntivi
+                    "content_type": msg.get_content_type(),
+                    "charset": msg.get_content_charset() or "utf-8",
+                    "size": len(raw_email) if raw_email else 0
+                }
+
+                emails.append(email_data)
+
+            return emails
+            
+        except Exception as e:
+            log_error(f"Errore nel recupero messaggi ricevuti per {self.username}: {str(e)}")
+            return []
+
+    def get_most_recent_received_message(self) -> Dict:
+        """
+        Recupera il messaggio ricevuto più recente dalla cartella INBOX.
+        Utilizzato per inizializzare il tracking quando non ci sono messaggi recenti.
+        
+        Returns:
+            Dict: Dati del messaggio più recente o dict vuoto se non trovato
+        """
+        # Seleziona la cartella INBOX
+        if not self.select_folder("INBOX"):
+            return {}
+        
+        try:
+            # Cerca tutti i messaggi dell'ultima settimana
+            one_week_ago = (datetime.now() - timedelta(days=7)).strftime("%d-%b-%Y")
+            status, messages = self.conn.search(None, f'SINCE "{one_week_ago}"')
+            
+            if status != "OK" or not messages[0]:
+                return {}
+
+            mail_ids = messages[0].split()
+            if not mail_ids:
+                return {}
+            
+            # Prendi l'ultimo messaggio (più recente)
+            latest_mail_id = mail_ids[-1]
+            _, msg_data = self.conn.fetch(latest_mail_id, "(RFC822)")
+            raw_email = msg_data[0][1]
+            msg = email.message_from_bytes(raw_email)
+
+            # Estrae solo i dati essenziali
+            date_str = msg.get("Date", "")
+            message_id = self._extract_message_id(msg)
+            
+            timestamp = ""
+            if date_str:
+                try:
+                    parsed_date = parsedate_to_datetime(date_str)
+                    timestamp = parsed_date.isoformat()
+                except:
+                    timestamp = date_str
+
+            return {
+                "message_id": message_id,
+                "timestamp": timestamp,
+                "date": date_str
+            }
+            
+        except Exception as e:
+            log_error(f"Errore nel recupero messaggio più recente per {self.username}: {str(e)}")
+            return {}
+
     def fetch_sent_messages(self) -> List[Dict]:
         """
         Recupera i messaggi inviati dalla cartella Sent.
