@@ -238,19 +238,20 @@ class ImapClient:
                 log_info(f"📁 Raw folder response: {folder_str}")
                 
                 # Parse della risposta IMAP LIST: (flags) "delimiter" "folder_name"
-                # Esempi:
-                # (\HasNoChildren) "." "INBOX.Sent"
-                # (\HasNoChildren) "/" "Sent"
-                parts = folder_str.split('"')
-                if len(parts) >= 3:
-                    # L'ultimo elemento quoted è il nome della cartella
-                    folder_name = parts[-2] if len(parts) >= 3 else parts[-1]
-                else:
-                    # Fallback: prendi l'ultima parte separata da spazio
-                    folder_name = folder_str.split()[-1].strip('"')
+                # Esempio: (\HasNoChildren \UnMarked \Sent) "." INBOX.Sent
+                # Il nome della cartella è l'ultima parte dopo il delimiter
                 
-                if folder_name and folder_name not in ['.', '..']:
-                    folder_names.append(folder_name)
+                # Cerca l'ultimo spazio seguito da qualcosa che non inizia con "
+                # Questo cattura il nome della cartella non quotata
+                parts = folder_str.split()
+                if len(parts) >= 3:
+                    # L'ultimo elemento è il nome della cartella
+                    folder_name = parts[-1].strip('"')
+                    
+                    # Se il nome della cartella è valido, aggiungilo
+                    if folder_name and folder_name not in ['.', '..']:
+                        folder_names.append(folder_name)
+                        log_info(f"📁 Cartella estratta: '{folder_name}'")
             
             log_info(f"📁 Cartelle parsate per {self.username}: {folder_names}")
             return folder_names
@@ -325,12 +326,15 @@ class ImapClient:
         # Se non trova corrispondenza esatta, cerca substring (case insensitive)
         for folder in available_folders:
             folder_lower = folder.lower()
-            for sent_pattern in ["sent", "inviata", "inviati", "elementi"]:
+            # Pattern specifici per trovare cartelle Sent
+            sent_patterns = ["sent", "inviata", "inviati", "elementi", "gesendet", "enviados", "envoyés"]
+            for sent_pattern in sent_patterns:
                 if sent_pattern in folder_lower:
                     log_info(f"📤 Cartella Sent trovata (pattern matching): '{folder}' per {self.username}")
                     return folder
         
         log_error(f"❌ Nessuna cartella Sent trovata per {self.username}. Cartelle disponibili: {available_folders}")
+        log_info(f"📋 Suggerimento: Verifica manualmente se esiste una cartella per email inviate tra: {available_folders}")
         return ""
 
     def fetch_unseen_messages(self, folder_name: str = "INBOX") -> List[Dict]:
