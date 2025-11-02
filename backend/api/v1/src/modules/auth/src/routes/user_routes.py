@@ -192,6 +192,93 @@ def add_new_user(
     result = controller.add_new_user(payload)
     return {"message": "Registrazione completata", "result": result}
 
+@router.post(
+    "/create-new-subs",
+    status_code=status.HTTP_201_CREATED,
+    summary="Crea una nuova subscriptione",
+    description="""
+    Crea un nuovo utente con la sua sottoscrizione associata.
+    """,
+    responses={
+        201: {
+            "description": "Account creato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Registrazione completata",
+                        "result": {
+                            "user": {
+                                "session of the user"
+                            },
+                            "subscription": {
+                                "subscription_id": "sub_xyz789",
+                                "name": "TechVision Srl",
+                                "plan": "premium",
+                                "active": True
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "value": {"detail": "Email e password sono richiesti"}
+                        },
+                        "missing_subscription": {
+                            "value": {"detail": "I dati della sottoscrizione sono richiesti"}
+                        },
+                        "weak_password": {
+                            "value": {"detail": "Password troppo debole. Usa almeno 6 caratteri"}
+                        }
+                    }
+                }
+            }
+        },
+        409: {
+            "description": "Conflitto",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Un utente con questa email esiste già"}
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante la creazione dell'account"}
+                }
+            }
+        }
+    }
+)
+def create_new_sub(
+    payload: dict = Body(
+        ...,
+        example={
+            "email": "user@example.com", 
+            "password": "strongpassword123",
+            "subscription": {
+                "name": "TechVision Srl",
+                "vat_number": "IT12345678901",
+                "city": "Milano",
+                "address": "Via Roma 42",
+                "active": True,
+                "current_period_end": "2025-12-31T23:59:59Z",
+                "plan": "premium",
+            }
+        },
+        description="Email e password per la registrazione del nuovo utente.",
+    )
+):
+    result = controller.create_new_sub(payload)
+    return {"message": "Registrazione completata", "result": result}
+
 @router.get(
     "/get-users-subscription/{subscription_id}",
     status_code=200,
