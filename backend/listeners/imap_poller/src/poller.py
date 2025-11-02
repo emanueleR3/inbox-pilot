@@ -54,12 +54,15 @@ async def poll_account_inbound(account):
                 if not is_first_polling:
                     log_info("   💌 Messaggio inbound IMAP - inviato al broker")
                     
+                    # Importa le funzioni per controllare no-reply e sent
+                    from src.utils.mail_parser import is_no_reply_email, is_sent_message
+                    
                     message_payload = {
                         "provider": "imap",
                         "user_email": email,
                         "mail_id": message["id"],
                         "message_id": message["message_id"],
-                        "thread_id": message["thread_id"],
+                        "reply_to_id": message["reply_to_id"],
                         "from": message["from"],
                         "to": message["to"],
                         "cc": message["cc"],
@@ -74,7 +77,9 @@ async def poll_account_inbound(account):
                         "size": message["size"],
                         "raw": message["raw"].decode(errors="ignore"),
                         "subscription_id": account.get("subscription_id"),
-                        "folder_type": "inbox"
+                        "folder_type": "inbox",
+                        "no_reply": is_no_reply_email(message.get("from", "")),
+                        "is_sent": is_sent_message(message.get("from", ""), email, "inbox"),
                     }
 
                     await publisher.publish_message(message_payload)
@@ -127,12 +132,15 @@ async def poll_account(account):
         for mail in new_mails:
             log_info(f"📩 Nuova mail INBOUND da {mail['from']} per {account['email']} | {mail['subject']}")        
             
+            # Importa le funzioni per controllare no-reply e sent
+            from src.utils.mail_parser import is_no_reply_email, is_sent_message
+            
             message_payload = {
                 "provider": "imap",
                 "user_email": account["email"],  # Cambiato da "account" a "user_email" per consistenza con il broker
                 "mail_id": mail["id"],
                 "message_id": mail["message_id"],
-                "thread_id": mail["thread_id"],
+                "reply_to_id": mail["reply_to_id"],
                 "from": mail["from"],
                 "to": mail["to"],
                 "cc": mail["cc"],
@@ -147,7 +155,9 @@ async def poll_account(account):
                 "size": mail["size"],
                 "raw": mail["raw"].decode(errors="ignore"),
                 "subscription_id": account.get("subscription_id"),  # Aggiunge riferimento alla subscription
-                "folder_type": "inbox"  # Indica che è un messaggio in arrivo
+                "folder_type": "inbox",  # Indica che è un messaggio in arrivo
+                "no_reply": is_no_reply_email(mail.get("from", "")),
+                "is_sent": is_sent_message(mail.get("from", ""), account["email"], "inbox"),
             }
 
             await publisher.publish_message(message_payload)
@@ -163,7 +173,7 @@ async def poll_account(account):
             log_info(f"   📝 Oggetto: {mail['subject']}")
             log_info(f"   📄 Corpo (primi 200 char): {mail['body_text'][:200]}...")
             log_info(f"   🆔 Message ID: {mail['message_id']}")
-            log_info(f"   🔗 Thread ID: {mail['thread_id']}")
+            log_info(f"   🔗 Thread ID: {mail['reply_to_id']}")
             log_info(f"   📊 Dimensione: {mail['size']} bytes")
             log_info("   💡 Messaggio outbound IMAP non inviato al broker (solo monitoraggio)")
             
@@ -223,7 +233,7 @@ async def poll_account_outbound(account):
                 log_info(f"   📧 Oggetto: {message.get('subject')}")
                 log_info(f"   📧 Data: {message.get('date')}")
                 log_info(f"   📧 Message-ID: {message.get('message_id')}")
-                log_info(f"   📧 Thread-ID: {message.get('thread_id')}")
+                log_info(f"   📧 Thread-ID: {message.get('reply_to_id')}")
                 log_info(f"   📧 Cartella: {message.get('folder')}")
                 log_info(f"   📊 Dimensione: {message.get('size')} bytes")
                 

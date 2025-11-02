@@ -126,18 +126,26 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         message_id = _clean_message_id(message_id)
     
     # Cerca in-reply-to in modo case-insensitive e rimuovi < >
-    thread_id = headers_lower.get("in-reply-to")
-    if thread_id:
-        thread_id = _clean_message_id(thread_id)
+    reply_to_id = headers_lower.get("in-reply-to")
+    if reply_to_id:
+        reply_to_id = _clean_message_id(reply_to_id)
     else:
-        thread_id = "no"
+        reply_to_id = "no"
+    
+    # Determina se è un'email no-reply
+    is_no_reply = _is_no_reply_email(headers_lower.get("from", ""))
+    
+    # Determina se è un messaggio inviato dall'account stesso
+    sender_email = _extract_email_from_header(headers_lower.get("from", ""))
+    labels = message.get("labelIds", [])
+    is_sent = (sender_email and sender_email.lower() == user_email.lower()) or 'SENT' in labels
     
     payload = {
         "provider": "gmail",
         "user_email": user_email,
         "history_id": history_id,
         "message_id": message_id,  # Usa header Message-Id IMAP standard (case-insensitive, senza < >)
-        "thread_id": thread_id,   # Usa header In-Reply-To IMAP o "no" se è None (case-insensitive, senza < >)
+        "reply_to_id": reply_to_id,   # Usa header In-Reply-To IMAP o "no" se è None (case-insensitive, senza < >)
         "subject": headers_lower.get("subject"),
         "from": headers_lower.get("from"),
         "to": headers_lower.get("to"),
@@ -149,6 +157,8 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "timestamp": message.get("internalDate"),
         "labels": message.get("labelIds", []),
         "attachments": [],
+        "no_reply": is_no_reply,
+        "is_sent": is_sent,
     }
     return payload
 
@@ -185,6 +195,31 @@ def _extract_email_from_header(from_header: str) -> str:
         return email_match.group(1) or email_match.group(2)
     
     return ""
+
+def _is_no_reply_email(from_header: str) -> bool:
+    """
+    Determina se un'email proviene da un indirizzo no-reply.
+    Esempi:
+    - "no-reply@example.com" -> True
+    - "noreply@example.com" -> True
+    - "do-not-reply@example.com" -> True
+    - "support@example.com" -> False
+    """
+    if not from_header:
+        return False
+    
+    email = _extract_email_from_header(from_header)
+    if not email:
+        return False
+    
+    email_lower = email.lower()
+    no_reply_patterns = [
+        'no-reply', 'noreply', 'do-not-reply', 'donotreply',
+        'no_reply', 'donot-reply', 'auto-reply', 'autoreply',
+        'mailer-daemon', 'postmaster', 'bounce'
+    ]
+    
+    return any(pattern in email_lower for pattern in no_reply_patterns)
 
 def _clean_gmail_body(body_text: str) -> str:
     """

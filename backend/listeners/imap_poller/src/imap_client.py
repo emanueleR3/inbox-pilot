@@ -182,11 +182,11 @@ class ImapClient:
         # Usa sempre In-Reply-To come standard IMAP per il threading
         in_reply_to = msg.get("In-Reply-To", "")
         if in_reply_to:
-            thread_id = self._clean_message_id(in_reply_to)
+            reply_to_id = self._clean_message_id(in_reply_to)
         else:
-            thread_id = "no"
+            reply_to_id = "no"
         
-        return thread_id
+        return reply_to_id
 
     def _is_email_recent(self, date_str: str) -> bool:
         """
@@ -389,12 +389,12 @@ class ImapClient:
             
             # Estrae Message-ID e Thread-ID
             message_id = self._extract_message_id(msg)
-            thread_id = self._extract_thread_id(msg)
+            reply_to_id = self._extract_thread_id(msg)
 
             email_data = {
                 "id": mail_id.decode(),
                 "message_id": message_id,
-                "thread_id": thread_id,
+                "reply_to_id": reply_to_id,
                 "from": from_address,
                 "to": to_address,
                 "cc": cc_address,
@@ -559,12 +559,12 @@ class ImapClient:
                     body_html = clean_email_body(body_html)
                 
                 # Estrae Thread-ID
-                thread_id = self._extract_thread_id(msg)
+                reply_to_id = self._extract_thread_id(msg)
 
                 email_data = {
                     "id": mail_id.decode(),
                     "message_id": message_id,
-                    "thread_id": thread_id,
+                    "reply_to_id": reply_to_id,
                     "from": from_address,
                     "to": to_address,
                     "cc": cc_address,
@@ -813,12 +813,12 @@ class ImapClient:
                     body_html = clean_email_body(body_html)
                 
                 # Estrae Thread-ID
-                thread_id = self._extract_thread_id(msg)
+                reply_to_id = self._extract_thread_id(msg)
 
                 email_data = {
                     "id": mail_id.decode(),
                     "message_id": message_id,
-                    "thread_id": thread_id,
+                    "reply_to_id": reply_to_id,
                     "from": from_address,
                     "to": to_address,
                     "cc": cc_address,
