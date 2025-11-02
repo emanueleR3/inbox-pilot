@@ -76,4 +76,6 @@ async def custom_login_route(
         description="Credenziali e configurazione del server di posta personalizzato"
     )
 ):
-    return await CustomProviderController.custom_provider_login(payload)
+    res = CustomProviderController.custom_provider_login(payload)
+
+    return {"status": "success", "message": "Credenziali custom provider salvate con successo", "data": res}

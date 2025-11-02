@@ -48,9 +48,11 @@ class CustomProviderController:
             )
 
         try:
-            SubscriptionServiceDAO().save_custom_provider_credentials(
+            res = SubscriptionServiceDAO().save_custom_provider_credentials(
                 server_imap, server_smtp, imap_port, smtp_port, email, password, subscription_id
             )
+
+            return res
             
         except HTTPException:
             raise

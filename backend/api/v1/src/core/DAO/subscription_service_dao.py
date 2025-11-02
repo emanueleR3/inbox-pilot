@@ -67,7 +67,7 @@ class SubscriptionServiceDAO:
 
         return cipher.decrypt(encrypted_token.encode()).decode()
     
-    def save_custom_provider_credentials(self, server_imap: str, server_smtp: str, imap_port: int, smtp_port: int, email: str, password: str, subscription_id: str) -> bool:
+    def save_custom_provider_credentials(self, server_imap: str, server_smtp: str, imap_port: int, smtp_port: int, email: str, password: str, subscription_id: str) -> SubscriptionServiceRead:
         try:
             encrypted_password = self._encrypt(password, "pass")
             
@@ -106,7 +106,13 @@ class SubscriptionServiceDAO:
                     logging.info(f"Errore nella creazione del nuovo record per email: {email}")
                     return False
                 
-                return True
+                return SubscriptionServiceRead(
+                    email=response.email,
+                    subscription_id=response.subscription_id,
+                    email_provider= response.email_provider,
+                    imap_server=response.imap_server,
+                    smtp_server=response.smtp_server
+                )
         except Exception as e:
             raise e
 
