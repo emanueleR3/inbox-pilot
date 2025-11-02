@@ -110,7 +110,7 @@ async def poll_account_outbound(account):
         client.connect()
         
         # Recupera messaggi inviati
-        sent_messages = client.fetch_sent_messages_since(last_timestamp, is_first_polling)
+        sent_messages = client.fetch_sent_messages_since(last_timestamp, is_first_polling, last_message_id)
         
         if sent_messages:
             log_info(f"📤 Trovati {len(sent_messages)} nuovi messaggi inviati per {email}")

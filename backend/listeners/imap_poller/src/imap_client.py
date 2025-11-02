@@ -436,7 +436,7 @@ class ImapClient:
         
         return self.fetch_unseen_messages(sent_folder)
 
-    def fetch_sent_messages_since(self, since_timestamp: str = None, is_first_polling: bool = False) -> List[Dict]:
+    def fetch_sent_messages_since(self, since_timestamp: str = None, is_first_polling: bool = False, last_sent_message_id: str = None) -> List[Dict]:
         """
         Recupera i messaggi inviati dalla cartella Sent più recenti di un timestamp specifico.
         
@@ -539,6 +539,14 @@ class ImapClient:
                             continue  # Salta questo messaggio
                     except:
                         pass  # In caso di errore, processa il messaggio
+                
+                # Estrae Message-ID prima del controllo duplicati
+                message_id = self._extract_message_id(msg)
+                
+                # Se abbiamo un last_sent_message_id, esclude quello specifico messaggio
+                if last_sent_message_id and message_id == last_sent_message_id:
+                    log_info(f"📤 Messaggio già processato saltato: {message_id} per {self.username}")
+                    continue
 
                 # Estrae il corpo del messaggio e lo pulisce
                 body_text, body_html = self._extract_email_body(msg)
@@ -550,8 +558,7 @@ class ImapClient:
                     body_text = extract_plain_text_from_html(body_html)
                     body_html = clean_email_body(body_html)
                 
-                # Estrae Message-ID e Thread-ID
-                message_id = self._extract_message_id(msg)
+                # Estrae Thread-ID
                 thread_id = self._extract_thread_id(msg)
 
                 email_data = {
