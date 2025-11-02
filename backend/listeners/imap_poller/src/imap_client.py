@@ -5,7 +5,7 @@ from email.header import decode_header
 from email.utils import parsedate_to_datetime
 from typing import List, Dict
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from src.utils.logger import log_info, log_error
 from src.utils.mail_parser import clean_email_body, extract_plain_text_from_html
 
@@ -512,10 +512,26 @@ class ImapClient:
                 if is_first_polling:
                     # Per il primo polling: prendi solo messaggi degli ultimi 2 minuti
                     if parsed_date:
-                        # Converte in timezone naive per confronto
-                        msg_date_naive = parsed_date.replace(tzinfo=None) if parsed_date.tzinfo else parsed_date
-                        if msg_date_naive < two_minutes_ago:
-                            continue
+                        # Converte entrambe le date a UTC per confronto equo
+                        try:
+                            if parsed_date.tzinfo:
+                                # La mail ha timezone - converte a UTC
+                                msg_date_utc = parsed_date.astimezone(timezone.utc)
+                            else:
+                                # La mail non ha timezone - assume sia già UTC
+                                msg_date_utc = parsed_date.replace(tzinfo=timezone.utc)
+                            
+                            # Converte two_minutes_ago a UTC
+                            now_utc = datetime.now(timezone.utc)
+                            two_minutes_ago_utc = now_utc - timedelta(minutes=2)
+                            
+                            if msg_date_utc < two_minutes_ago_utc:
+                                continue
+                        except:
+                            # Fallback: usa confronto naive come prima
+                            msg_date_naive = parsed_date.replace(tzinfo=None) if parsed_date.tzinfo else parsed_date
+                            if msg_date_naive < two_minutes_ago:
+                                continue
                 elif since_timestamp and parsed_date:
                     # Per polling incrementali: salta i messaggi più vecchi dell'ultimo processato
                     try:
