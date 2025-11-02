@@ -92,11 +92,6 @@ async def poll_account_outbound(account):
         
         is_first_polling = last_timestamp is None and last_message_id is None
         
-        if is_first_polling:
-            log_info(f"📤 PRIMO POLLING per {email} - cerco messaggi degli ultimi 2 minuti")
-        else:
-            log_info(f"📤 Polling incrementale per {email} (ultimo: {last_timestamp})")
-        
         # Crea client IMAP
         client = ImapClient(
             host=account["imap_host"],
@@ -113,8 +108,6 @@ async def poll_account_outbound(account):
         sent_messages = client.fetch_sent_messages_since(last_timestamp, is_first_polling, last_message_id)
         
         if sent_messages:
-            log_info(f"📤 Trovati {len(sent_messages)} nuovi messaggi inviati per {email}")
-            
             # Ordina per timestamp per processare dal più vecchio al più recente
             sent_messages.sort(key=lambda x: x.get("timestamp", ""))
             
@@ -153,24 +146,18 @@ async def poll_account_outbound(account):
                     latest_message.get("message_id", ""),
                     latest_message.get("timestamp", "")
                 )
-                log_info(f"✅ Aggiornato tracking per {email}: ultimo messaggio {latest_message.get('message_id')}")
                 
         elif is_first_polling:
             # Primo polling senza messaggi negli ultimi 2 minuti
             # Imposta il messaggio più recente come baseline
-            log_info(f"📤 Primo polling per {email}: nessun messaggio negli ultimi 2 minuti")
-            log_info(f"📤 Cerco il messaggio più recente per impostare baseline...")
+            recent_message = client.get_most_recent_sent_message()
             
-            most_recent = client.get_most_recent_sent_message()
-            if most_recent:
+            if recent_message:
                 update_last_sent_message_info(
                     email,
-                    most_recent.get("message_id", ""),
-                    most_recent.get("timestamp", "")
+                    recent_message.get("message_id", ""),
+                    recent_message.get("timestamp", "")
                 )
-                log_info(f"✅ Baseline impostata per {email}: {most_recent.get('message_id')} ({most_recent.get('date')})")
-            else:
-                log_info(f"📤 Nessun messaggio recente trovato per {email} - baseline rimarrà null")
         else:
             log_info(f"📤 Nessun nuovo messaggio inviato per {email}")
         

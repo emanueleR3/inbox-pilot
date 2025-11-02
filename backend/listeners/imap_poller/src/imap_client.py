@@ -251,9 +251,7 @@ class ImapClient:
                     # Se il nome della cartella è valido, aggiungilo
                     if folder_name and folder_name not in ['.', '..']:
                         folder_names.append(folder_name)
-                        log_info(f"📁 Cartella estratta: '{folder_name}'")
             
-            log_info(f"📁 Cartelle parsate per {self.username}: {folder_names}")
             return folder_names
             
         except Exception as e:
@@ -273,7 +271,6 @@ class ImapClient:
         try:
             status, count = self.conn.select(folder_name)
             if status == "OK":
-                log_info(f"Cartella '{folder_name}' selezionata per {self.username}")
                 return True
             else:
                 log_error(f"Errore nella selezione cartella '{folder_name}' per {self.username}: {status}")
@@ -320,7 +317,6 @@ class ImapClient:
         # Cerca corrispondenza esatta prima
         for sent_name in possible_sent_folders:
             if sent_name in available_folders:
-                log_info(f"📤 Cartella Sent trovata (corrispondenza esatta): '{sent_name}' per {self.username}")
                 return sent_name
         
         # Se non trova corrispondenza esatta, cerca substring (case insensitive)
@@ -330,11 +326,9 @@ class ImapClient:
             sent_patterns = ["sent", "inviata", "inviati", "elementi", "gesendet", "enviados", "envoyés"]
             for sent_pattern in sent_patterns:
                 if sent_pattern in folder_lower:
-                    log_info(f"📤 Cartella Sent trovata (pattern matching): '{folder}' per {self.username}")
                     return folder
         
-        log_error(f"❌ Nessuna cartella Sent trovata per {self.username}. Cartelle disponibili: {available_folders}")
-        log_info(f"📋 Suggerimento: Verifica manualmente se esiste una cartella per email inviate tra: {available_folders}")
+        log_error(f"❌ Nessuna cartella Sent trovata per {self.username}")
         return ""
 
     def fetch_unseen_messages(self, folder_name: str = "INBOX") -> List[Dict]:
@@ -475,12 +469,10 @@ class ImapClient:
                     # Se il parsing fallisce, usa gli ultimi 2 giorni
                     yesterday = (datetime.now() - timedelta(days=2)).strftime("%d-%b-%Y")
                     search_criteria = f'SINCE "{yesterday}"'
-                    log_info(f"📤 Fallback per {self.username} - cerco messaggi dal {yesterday}")
             else:
                 # Default: prendi i messaggi degli ultimi 2 giorni
                 yesterday = (datetime.now() - timedelta(days=2)).strftime("%d-%b-%Y")
                 search_criteria = f'SINCE "{yesterday}"'
-                log_info(f"📤 Polling default per {self.username} - cerco messaggi dal {yesterday}")
             
             status, messages = self.conn.search(None, search_criteria)
             if status != "OK":
@@ -491,8 +483,6 @@ class ImapClient:
             emails = []
             now = datetime.now()
             two_minutes_ago = now - timedelta(minutes=2)
-            
-            log_info(f"📤 Trovati {len(mail_ids)} messaggi nella cartella Sent per {self.username}")
             
             for mail_id in mail_ids:
                 _, msg_data = self.conn.fetch(mail_id, "(RFC822)")
@@ -524,10 +514,7 @@ class ImapClient:
                         # Converte in timezone naive per confronto
                         msg_date_naive = parsed_date.replace(tzinfo=None) if parsed_date.tzinfo else parsed_date
                         if msg_date_naive < two_minutes_ago:
-                            log_info(f"📤 Primo polling: messaggio {mail_id.decode()} troppo vecchio ({msg_date_naive}), saltato")
                             continue
-                        else:
-                            log_info(f"📤 Primo polling: messaggio {mail_id.decode()} recente ({msg_date_naive}), processato")
                 elif since_timestamp and parsed_date:
                     # Per polling incrementali: salta i messaggi più vecchi dell'ultimo processato
                     try:
@@ -545,7 +532,6 @@ class ImapClient:
                 
                 # Se abbiamo un last_sent_message_id, esclude quello specifico messaggio
                 if last_sent_message_id and message_id == last_sent_message_id:
-                    log_info(f"📤 Messaggio già processato saltato: {message_id} per {self.username}")
                     continue
 
                 # Estrae il corpo del messaggio e lo pulisce
@@ -585,7 +571,6 @@ class ImapClient:
 
                 emails.append(email_data)
 
-            log_info(f"📤 Selezionati {len(emails)} messaggi inviati per {self.username}")
             return emails
             
         except Exception as e:
@@ -639,8 +624,6 @@ class ImapClient:
                 except:
                     timestamp = date_str
 
-            log_info(f"📤 Messaggio più recente per {self.username}: {message_id} (data: {date_str})")
-            
             return {
                 "message_id": message_id,
                 "timestamp": timestamp,
