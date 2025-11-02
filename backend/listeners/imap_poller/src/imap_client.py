@@ -235,7 +235,7 @@ class ImapClient:
             for folder in folders:
                 # Decodifica la risposta (formato: (flags) delimiter folder_name)
                 folder_str = folder.decode() if isinstance(folder, bytes) else folder
-                log_info(f"📁 Raw folder response: {folder_str}")
+                #log_info(f"📁 Raw folder response: {folder_str}")
                 
                 # Parse della risposta IMAP LIST: (flags) "delimiter" "folder_name"
                 # Esempio: (\HasNoChildren \UnMarked \Sent) "." INBOX.Sent
