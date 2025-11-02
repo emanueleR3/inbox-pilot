@@ -497,12 +497,13 @@ class ImapClient:
                 bcc_address = self._decode_header(msg.get("Bcc", ""))
                 date_str = msg.get("Date", "")
                 
-                # Converte la data in formato timestamp
+                # Converte la data in formato timestamp PRESERVANDO il timezone originale
                 timestamp = ""
                 parsed_date = None
                 if date_str:
                     try:
                         parsed_date = parsedate_to_datetime(date_str)
+                        # PRESERVA il timezone originale della mail, non convertire in locale
                         timestamp = parsed_date.isoformat()
                     except:
                         timestamp = date_str
@@ -519,13 +520,36 @@ class ImapClient:
                     # Per polling incrementali: salta i messaggi più vecchi dell'ultimo processato
                     try:
                         since_dt = datetime.fromisoformat(since_timestamp.replace('Z', '+00:00'))
-                        msg_dt = parsed_date.replace(tzinfo=None) if parsed_date.tzinfo else parsed_date
-                        since_dt_naive = since_dt.replace(tzinfo=None) if since_dt.tzinfo else since_dt
                         
-                        if msg_dt <= since_dt_naive:
-                            continue  # Salta questo messaggio
-                    except:
-                        pass  # In caso di errore, processa il messaggio
+                        # Confronta preservando i timezone
+                        if since_dt.tzinfo and parsed_date.tzinfo:
+                            # Entrambi hanno timezone - confronto diretto
+                            if parsed_date <= since_dt:
+                                continue
+                        elif since_dt.tzinfo:
+                            # Solo since_dt ha timezone - converte a UTC per confronto
+                            since_dt_utc = since_dt.astimezone(datetime.now().astimezone().tzinfo)
+                            parsed_date_local = parsed_date.replace(tzinfo=datetime.now().astimezone().tzinfo)
+                            if parsed_date_local <= since_dt_utc:
+                                continue
+                        elif parsed_date.tzinfo:
+                            # Solo parsed_date ha timezone - converte since_dt al timezone di parsed_date
+                            since_dt_tz = since_dt.replace(tzinfo=parsed_date.tzinfo)
+                            if parsed_date <= since_dt_tz:
+                                continue
+                        else:
+                            # Nessuno ha timezone - confronto naive
+                            if parsed_date <= since_dt:
+                                continue
+                    except Exception as e:
+                        # In caso di errore nel confronto timezone, usa confronto naive come fallback
+                        try:
+                            since_dt_naive = datetime.fromisoformat(since_timestamp.replace('Z', '+00:00')).replace(tzinfo=None)
+                            parsed_date_naive = parsed_date.replace(tzinfo=None) if parsed_date.tzinfo else parsed_date
+                            if parsed_date_naive <= since_dt_naive:
+                                continue
+                        except:
+                            pass  # In caso di errore totale, processa il messaggio
                 
                 # Estrae Message-ID prima del controllo duplicati
                 message_id = self._extract_message_id(msg)
