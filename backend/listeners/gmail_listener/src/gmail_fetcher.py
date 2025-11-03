@@ -40,7 +40,11 @@ def _fetch_messages_sync(email: str, start_history_id: str):
                         ).execute()
                         messages.append(msg_data)
                     except Exception as e:
-                        log_error(f"Errore recupero messaggio {msg_id}: {e}")
+                        # Non loggiamo errori 404 come errori - sono normali
+                        if "404" in str(e) or "not found" in str(e).lower():
+                            log_info(f"Messaggio {msg_id} non più disponibile (404) - probabilmente già elaborato")
+                        else:
+                            log_error(f"Errore recupero messaggio {msg_id}: {e}")
 
         # Aggiorna l'historyId al valore corrente della risposta
         new_history_id = response.get('historyId')

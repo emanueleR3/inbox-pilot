@@ -28,6 +28,14 @@ class AdvancedEmailFilter:
             Processing result or None if message should be skipped
         """
         try:
+            # Check for duplicate message_id first
+            message_id = email_data.get("message_id")
+            box_email = email_data.get("user_email")
+            
+            if message_id and self.thread_repo.message_id_exists(message_id, box_email):
+                print(f"🚫 [FILTER] Duplicate message detected - message_id {message_id} already processed")
+                return None
+            
             # Apply the first filter: new conversation from sent messages
             if await self._is_new_conversation_from_user(email_data):
                 thread_result = await self._create_new_thread_from_sent(email_data)

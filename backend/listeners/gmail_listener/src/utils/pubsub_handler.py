@@ -139,6 +139,19 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     labels = message.get("labelIds", [])
     is_sent = (sender_email and sender_email.lower() == user_email.lower()) or 'SENT' in labels
     
+    # Gestisci il campo 'to' con fallback più informativi
+    to_field = headers_lower.get("to")
+    if not to_field:
+        # Se è BCC, potrebbe non esserci il campo To
+        if headers_lower.get("bcc"):
+            to_field = "BCC"
+        # Se è una email inviata, usa il Delivered-To o X-Original-To
+        elif is_sent:
+            to_field = headers_lower.get("delivered-to") or headers_lower.get("x-original-to") or user_email
+        # Se non è presente, usa l'account corrente come fallback
+        else:
+            to_field = user_email
+    
     payload = {
         "provider": "gmail",
         "user_email": user_email,
@@ -147,7 +160,7 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "reply_to_id": reply_to_id,   # Usa header In-Reply-To IMAP o "no" se è None (case-insensitive, senza < >)
         "subject": headers_lower.get("subject"),
         "from": headers_lower.get("from"),
-        "to": headers_lower.get("to"),
+        "to": to_field,
         "cc": headers_lower.get("cc"),
         "bcc": headers_lower.get("bcc"),
         "date": headers_lower.get("date"),

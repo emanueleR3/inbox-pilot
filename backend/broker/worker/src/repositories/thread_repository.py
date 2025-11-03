@@ -330,3 +330,40 @@ class ThreadRepository:
         except Exception as e:
             print(f"❌ Error setting human response: {e}")
             return False
+
+    def message_id_exists(self, message_id: str, box_email: str = None) -> bool:
+        """
+        Check if a message_id already exists in any thread.
+        
+        Args:
+            message_id: The message ID to check
+            box_email: Optional box email to limit search scope
+            
+        Returns:
+            bool: True if message_id exists, False otherwise
+        """
+        try:
+            query = self.supabase.table("threads").select("thread_id, last_message_id")
+            
+            # Check both last_message_id and history array
+            if box_email:
+                # Use proper PostgreSQL JSON operations for history array search
+                response = query.or_(
+                    f"last_message_id.eq.{message_id},"
+                    f"history.cs.['{message_id}']"
+                ).eq("box_email", box_email).execute()
+            else:
+                response = query.or_(
+                    f"last_message_id.eq.{message_id},"
+                    f"history.cs.['{message_id}']"
+                ).execute()
+            
+            if response.data:
+                print(f"🔍 [THREAD] Message ID {message_id} already exists in thread: {response.data[0]['thread_id']}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"❌ Error checking message_id existence: {e}")
+            return False
