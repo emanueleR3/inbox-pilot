@@ -286,7 +286,7 @@ class ThreadRepository:
             print(f"❌ Error updating thread with new message: {e}")
             return False
     
-    def set_human_response_needed(self, thread_id: str, message_id: str = None, message_timestamp: datetime = None) -> bool:
+    def set_human_response_needed(self, thread_id: str, message_id: str = None, message_timestamp: datetime = None, sender_email: str = None) -> bool:
         """
         Sets human_response to True for a thread (when user sends a reply).
         Optionally adds the user's message to the thread history.
@@ -295,6 +295,7 @@ class ThreadRepository:
             thread_id: Thread ID to update
             message_id: Optional message ID to add to history
             message_timestamp: Optional timestamp of the message
+            sender_email: Optional sender email to update last_sender_email
             
         Returns:
             True if updated successfully
@@ -315,6 +316,10 @@ class ThreadRepository:
                             "last_message_id": message_id,
                             "last_message_at": message_timestamp.isoformat()
                         })
+                        
+                        # Update last_sender_email if provided
+                        if sender_email:
+                            update_data["last_sender_email"] = sender_email
             
             response = self.supabase.table("threads").update(update_data).eq("thread_id", thread_id).execute()
             
@@ -350,12 +355,12 @@ class ThreadRepository:
                 # Use proper PostgreSQL JSON operations for history array search
                 response = query.or_(
                     f"last_message_id.eq.{message_id},"
-                    f"history.cs.['{message_id}']"
+                    f"history.cs.[\"{message_id}\"]"
                 ).eq("box_email", box_email).execute()
             else:
                 response = query.or_(
                     f"last_message_id.eq.{message_id},"
-                    f"history.cs.['{message_id}']"
+                    f"history.cs.[\"{message_id}\"]"
                 ).execute()
             
             if response.data:

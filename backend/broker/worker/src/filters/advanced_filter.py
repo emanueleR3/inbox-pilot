@@ -147,8 +147,9 @@ class AdvancedEmailFilter:
                 # User sent a reply - mark as needing human response and add to history
                 timestamp_str = email_data.get("timestamp") or email_data.get("date")
                 message_datetime = self._parse_timestamp(timestamp_str)
+                sender_email = self._extract_email_address(email_data.get("from"))
                 
-                if self.thread_repo.set_human_response_needed(thread_id, message_id, message_datetime):
+                if self.thread_repo.set_human_response_needed(thread_id, message_id, message_datetime, sender_email):
                     print(f"👤 [FILTER] Human response set for thread {thread_id}")
                     # TODO: notifica, aggiornare summary e category
                     return {"action": "human_response_set", "thread_id": thread_id}
