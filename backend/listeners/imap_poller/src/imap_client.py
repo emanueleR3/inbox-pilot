@@ -182,11 +182,11 @@ class ImapClient:
         # Usa sempre In-Reply-To come standard IMAP per il threading
         in_reply_to = msg.get("In-Reply-To", "")
         if in_reply_to:
-            thread_id = self._clean_message_id(in_reply_to)
+            reply_to_id = self._clean_message_id(in_reply_to)
         else:
-            thread_id = "no"
+            reply_to_id = "no"
         
-        return thread_id
+        return reply_to_id
 
     def _is_email_recent(self, date_str: str) -> bool:
         """
@@ -389,12 +389,12 @@ class ImapClient:
             
             # Estrae Message-ID e Thread-ID
             message_id = self._extract_message_id(msg)
-            thread_id = self._extract_thread_id(msg)
+            reply_to_id = self._extract_thread_id(msg)
 
             email_data = {
                 "id": mail_id.decode(),
                 "message_id": message_id,
-                "thread_id": thread_id,
+                "reply_to_id": reply_to_id,
                 "from": from_address,
                 "to": to_address,
                 "cc": cc_address,
@@ -559,12 +559,12 @@ class ImapClient:
                     body_html = clean_email_body(body_html)
                 
                 # Estrae Thread-ID
-                thread_id = self._extract_thread_id(msg)
+                reply_to_id = self._extract_thread_id(msg)
 
                 email_data = {
                     "id": mail_id.decode(),
                     "message_id": message_id,
-                    "thread_id": thread_id,
+                    "reply_to_id": reply_to_id,
                     "from": from_address,
                     "to": to_address,
                     "cc": cc_address,
@@ -692,7 +692,7 @@ class ImapClient:
                     since_date = datetime.fromisoformat(since_timestamp.replace('Z', '+00:00'))
                     imap_date = since_date.strftime("%d-%b-%Y")
                     search_criteria = f'SINCE "{imap_date}"'
-                    log_info(f"📤 Polling incrementale per {self.username} - cerco messaggi dal {imap_date}")
+                    #log_info(f"📤 Polling incrementale per {self.username} - cerco messaggi dal {imap_date}")
                 except:
                     # Se il parsing fallisce, usa gli ultimi 2 giorni
                     yesterday = (datetime.now() - timedelta(days=2)).strftime("%d-%b-%Y")
@@ -813,12 +813,12 @@ class ImapClient:
                     body_html = clean_email_body(body_html)
                 
                 # Estrae Thread-ID
-                thread_id = self._extract_thread_id(msg)
+                reply_to_id = self._extract_thread_id(msg)
 
                 email_data = {
                     "id": mail_id.decode(),
                     "message_id": message_id,
-                    "thread_id": thread_id,
+                    "reply_to_id": reply_to_id,
                     "from": from_address,
                     "to": to_address,
                     "cc": cc_address,
@@ -919,6 +919,5 @@ class ImapClient:
                 
                 # Logout sempre
                 self.conn.logout()
-                log_info(f"✅ Connessione IMAP chiusa correttamente per {self.username}")
         except Exception as e:
             log_error(f"Errore durante chiusura connessione IMAP per {self.username}: {str(e)}")

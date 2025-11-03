@@ -17,6 +17,9 @@ async def poll_account_inbound(account):
     """
     Controlla i messaggi ricevuti per un singolo account IMAP con tracking basato su timestamp.
     Implementa la logica di primo polling: se è il primo polling, imposta solo la baseline senza inviare messaggi.
+    
+    Returns:
+        int: Numero di messaggi ricevuti processati
     """
     try:
         email = account["email"]
@@ -43,6 +46,8 @@ async def poll_account_inbound(account):
         # Recupera messaggi ricevuti
         received_messages = client.fetch_received_messages_since(last_timestamp, is_first_polling, last_message_id)
         
+        processed_count = 0
+        
         if received_messages:
             # Ordina per timestamp per processare dal più vecchio al più recente
             received_messages.sort(key=lambda x: x.get("timestamp", ""))
@@ -54,12 +59,15 @@ async def poll_account_inbound(account):
                 if not is_first_polling:
                     log_info("   💌 Messaggio inbound IMAP - inviato al broker")
                     
+                    # Importa le funzioni per controllare no-reply e sent
+                    from src.utils.mail_parser import is_no_reply_email, is_sent_message
+                    
                     message_payload = {
                         "provider": "imap",
                         "user_email": email,
                         "mail_id": message["id"],
                         "message_id": message["message_id"],
-                        "thread_id": message["thread_id"],
+                        "reply_to_id": message["reply_to_id"],
                         "from": message["from"],
                         "to": message["to"],
                         "cc": message["cc"],
@@ -74,10 +82,13 @@ async def poll_account_inbound(account):
                         "size": message["size"],
                         "raw": message["raw"].decode(errors="ignore"),
                         "subscription_id": account.get("subscription_id"),
-                        "folder_type": "inbox"
+                        "folder_type": "inbox",
+                        "no_reply": is_no_reply_email(message.get("from", "")),
+                        "is_sent": is_sent_message(message.get("from", ""), email, "inbox"),
                     }
 
                     await publisher.publish_message(message_payload)
+                    processed_count += 1
                 else:
                     log_info("   🔄 Primo polling - messaggio usato solo per baseline")
 
@@ -102,14 +113,14 @@ async def poll_account_inbound(account):
                     recent_message.get("message_id", ""),
                     recent_message.get("timestamp", "")
                 )
-        else:
-            log_info(f"📩 Nessun nuovo messaggio ricevuto per {email}")
         
         # Chiudi connessione
         client.close()
+        return processed_count
         
     except Exception as e:
         log_error(f"❌ Errore nel polling messaggi ricevuti per {account.get('email', 'unknown')}: {str(e)}")
+        return 0
 
 async def poll_account(account):
     try:
@@ -127,12 +138,15 @@ async def poll_account(account):
         for mail in new_mails:
             log_info(f"📩 Nuova mail INBOUND da {mail['from']} per {account['email']} | {mail['subject']}")        
             
+            # Importa le funzioni per controllare no-reply e sent
+            from src.utils.mail_parser import is_no_reply_email, is_sent_message
+            
             message_payload = {
                 "provider": "imap",
                 "user_email": account["email"],  # Cambiato da "account" a "user_email" per consistenza con il broker
                 "mail_id": mail["id"],
                 "message_id": mail["message_id"],
-                "thread_id": mail["thread_id"],
+                "reply_to_id": mail["reply_to_id"],
                 "from": mail["from"],
                 "to": mail["to"],
                 "cc": mail["cc"],
@@ -147,28 +161,17 @@ async def poll_account(account):
                 "size": mail["size"],
                 "raw": mail["raw"].decode(errors="ignore"),
                 "subscription_id": account.get("subscription_id"),  # Aggiunge riferimento alla subscription
-                "folder_type": "inbox"  # Indica che è un messaggio in arrivo
+                "folder_type": "inbox",  # Indica che è un messaggio in arrivo
+                "no_reply": is_no_reply_email(mail.get("from", "")),
+                "is_sent": is_sent_message(mail.get("from", ""), account["email"], "inbox"),
             }
 
             await publisher.publish_message(message_payload)
             client.mark_as_seen(mail["id"])
 
-        # Processa messaggi inviati (Sent folder) - solo log, non invia al broker
-        sent_mails = client.fetch_sent_messages()
-        for mail in sent_mails:
-            log_info(f"📤 OUTBOUND MAIL (solo log) da {account['email']} a {mail['to']} | {mail['subject']}")
-            log_info(f"   📧 Da: {mail['from']}")
-            log_info(f"   📧 A: {mail['to']}")
-            log_info(f"   📅 Data: {mail['date']}")
-            log_info(f"   📝 Oggetto: {mail['subject']}")
-            log_info(f"   📄 Corpo (primi 200 char): {mail['body_text'][:200]}...")
-            log_info(f"   🆔 Message ID: {mail['message_id']}")
-            log_info(f"   🔗 Thread ID: {mail['thread_id']}")
-            log_info(f"   📊 Dimensione: {mail['size']} bytes")
-            log_info("   💡 Messaggio outbound IMAP non inviato al broker (solo monitoraggio)")
-            
-            # Marca come letto anche le email inviate per evitare di riprocessarle
-            client.mark_as_seen(mail["id"])
+        # Processa messaggi inviati (Sent folder) - ora invia al broker tramite poll_account_outbound
+        # La logica è stata spostata nella funzione poll_account_outbound
+        # che viene chiamata separatamente per gestire il tracking dei timestamp
 
         client.close()
 
@@ -179,6 +182,9 @@ async def poll_account_outbound(account):
     """
     Controlla i messaggi inviati per un singolo account IMAP.
     Implementa la logica di primo polling con soglia di 2 minuti.
+    
+    Returns:
+        int: Numero di messaggi inviati processati
     """
     try:
         email = account["email"]
@@ -205,6 +211,8 @@ async def poll_account_outbound(account):
         # Recupera messaggi inviati
         sent_messages = client.fetch_sent_messages_since(last_timestamp, is_first_polling, last_message_id)
         
+        processed_count = 0
+        
         if sent_messages:
             # Ordina per timestamp per processare dal più vecchio al più recente
             sent_messages.sort(key=lambda x: x.get("timestamp", ""))
@@ -212,29 +220,43 @@ async def poll_account_outbound(account):
             latest_message = None
             
             for message in sent_messages:
-                # Log dettagliato del messaggio inviato (non inviare al broker)
-                log_info("="*80)
-                log_info("📤 IMAP OUTBOUND - Messaggio inviato rilevato:")
-                log_info(f"   📧 Account: {email}")
-                log_info(f"   📧 Da: {message.get('from')}")
-                log_info(f"   📧 A: {message.get('to')}")
-                if message.get('cc'):
-                    log_info(f"   📧 CC: {message.get('cc')}")
-                log_info(f"   📧 Oggetto: {message.get('subject')}")
-                log_info(f"   📧 Data: {message.get('date')}")
-                log_info(f"   📧 Message-ID: {message.get('message_id')}")
-                log_info(f"   📧 Thread-ID: {message.get('thread_id')}")
-                log_info(f"   📧 Cartella: {message.get('folder')}")
-                log_info(f"   📊 Dimensione: {message.get('size')} bytes")
-                
-                # Mostra un'anteprima del corpo (primi 150 caratteri)
-                body_preview = message.get('body_text', '')[:150]
-                if len(body_preview) >= 150:
-                    body_preview += "..."
-                log_info(f"   📄 Anteprima corpo: {body_preview}")
-                log_info("   💡 Messaggio outbound IMAP - non inviato al broker (solo monitoraggio)")
-                log_info("="*80)
-                
+                # Se NON è il primo polling, invia al broker
+                if not is_first_polling:
+                    log_info("   📤 Messaggio outbound IMAP - inviato al broker")
+                    
+                    # Importa le funzioni per controllare no-reply e sent
+                    from src.utils.mail_parser import is_no_reply_email, is_sent_message
+                    
+                    message_payload = {
+                        "provider": "imap",
+                        "user_email": email,
+                        "mail_id": message["id"],
+                        "message_id": message["message_id"],
+                        "reply_to_id": message["reply_to_id"],
+                        "from": message["from"],
+                        "to": message["to"],
+                        "cc": message["cc"],
+                        "bcc": message["bcc"],
+                        "subject": message["subject"],
+                        "date": message["date"],
+                        "timestamp": message["timestamp"],
+                        "body_text": message["body_text"],
+                        "body_html": message["body_html"],
+                        "content_type": message["content_type"],
+                        "charset": message["charset"],
+                        "size": message["size"],
+                        "raw": message["raw"].decode(errors="ignore"),
+                        "subscription_id": account.get("subscription_id"),
+                        "folder_type": "sent",
+                        "no_reply": is_no_reply_email(message.get("from", "")),
+                        "is_sent": is_sent_message(message.get("from", ""), email, "sent"),
+                    }
+
+                    await publisher.publish_message(message_payload)
+                    processed_count += 1
+                else:
+                    log_info("   🔄 Primo polling - messaggio usato solo per baseline")
+
                 latest_message = message
             
             # Aggiorna il timestamp dell'ultimo messaggio processato
@@ -256,26 +278,39 @@ async def poll_account_outbound(account):
                     recent_message.get("message_id", ""),
                     recent_message.get("timestamp", "")
                 )
-        else:
-            log_info(f"📤 Nessun nuovo messaggio inviato per {email}")
         
         # Chiudi connessione
         client.close()
+        return processed_count
         
     except Exception as e:
         log_error(f"❌ Errore nel polling messaggi inviati per {account.get('email', 'unknown')}: {str(e)}")
+        return 0
 
 async def poll_all_accounts():
     accounts = await get_all_imap_accounts()
     sem = asyncio.Semaphore(MAX_CONCURRENT_CONNECTIONS)
+    
+    # Dizionario per tenere traccia dei conteggi per ogni account
+    account_stats = {}
 
     async def sem_task_inbound(account):
         async with sem:
-            await poll_account_inbound(account)
+            received_count = await poll_account_inbound(account)
+            email = account["email"]
+            if email not in account_stats:
+                account_stats[email] = {"received": 0, "sent": 0}
+            account_stats[email]["received"] = received_count
+            return received_count
     
     async def sem_task_outbound(account):
         async with sem:
-            await poll_account_outbound(account)
+            sent_count = await poll_account_outbound(account)
+            email = account["email"]
+            if email not in account_stats:
+                account_stats[email] = {"received": 0, "sent": 0}
+            account_stats[email]["sent"] = sent_count
+            return sent_count
 
     # Crea task per entrambi i tipi di polling
     tasks = []
@@ -285,3 +320,9 @@ async def poll_all_accounts():
     
     # Esegue tutti i task concorrentemente
     await asyncio.gather(*tasks)
+    
+    # Log consolidato per ogni account
+    for email, stats in account_stats.items():
+        received = stats["received"]
+        sent = stats["sent"]
+        log_info(f"📧 [{email}] - Ricevuti: {received}; Inviati: {sent}")

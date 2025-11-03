@@ -5,6 +5,7 @@ import re
 import html
 from src.gmail_fetcher import fetch_messages_for_user
 from src.broker_client import RabbitMQPublisher 
+from src.utils.logger import log_info 
 
 publisher = RabbitMQPublisher()
 
@@ -19,8 +20,6 @@ async def process_pubsub_message(data: dict):
     if not email or not history_id:
         print("❌ Messaggio Pub/Sub non valido:", data)
         return
-    
-    print(f"🔔 NOTIFICA RICEVUTA per {email} - historyId: {history_id}")
     
     # Usa l'historyId salvato nel DB se disponibile
     start_history_id = history_id  # Default: usa quello della notifica
@@ -41,15 +40,15 @@ async def process_pubsub_message(data: dict):
     # Fetch async dei messaggi usando l'historyId corretto
     messages = await fetch_messages_for_user(email, start_history_id)
 
-    # Se non ci sono messaggi, esci
+    # Se non ci sono messaggi, stampa log consolidato e esci
     if not messages:
-        print(f"📭 [{email}] Nessun messaggio nuovo da historyId {history_id}")
+        log_info(f"📧 Notifica per [{email}] - 0 nuovi messaggi")
         return
-
-    print(f"📧 [{email}] Trovati {len(messages)} nuovi messaggi!")
 
     # Filtra i messaggi per escludere quelli inviati dalla stessa email
     filtered_messages = []
+    draft_count = 0
+    
     for msg in messages:
         payload = _serialize_gmail_message(email, msg, history_id)
         sender_email = _extract_email_from_header(payload.get('from', ''))
@@ -88,21 +87,21 @@ async def process_pubsub_message(data: dict):
 
         # Salta i messaggi con label DRAFT (bozze)
         if 'DRAFT' in labels:
-            print(f"🚫 Messaggio saltato - ha label DRAFT: {payload.get('subject', 'N/A')}")
+            draft_count += 1
             continue
             
         filtered_messages.append(payload)
-
-    # Se non ci sono messaggi da processare dopo il filtro
-    if not filtered_messages:
-        print(f"📭 [{email}] Nessun messaggio da processare dopo il filtro (tutti erano dalla stessa email)")
-        return
 
     # Invia solo i messaggi filtrati a RabbitMQ
     for payload in filtered_messages:
         await publisher.publish_message(payload)
 
-    print(f"✅ [{email}] Processati {len(filtered_messages)}/{len(messages)} messaggi → inviati a RabbitMQ (saltati {len(messages) - len(filtered_messages)} messaggi dalla stessa email)")
+    # Log consolidato finale
+    skipped_count = len(messages) - len(filtered_messages)
+    if draft_count > 0:
+        log_info(f"📧 Notifica per [{email}] - {len(messages)} nuovi messaggi; {skipped_count}/{len(messages)} scartati (motivo: draft)")
+    else:
+        log_info(f"📧 Notifica per [{email}] - {len(messages)} nuovi messaggi; {skipped_count}/{len(messages)} scartati")
 
 def _serialize_gmail_message(user_email: str, message: dict, history_id: str) -> dict:
     """
@@ -126,21 +125,42 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         message_id = _clean_message_id(message_id)
     
     # Cerca in-reply-to in modo case-insensitive e rimuovi < >
-    thread_id = headers_lower.get("in-reply-to")
-    if thread_id:
-        thread_id = _clean_message_id(thread_id)
+    reply_to_id = headers_lower.get("in-reply-to")
+    if reply_to_id:
+        reply_to_id = _clean_message_id(reply_to_id)
     else:
-        thread_id = "no"
+        reply_to_id = "no"
+    
+    # Determina se è un'email no-reply
+    is_no_reply = _is_no_reply_email(headers_lower.get("from", ""))
+    
+    # Determina se è un messaggio inviato dall'account stesso
+    sender_email = _extract_email_from_header(headers_lower.get("from", ""))
+    labels = message.get("labelIds", [])
+    is_sent = (sender_email and sender_email.lower() == user_email.lower()) or 'SENT' in labels
+    
+    # Gestisci il campo 'to' con fallback più informativi
+    to_field = headers_lower.get("to")
+    if not to_field:
+        # Se è BCC, potrebbe non esserci il campo To
+        if headers_lower.get("bcc"):
+            to_field = "BCC"
+        # Se è una email inviata, usa il Delivered-To o X-Original-To
+        elif is_sent:
+            to_field = headers_lower.get("delivered-to") or headers_lower.get("x-original-to") or user_email
+        # Se non è presente, usa l'account corrente come fallback
+        else:
+            to_field = user_email
     
     payload = {
         "provider": "gmail",
         "user_email": user_email,
         "history_id": history_id,
         "message_id": message_id,  # Usa header Message-Id IMAP standard (case-insensitive, senza < >)
-        "thread_id": thread_id,   # Usa header In-Reply-To IMAP o "no" se è None (case-insensitive, senza < >)
+        "reply_to_id": reply_to_id,   # Usa header In-Reply-To IMAP o "no" se è None (case-insensitive, senza < >)
         "subject": headers_lower.get("subject"),
         "from": headers_lower.get("from"),
-        "to": headers_lower.get("to"),
+        "to": to_field,
         "cc": headers_lower.get("cc"),
         "bcc": headers_lower.get("bcc"),
         "date": headers_lower.get("date"),
@@ -149,6 +169,8 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "timestamp": message.get("internalDate"),
         "labels": message.get("labelIds", []),
         "attachments": [],
+        "no_reply": is_no_reply,
+        "is_sent": is_sent,
     }
     return payload
 
@@ -185,6 +207,31 @@ def _extract_email_from_header(from_header: str) -> str:
         return email_match.group(1) or email_match.group(2)
     
     return ""
+
+def _is_no_reply_email(from_header: str) -> bool:
+    """
+    Determina se un'email proviene da un indirizzo no-reply.
+    Esempi:
+    - "no-reply@example.com" -> True
+    - "noreply@example.com" -> True
+    - "do-not-reply@example.com" -> True
+    - "support@example.com" -> False
+    """
+    if not from_header:
+        return False
+    
+    email = _extract_email_from_header(from_header)
+    if not email:
+        return False
+    
+    email_lower = email.lower()
+    no_reply_patterns = [
+        'no-reply', 'noreply', 'do-not-reply', 'donotreply',
+        'no_reply', 'donot-reply', 'auto-reply', 'autoreply',
+        'mailer-daemon', 'postmaster', 'bounce'
+    ]
+    
+    return any(pattern in email_lower for pattern in no_reply_patterns)
 
 def _clean_gmail_body(body_text: str) -> str:
     """

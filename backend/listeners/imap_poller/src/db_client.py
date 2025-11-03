@@ -112,7 +112,6 @@ async def get_all_imap_accounts() -> List[Dict]:
                 # Verifica che i campi essenziali siano presenti
                 if imap_account["imap_host"] and imap_account["email"] and decrypted_password:
                     imap_accounts.append(imap_account)
-                    log_info(f"Account IMAP configurato: {imap_account['email']} -> {imap_account['imap_host']}:{imap_account['imap_port']}")
                 else:
                     log_error(f"⚠️ Account IMAP incompleto per {account.get('email')}: mancano campi essenziali")
                     
@@ -120,7 +119,14 @@ async def get_all_imap_accounts() -> List[Dict]:
                 log_error(f"❌ Errore nella decrittazione/configurazione account {account.get('email')}: {str(e)}")
                 continue
         
-        log_info(f"📊 Totale account IMAP configurati: {len(imap_accounts)}")
+        # Log unico con tutti gli account configurati
+        if imap_accounts:
+            emails_list = [acc['email'] for acc in imap_accounts]
+            emails_str = ', '.join(emails_list)
+            log_info(f"📊 Totale account IMAP configurati: {len(imap_accounts)} - [{emails_str}]")
+        else:
+            log_info("📊 Nessun account IMAP configurato")
+        
         return imap_accounts
         
     except Exception as e:

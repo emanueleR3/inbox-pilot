@@ -68,6 +68,49 @@ def _extract_body_content(body_content: dict) -> str:
     # Se è testo, pulisce e ritorna
     return _clean_text(content)
 
+def _extract_email_from_address(email_address: str) -> str:
+    """
+    Estrae l'indirizzo email dal campo Microsoft Graph.
+    Esempi:
+    - "Emanuele Romano <emanuele.romano@example.com>" -> "emanuele.romano@example.com"
+    - "emanuele.romano@example.com" -> "emanuele.romano@example.com"
+    """
+    if not email_address:
+        return ""
+    
+    import re
+    # Regex per estrarre l'email tra < > o l'email diretta
+    email_match = re.search(r'<([^>]+)>|([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', email_address)
+    if email_match:
+        return email_match.group(1) or email_match.group(2)
+    
+    return ""
+
+def _is_no_reply_email(from_address: str) -> bool:
+    """
+    Determina se un'email proviene da un indirizzo no-reply.
+    Esempi:
+    - "no-reply@example.com" -> True
+    - "noreply@example.com" -> True
+    - "do-not-reply@example.com" -> True
+    - "support@example.com" -> False
+    """
+    if not from_address:
+        return False
+    
+    email = _extract_email_from_address(from_address)
+    if not email:
+        return False
+    
+    email_lower = email.lower()
+    no_reply_patterns = [
+        'no-reply', 'noreply', 'do-not-reply', 'donotreply',
+        'no_reply', 'donot-reply', 'auto-reply', 'autoreply',
+        'mailer-daemon', 'postmaster', 'bounce'
+    ]
+    
+    return any(pattern in email_lower for pattern in no_reply_patterns)
+
 def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: bool = False) -> dict:
     """
     Converte il messaggio di Microsoft Graph nel formato standard per RabbitMQ.
@@ -86,6 +129,22 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
             email_addr = recipient.get("emailAddress", {})
             to_addresses.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
         to_field = ", ".join(to_addresses)
+        
+        # Gestisci i destinatari in CC
+        cc_recipients = graph_data.get("ccRecipients", [])
+        cc_addresses = []
+        for recipient in cc_recipients:
+            email_addr = recipient.get("emailAddress", {})
+            cc_addresses.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
+        cc_field = ", ".join(cc_addresses) if cc_addresses else None
+        
+        # Gestisci i destinatari in BCC (se disponibili)
+        bcc_recipients = graph_data.get("bccRecipients", [])
+        bcc_addresses = []
+        for recipient in bcc_recipients:
+            email_addr = recipient.get("emailAddress", {})
+            bcc_addresses.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
+        bcc_field = ", ".join(bcc_addresses) if bcc_addresses else None
         
         # Estrai il corpo del messaggio usando la nuova funzione
         body_content = graph_data.get("body", {})
@@ -109,11 +168,11 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
             message_id = message_id[1:-1]
         
         # Cerca In-Reply-To negli header MIME
-        thread_id = headers.get("in-reply-to", "")
-        if thread_id and thread_id.startswith('<') and thread_id.endswith('>'):
-            thread_id = thread_id[1:-1]
-        if not thread_id:
-            thread_id = "no"
+        reply_to_id = headers.get("in-reply-to", "")
+        if reply_to_id and reply_to_id.startswith('<') and reply_to_id.endswith('>'):
+            reply_to_id = reply_to_id[1:-1]
+        if not reply_to_id:
+            reply_to_id = "no"
         
         # Simula le labels per essere consistente con Gmail
         labels = []
@@ -122,19 +181,25 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
         else:
             labels.append("INBOX")
         
+        # Determina se è un'email no-reply
+        is_no_reply = _is_no_reply_email(from_address)
+        
         return {
             "provider": "microsoft",
             "user_email": user_email,
             "from": from_address,
             "to": to_field,
+            "cc": cc_field,
+            "bcc": bcc_field,
             "subject": subject,
             "body_text": body_text,
             "date": message_datetime,
             "message_id": message_id,
-            "thread_id": thread_id,
+            "reply_to_id": reply_to_id,
             "labels": labels,  # Aggiungi SENT per messaggi inviati
             "timestamp": message_datetime,
-            "is_sent": is_sent_message  # Flag aggiuntivo per identificare messaggi inviati
+            "is_sent": is_sent_message,  # Flag aggiuntivo per identificare messaggi inviati
+            "no_reply": is_no_reply,
         }
     except Exception as e:
         log_error(f"Errore nel parsing del messaggio Microsoft: {str(e)}", e)
