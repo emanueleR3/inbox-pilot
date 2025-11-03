@@ -692,7 +692,7 @@ class ImapClient:
                     since_date = datetime.fromisoformat(since_timestamp.replace('Z', '+00:00'))
                     imap_date = since_date.strftime("%d-%b-%Y")
                     search_criteria = f'SINCE "{imap_date}"'
-                    log_info(f"📤 Polling incrementale per {self.username} - cerco messaggi dal {imap_date}")
+                    #log_info(f"📤 Polling incrementale per {self.username} - cerco messaggi dal {imap_date}")
                 except:
                     # Se il parsing fallisce, usa gli ultimi 2 giorni
                     yesterday = (datetime.now() - timedelta(days=2)).strftime("%d-%b-%Y")
