@@ -130,6 +130,22 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
             to_addresses.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
         to_field = ", ".join(to_addresses)
         
+        # Gestisci i destinatari in CC
+        cc_recipients = graph_data.get("ccRecipients", [])
+        cc_addresses = []
+        for recipient in cc_recipients:
+            email_addr = recipient.get("emailAddress", {})
+            cc_addresses.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
+        cc_field = ", ".join(cc_addresses) if cc_addresses else None
+        
+        # Gestisci i destinatari in BCC (se disponibili)
+        bcc_recipients = graph_data.get("bccRecipients", [])
+        bcc_addresses = []
+        for recipient in bcc_recipients:
+            email_addr = recipient.get("emailAddress", {})
+            bcc_addresses.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
+        bcc_field = ", ".join(bcc_addresses) if bcc_addresses else None
+        
         # Estrai il corpo del messaggio usando la nuova funzione
         body_content = graph_data.get("body", {})
         body_text = _extract_body_content(body_content)
@@ -173,6 +189,8 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
             "user_email": user_email,
             "from": from_address,
             "to": to_field,
+            "cc": cc_field,
+            "bcc": bcc_field,
             "subject": subject,
             "body_text": body_text,
             "date": message_datetime,

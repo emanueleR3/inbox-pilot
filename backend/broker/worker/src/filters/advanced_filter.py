@@ -367,21 +367,30 @@ class AdvancedEmailFilter:
     def _extract_cc_emails(self, cc_header: str) -> List[str]:
         """
         Extracts CC email addresses from the CC header.
+        Handles formats like "Name <email@domain.com>, Another Name <email2@domain.com>"
         
         Args:
             cc_header: CC header string
             
         Returns:
-            List of email addresses
+            List of clean email addresses
         """
         if not cc_header:
             return []
         
         try:
-            # Simple extraction - split by comma and clean up
-            emails = [email.strip() for email in cc_header.split(',')]
-            # TODO: Add more sophisticated email extraction if needed
-            return [email for email in emails if email and '@' in email]
+            # Split by comma to get individual CC entries
+            cc_entries = [entry.strip() for entry in cc_header.split(',')]
+            
+            # Extract clean email from each entry using the same logic as _extract_email_address
+            clean_emails = []
+            for entry in cc_entries:
+                if entry and '@' in entry:
+                    clean_email = self._extract_email_address(entry)
+                    if clean_email:
+                        clean_emails.append(clean_email)
+            
+            return clean_emails
         except Exception as e:
             print(f"⚠️ [FILTER] Error extracting CC emails from {cc_header}: {e}")
             return []
