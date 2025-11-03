@@ -47,12 +47,24 @@ class EmailProcessor:
             action = filter_result.get("action")
             
             if action == "thread_created":
-                # New thread was created, no AI processing needed yet
-                print(f"✅ [PROCESSOR] New thread created successfully")
+                # New thread was created
+                thread_data = filter_result.get("thread", {})
+                needs_ai = filter_result.get("needs_ai", False)
+                
+                if needs_ai:
+                    print(f"🤖 [PROCESSOR] Thread created from external user - sending to AI workflow")
+                    print(f"🧵 Thread ID: {thread_data.get('thread_id')}")
+                    print(f"📧 Subject: {thread_data.get('subject')}")
+                    print(f"👤 Sender: {thread_data.get('sender_email')}")
+                    print(f"📮 Mailbox: {thread_data.get('box_email')}")
+                    # TODO: Send to AI workflow
+                else:
+                    print(f"👤 [PROCESSOR] Thread created from user - no AI processing needed")
+                
                 return {
                     "status": "thread_created",
-                    "thread_id": filter_result.get("thread", {}).get("thread_id"),
-                    "needs_ai_processing": False
+                    "thread_id": thread_data.get("thread_id"),
+                    "needs_ai_processing": needs_ai
                 }
             
             elif action == "process":
@@ -62,6 +74,38 @@ class EmailProcessor:
                 return {
                     "status": "ready_for_ai",
                     "needs_ai_processing": filter_result.get("needs_ai", True)
+                }
+            
+            elif action == "thread_updated":
+                # Existing thread was updated with new message
+                thread_id = filter_result.get("thread_id")
+                print(f"📝 [PROCESSOR] Thread {thread_id} updated with reply - sending to AI workflow")
+                # TODO: Send to AI workflow for processing the new message
+                return {
+                    "status": "thread_updated",
+                    "thread_id": thread_id,
+                    "needs_ai_processing": True
+                }
+            
+            elif action == "human_response_marked":
+                # Human response was marked for thread
+                thread_id = filter_result.get("thread_id")
+                print(f"👤 [PROCESSOR] Human response marked for thread {thread_id}")
+                # TODO: Send notification, update summary and category
+                return {
+                    "status": "human_response_needed",
+                    "thread_id": thread_id,
+                    "needs_ai_processing": False
+                }
+            
+            elif action == "skip":
+                # Message should be skipped (duplicate)
+                reason = filter_result.get("reason", "unknown")
+                print(f"🚫 [PROCESSOR] Message skipped: {reason}")
+                return {
+                    "status": "skipped",
+                    "reason": reason,
+                    "needs_ai_processing": False
                 }
             
             else:
