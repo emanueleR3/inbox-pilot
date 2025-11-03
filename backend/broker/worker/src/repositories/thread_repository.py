@@ -413,3 +413,129 @@ class ThreadRepository:
         except Exception as e:
             print(f"❌ Error in global thread search: {e}")
             return None
+    
+    def find_or_create_local_thread_for_conversation(self, reply_to_id: str, box_email: str, 
+                                                   message_id: str, message_timestamp: datetime,
+                                                   subject: str, sender_email: str, cc_emails: List[str] = None) -> Optional[dict]:
+        """
+        Trova o crea un thread locale per la mailbox corrente che sia collegato alla conversazione.
+        Cerca prima un thread locale che contenga qualsiasi message_id della conversazione cross-mailbox.
+        
+        Args:
+            reply_to_id: Message ID to which this is a reply
+            box_email: Current mailbox email
+            message_id: Current message ID
+            message_timestamp: Current message timestamp
+            subject: Current message subject
+            sender_email: Current message sender
+            cc_emails: Current message CC emails
+            
+        Returns:
+            Thread data for the local mailbox, either found or created
+        """
+        try:
+            # Prima, trova il thread cross-mailbox per ottenere la history completa
+            cross_thread = self.find_thread_by_reply_to_global(reply_to_id)
+            if not cross_thread:
+                print(f"❌ [THREAD] No cross-mailbox thread found for reply_to_id: {reply_to_id}")
+                return None
+                
+            cross_history = cross_thread.get("history", [])
+            cross_box_email = cross_thread.get("box_email")
+            print(f"🔍 [THREAD] Cross-mailbox thread ({cross_box_email}) has history: {cross_history}")
+            
+            # Cerca un thread locale che sia collegato alla conversazione con scoring migliorato
+            local_response = self.supabase.table("threads").select("*").eq("box_email", box_email).execute()
+            
+            best_match = None
+            best_score = 0
+            
+            for local_thread in local_response.data:
+                local_history = local_thread.get("history", [])
+                local_subject = local_thread.get("subject", "")
+                local_sender = local_thread.get("sender_email", "")
+                
+                # Calcola score basato su più fattori
+                score = 0
+                
+                # 1. Sovrapposizione history (peso maggiore)
+                overlap_count = len(set(local_history) & set(cross_history))
+                score += overlap_count * 10
+                
+                # 2. Subject similarity (peso minore)
+                if subject and local_subject:
+                    if self._subjects_similar(subject, local_subject):
+                        score += 5
+                
+                # 3. Sender match (peso minore)
+                if sender_email and sender_email == local_sender:
+                    score += 3
+                
+                # 4. Penalizza thread con poca sovrapposizione relativa
+                if overlap_count > 0 and len(local_history) > 0:
+                    overlap_ratio = overlap_count / len(local_history)
+                    if overlap_ratio < 0.3:  # Meno del 30% di sovrapposizione
+                        score -= 2
+                
+                print(f"� [THREAD] Thread {local_thread.get('thread_id')}: overlap={overlap_count}/{len(local_history)}, subject_match={self._subjects_similar(subject, local_subject) if subject and local_subject else False}, score={score}")
+                
+                if score > best_score:
+                    best_score = score
+                    best_match = local_thread
+            
+            # Controlla se abbiamo un match abbastanza buono
+            if best_match and best_score >= 8:  # Soglia minima per considerare un match valido
+                print(f"🎯 [THREAD] Best match found: {best_match.get('thread_id')} with score {best_score}")
+                return {"thread": best_match, "newly_created": False}
+            elif best_match:
+                print(f"🚫 [THREAD] Match found but score too low: {best_score} < 8 (thread: {best_match.get('thread_id')})")
+            else:
+                print(f"🚫 [THREAD] No matching local thread found")
+            
+            # Se non trova un thread locale collegato, crea un nuovo thread
+            print(f"🆕 [THREAD] Creating new local thread for mailbox {box_email} connected to cross-mailbox conversation")
+            
+            new_thread = self.create_thread(
+                started_at=message_timestamp,
+                history=[reply_to_id, message_id],  # Include il reply_to_id per collegare la conversazione
+                subject=subject,
+                sender_email=sender_email,
+                cc_emails=cc_emails or [],
+                last_message_id=message_id,
+                last_message_at=message_timestamp,
+                category="CROSS_MAILBOX_REPLY",
+                human_response=False,
+                last_sender_email=sender_email,
+                box_email=box_email
+            )
+            
+            if new_thread and new_thread.get("thread_id"):
+                print(f"✅ [THREAD] Created new local thread {new_thread.get('thread_id')} for cross-mailbox conversation")
+                return {"thread": new_thread, "newly_created": True}
+            else:
+                print(f"❌ [THREAD] Failed to create new local thread for {box_email}")
+                return None
+            
+        except Exception as e:
+            print(f"❌ Error finding/creating local thread: {e}")
+            return None
+    
+    def _subjects_similar(self, subject1: str, subject2: str) -> bool:
+        """
+        Helper per confrontare subject simili (rimuove Re:, Fwd:, etc.)
+        
+        Args:
+            subject1: First subject to compare
+            subject2: Second subject to compare
+            
+        Returns:
+            True if subjects are similar after normalization
+        """
+        import re
+        
+        # Normalizza i subject rimuovendo prefissi comuni
+        clean1 = re.sub(r'^(Re:|Fwd:|RE:|FWD:|Fw:|\[EXTERNAL\]|\[Ext\])\s*', '', subject1 or '', re.IGNORECASE).strip()
+        clean2 = re.sub(r'^(Re:|Fwd:|RE:|FWD:|Fw:|\[EXTERNAL\]|\[Ext\])\s*', '', subject2 or '', re.IGNORECASE).strip()
+        
+        # Confronta case-insensitive
+        return clean1.lower() == clean2.lower() if clean1 and clean2 else False

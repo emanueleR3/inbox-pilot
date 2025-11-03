@@ -133,13 +133,37 @@ class AdvancedEmailFilter:
             thread = self.thread_repo.find_thread_by_reply_to(reply_to_id, box_email)
             if not thread:
                 print(f"🔍 [THREAD] No thread found in current mailbox for: {reply_to_id}")
-                # Fallback: cerca in tutte le mailboxes (cross-mailbox search)
-                thread = self.thread_repo.find_thread_by_reply_to_global(reply_to_id)
-                if not thread:
-                    print(f"❌ [FILTER] No thread found globally for reply_to_id: {reply_to_id}")
+                
+                # Cross-mailbox case: trova o crea thread locale collegato
+                timestamp_str = email_data.get("timestamp") or email_data.get("date")
+                message_datetime = self._parse_timestamp(timestamp_str)
+                sender_email = self._extract_email_address(email_data.get("from"))
+                cc_emails = self._extract_cc_emails(email_data.get("cc"))
+                subject = email_data.get("subject")
+                
+                thread_result = self.thread_repo.find_or_create_local_thread_for_conversation(
+                    reply_to_id=reply_to_id,
+                    box_email=box_email,
+                    message_id=message_id,
+                    message_timestamp=message_datetime,
+                    subject=subject,
+                    sender_email=sender_email,
+                    cc_emails=cc_emails
+                )
+                
+                if not thread_result:
+                    print(f"❌ [FILTER] No thread found and failed to create local thread for reply_to_id: {reply_to_id}")
                     return None
+                
+                thread = thread_result["thread"]
+                newly_created = thread_result["newly_created"]
+                
+                if newly_created:
+                    print(f"🔗 [FILTER] Using newly created local thread {thread.get('thread_id')} for cross-mailbox conversation")
+                    # Se il thread è appena stato creato, il messaggio è già incluso
+                    return {"action": "thread_created", "thread_id": thread.get("thread_id"), "needs_ai": not is_sent}
                 else:
-                    print(f"🌐 [THREAD] Found thread {thread.get('thread_id')} in different mailbox for reply: {reply_to_id}")
+                    print(f"🔗 [FILTER] Using existing local thread {thread.get('thread_id')} for cross-mailbox conversation")
             
             thread_id = thread.get("thread_id")
             
