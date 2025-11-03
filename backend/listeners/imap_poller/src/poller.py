@@ -17,6 +17,9 @@ async def poll_account_inbound(account):
     """
     Controlla i messaggi ricevuti per un singolo account IMAP con tracking basato su timestamp.
     Implementa la logica di primo polling: se è il primo polling, imposta solo la baseline senza inviare messaggi.
+    
+    Returns:
+        int: Numero di messaggi ricevuti processati
     """
     try:
         email = account["email"]
@@ -42,6 +45,8 @@ async def poll_account_inbound(account):
         
         # Recupera messaggi ricevuti
         received_messages = client.fetch_received_messages_since(last_timestamp, is_first_polling, last_message_id)
+        
+        processed_count = 0
         
         if received_messages:
             # Ordina per timestamp per processare dal più vecchio al più recente
@@ -83,6 +88,7 @@ async def poll_account_inbound(account):
                     }
 
                     await publisher.publish_message(message_payload)
+                    processed_count += 1
                 else:
                     log_info("   🔄 Primo polling - messaggio usato solo per baseline")
 
@@ -107,14 +113,14 @@ async def poll_account_inbound(account):
                     recent_message.get("message_id", ""),
                     recent_message.get("timestamp", "")
                 )
-        else:
-            log_info(f"📩 Nessun nuovo messaggio ricevuto per {email}")
         
         # Chiudi connessione
         client.close()
+        return processed_count
         
     except Exception as e:
         log_error(f"❌ Errore nel polling messaggi ricevuti per {account.get('email', 'unknown')}: {str(e)}")
+        return 0
 
 async def poll_account(account):
     try:
@@ -176,6 +182,9 @@ async def poll_account_outbound(account):
     """
     Controlla i messaggi inviati per un singolo account IMAP.
     Implementa la logica di primo polling con soglia di 2 minuti.
+    
+    Returns:
+        int: Numero di messaggi inviati processati
     """
     try:
         email = account["email"]
@@ -201,6 +210,8 @@ async def poll_account_outbound(account):
         
         # Recupera messaggi inviati
         sent_messages = client.fetch_sent_messages_since(last_timestamp, is_first_polling, last_message_id)
+        
+        processed_count = 0
         
         if sent_messages:
             # Ordina per timestamp per processare dal più vecchio al più recente
@@ -242,6 +253,7 @@ async def poll_account_outbound(account):
                     }
 
                     await publisher.publish_message(message_payload)
+                    processed_count += 1
                 else:
                     log_info("   🔄 Primo polling - messaggio usato solo per baseline")
 
@@ -266,26 +278,39 @@ async def poll_account_outbound(account):
                     recent_message.get("message_id", ""),
                     recent_message.get("timestamp", "")
                 )
-        else:
-            log_info(f"📤 Nessun nuovo messaggio inviato per {email}")
         
         # Chiudi connessione
         client.close()
+        return processed_count
         
     except Exception as e:
         log_error(f"❌ Errore nel polling messaggi inviati per {account.get('email', 'unknown')}: {str(e)}")
+        return 0
 
 async def poll_all_accounts():
     accounts = await get_all_imap_accounts()
     sem = asyncio.Semaphore(MAX_CONCURRENT_CONNECTIONS)
+    
+    # Dizionario per tenere traccia dei conteggi per ogni account
+    account_stats = {}
 
     async def sem_task_inbound(account):
         async with sem:
-            await poll_account_inbound(account)
+            received_count = await poll_account_inbound(account)
+            email = account["email"]
+            if email not in account_stats:
+                account_stats[email] = {"received": 0, "sent": 0}
+            account_stats[email]["received"] = received_count
+            return received_count
     
     async def sem_task_outbound(account):
         async with sem:
-            await poll_account_outbound(account)
+            sent_count = await poll_account_outbound(account)
+            email = account["email"]
+            if email not in account_stats:
+                account_stats[email] = {"received": 0, "sent": 0}
+            account_stats[email]["sent"] = sent_count
+            return sent_count
 
     # Crea task per entrambi i tipi di polling
     tasks = []
@@ -295,3 +320,9 @@ async def poll_all_accounts():
     
     # Esegue tutti i task concorrentemente
     await asyncio.gather(*tasks)
+    
+    # Log consolidato per ogni account
+    for email, stats in account_stats.items():
+        received = stats["received"]
+        sent = stats["sent"]
+        log_info(f"📧 [{email}] - Ricevuti: {received}; Inviati: {sent}")
