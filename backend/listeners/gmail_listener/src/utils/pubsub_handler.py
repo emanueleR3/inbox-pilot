@@ -5,6 +5,7 @@ import re
 import html
 from src.gmail_fetcher import fetch_messages_for_user
 from src.broker_client import RabbitMQPublisher 
+from src.utils.logger import log_info 
 
 publisher = RabbitMQPublisher()
 
@@ -41,7 +42,7 @@ async def process_pubsub_message(data: dict):
 
     # Se non ci sono messaggi, stampa log consolidato e esci
     if not messages:
-        print(f"� Notifica per [{email}] - 0 nuovi messaggi")
+        log_info(f"📧 Notifica per [{email}] - 0 nuovi messaggi")
         return
 
     # Filtra i messaggi per escludere quelli inviati dalla stessa email
@@ -98,9 +99,9 @@ async def process_pubsub_message(data: dict):
     # Log consolidato finale
     skipped_count = len(messages) - len(filtered_messages)
     if draft_count > 0:
-        print(f"📧 Notifica per [{email}] - {len(messages)} nuovi messaggi; {skipped_count}/{len(messages)} scartati (motivo: draft)")
+        log_info(f"📧 Notifica per [{email}] - {len(messages)} nuovi messaggi; {skipped_count}/{len(messages)} scartati (motivo: draft)")
     else:
-        print(f"📧 Notifica per [{email}] - {len(messages)} nuovi messaggi; {skipped_count}/{len(messages)} scartati")
+        log_info(f"📧 Notifica per [{email}] - {len(messages)} nuovi messaggi; {skipped_count}/{len(messages)} scartati")
 
 def _serialize_gmail_message(user_email: str, message: dict, history_id: str) -> dict:
     """
