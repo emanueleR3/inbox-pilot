@@ -20,8 +20,6 @@ async def process_pubsub_message(data: dict):
         print("❌ Messaggio Pub/Sub non valido:", data)
         return
     
-    print(f"🔔 NOTIFICA RICEVUTA per {email} - historyId: {history_id}")
-    
     # Usa l'historyId salvato nel DB se disponibile
     start_history_id = history_id  # Default: usa quello della notifica
     try:
@@ -41,15 +39,15 @@ async def process_pubsub_message(data: dict):
     # Fetch async dei messaggi usando l'historyId corretto
     messages = await fetch_messages_for_user(email, start_history_id)
 
-    # Se non ci sono messaggi, esci
+    # Se non ci sono messaggi, stampa log consolidato e esci
     if not messages:
-        print(f"📭 [{email}] Nessun messaggio nuovo da historyId {history_id}")
+        print(f"� Notifica per [{email}] - 0 nuovi messaggi")
         return
-
-    print(f"📧 [{email}] Trovati {len(messages)} nuovi messaggi!")
 
     # Filtra i messaggi per escludere quelli inviati dalla stessa email
     filtered_messages = []
+    draft_count = 0
+    
     for msg in messages:
         payload = _serialize_gmail_message(email, msg, history_id)
         sender_email = _extract_email_from_header(payload.get('from', ''))
@@ -88,21 +86,21 @@ async def process_pubsub_message(data: dict):
 
         # Salta i messaggi con label DRAFT (bozze)
         if 'DRAFT' in labels:
-            print(f"🚫 Messaggio saltato - ha label DRAFT: {payload.get('subject', 'N/A')}")
+            draft_count += 1
             continue
             
         filtered_messages.append(payload)
-
-    # Se non ci sono messaggi da processare dopo il filtro
-    if not filtered_messages:
-        print(f"📭 [{email}] Nessun messaggio da processare dopo il filtro (tutti erano dalla stessa email)")
-        return
 
     # Invia solo i messaggi filtrati a RabbitMQ
     for payload in filtered_messages:
         await publisher.publish_message(payload)
 
-    print(f"✅ [{email}] Processati {len(filtered_messages)}/{len(messages)} messaggi → inviati a RabbitMQ (saltati {len(messages) - len(filtered_messages)} messaggi dalla stessa email)")
+    # Log consolidato finale
+    skipped_count = len(messages) - len(filtered_messages)
+    if draft_count > 0:
+        print(f"📧 Notifica per [{email}] - {len(messages)} nuovi messaggi; {skipped_count}/{len(messages)} scartati (motivo: draft)")
+    else:
+        print(f"📧 Notifica per [{email}] - {len(messages)} nuovi messaggi; {skipped_count}/{len(messages)} scartati")
 
 def _serialize_gmail_message(user_email: str, message: dict, history_id: str) -> dict:
     """

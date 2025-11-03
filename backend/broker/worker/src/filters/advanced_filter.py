@@ -151,7 +151,7 @@ class AdvancedEmailFilter:
                 # External reply - update thread with new message
                 timestamp_str = email_data.get("timestamp") or email_data.get("date")
                 message_datetime = self._parse_timestamp(timestamp_str)
-                sender_email = email_data.get("from")
+                sender_email = self._extract_email_address(email_data.get("from"))
                 cc_emails = self._extract_cc_emails(email_data.get("cc"))
                 
                 if self.thread_repo.update_thread_with_new_message(
@@ -228,7 +228,7 @@ class AdvancedEmailFilter:
             cc_emails = self._extract_cc_emails(email_data.get("cc"))
             
             # For external emails, sender_email is the 'from' field, not user_email
-            sender_email = email_data.get("from")
+            sender_email = self._extract_email_address(email_data.get("from"))
             
             # Create the thread with minimal data as requested
             thread_data = self.thread_repo.create_thread(
@@ -284,7 +284,7 @@ class AdvancedEmailFilter:
                 attachment_emails_id=None,  # No attachments for now
                 category="STARTED_BY_HUMAN",  # Category for user-initiated conversations
                 human_response=True,  # User initiated, so it's a human response
-                last_sender_email=email_data.get("user_email"),
+                last_sender_email=self._extract_email_address(email_data.get("user_email")),
                 box_email=email_data.get("user_email")  # Email of the monitored mailbox
             )
             
@@ -293,6 +293,34 @@ class AdvancedEmailFilter:
         except Exception as e:
             print(f"❌ [FILTER] Error creating new thread: {e}")
             return None
+    
+    def _extract_email_address(self, email_field: str) -> str:
+        """
+        Extracts the email address from various formats.
+        
+        Handles formats like:
+        - "email@domain.com"
+        - "Name Surname <email@domain.com>"
+        - "Name Surname<email@domain.com>"
+        
+        Args:
+            email_field: Email field that may contain name and email
+            
+        Returns:
+            Clean email address
+        """
+        if not email_field:
+            return ""
+        
+        # If there are angle brackets, extract email from within them
+        if '<' in email_field and '>' in email_field:
+            start = email_field.find('<')
+            end = email_field.find('>')
+            if start != -1 and end != -1 and end > start:
+                return email_field[start + 1:end].strip()
+        
+        # If no brackets, assume the whole field is the email
+        return email_field.strip()
     
     def _parse_timestamp(self, timestamp_str: str) -> datetime:
         """

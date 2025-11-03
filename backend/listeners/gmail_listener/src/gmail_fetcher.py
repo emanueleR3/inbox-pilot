@@ -48,8 +48,6 @@ def _fetch_messages_sync(email: str, start_history_id: str):
             result = update_history_id(email, new_history_id)
             if result is False:
                 log_error(f"Errore nell'aggiornamento dello historyId per {email}")
-            else:
-                log_info(f"HistoryId aggiornato per {email} da {start_history_id} a {new_history_id}")
 
     except Exception as e:
         log_error(f"Errore fetch Gmail per {email}: {e}")
