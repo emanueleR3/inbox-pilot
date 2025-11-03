@@ -919,6 +919,5 @@ class ImapClient:
                 
                 # Logout sempre
                 self.conn.logout()
-                log_info(f"✅ Connessione IMAP chiusa correttamente per {self.username}")
         except Exception as e:
             log_error(f"Errore durante chiusura connessione IMAP per {self.username}: {str(e)}")

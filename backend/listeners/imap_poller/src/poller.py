@@ -163,22 +163,9 @@ async def poll_account(account):
             await publisher.publish_message(message_payload)
             client.mark_as_seen(mail["id"])
 
-        # Processa messaggi inviati (Sent folder) - solo log, non invia al broker
-        sent_mails = client.fetch_sent_messages()
-        for mail in sent_mails:
-            log_info(f"📤 OUTBOUND MAIL (solo log) da {account['email']} a {mail['to']} | {mail['subject']}")
-            log_info(f"   📧 Da: {mail['from']}")
-            log_info(f"   📧 A: {mail['to']}")
-            log_info(f"   📅 Data: {mail['date']}")
-            log_info(f"   📝 Oggetto: {mail['subject']}")
-            log_info(f"   📄 Corpo (primi 200 char): {mail['body_text'][:200]}...")
-            log_info(f"   🆔 Message ID: {mail['message_id']}")
-            log_info(f"   🔗 Thread ID: {mail['reply_to_id']}")
-            log_info(f"   📊 Dimensione: {mail['size']} bytes")
-            log_info("   💡 Messaggio outbound IMAP non inviato al broker (solo monitoraggio)")
-            
-            # Marca come letto anche le email inviate per evitare di riprocessarle
-            client.mark_as_seen(mail["id"])
+        # Processa messaggi inviati (Sent folder) - ora invia al broker tramite poll_account_outbound
+        # La logica è stata spostata nella funzione poll_account_outbound
+        # che viene chiamata separatamente per gestire il tracking dei timestamp
 
         client.close()
 
@@ -222,29 +209,42 @@ async def poll_account_outbound(account):
             latest_message = None
             
             for message in sent_messages:
-                # Log dettagliato del messaggio inviato (non inviare al broker)
-                log_info("="*80)
-                log_info("📤 IMAP OUTBOUND - Messaggio inviato rilevato:")
-                log_info(f"   📧 Account: {email}")
-                log_info(f"   📧 Da: {message.get('from')}")
-                log_info(f"   📧 A: {message.get('to')}")
-                if message.get('cc'):
-                    log_info(f"   📧 CC: {message.get('cc')}")
-                log_info(f"   📧 Oggetto: {message.get('subject')}")
-                log_info(f"   📧 Data: {message.get('date')}")
-                log_info(f"   📧 Message-ID: {message.get('message_id')}")
-                log_info(f"   📧 Thread-ID: {message.get('reply_to_id')}")
-                log_info(f"   📧 Cartella: {message.get('folder')}")
-                log_info(f"   📊 Dimensione: {message.get('size')} bytes")
-                
-                # Mostra un'anteprima del corpo (primi 150 caratteri)
-                body_preview = message.get('body_text', '')[:150]
-                if len(body_preview) >= 150:
-                    body_preview += "..."
-                log_info(f"   📄 Anteprima corpo: {body_preview}")
-                log_info("   💡 Messaggio outbound IMAP - non inviato al broker (solo monitoraggio)")
-                log_info("="*80)
-                
+                # Se NON è il primo polling, invia al broker
+                if not is_first_polling:
+                    log_info("   📤 Messaggio outbound IMAP - inviato al broker")
+                    
+                    # Importa le funzioni per controllare no-reply e sent
+                    from src.utils.mail_parser import is_no_reply_email, is_sent_message
+                    
+                    message_payload = {
+                        "provider": "imap",
+                        "user_email": email,
+                        "mail_id": message["id"],
+                        "message_id": message["message_id"],
+                        "reply_to_id": message["reply_to_id"],
+                        "from": message["from"],
+                        "to": message["to"],
+                        "cc": message["cc"],
+                        "bcc": message["bcc"],
+                        "subject": message["subject"],
+                        "date": message["date"],
+                        "timestamp": message["timestamp"],
+                        "body_text": message["body_text"],
+                        "body_html": message["body_html"],
+                        "content_type": message["content_type"],
+                        "charset": message["charset"],
+                        "size": message["size"],
+                        "raw": message["raw"].decode(errors="ignore"),
+                        "subscription_id": account.get("subscription_id"),
+                        "folder_type": "sent",
+                        "no_reply": is_no_reply_email(message.get("from", "")),
+                        "is_sent": is_sent_message(message.get("from", ""), email, "sent"),
+                    }
+
+                    await publisher.publish_message(message_payload)
+                else:
+                    log_info("   🔄 Primo polling - messaggio usato solo per baseline")
+
                 latest_message = message
             
             # Aggiorna il timestamp dell'ultimo messaggio processato

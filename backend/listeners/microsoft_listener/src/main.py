@@ -119,37 +119,21 @@ async def receive_microsoft_notification(request: Request):
         log_error(f"❌ MICROSOFT - {other_errors} altri errori su {len(messages)} tentativi")
     
     if valid_messages:
-        # Separa i messaggi inbound e outbound
+        # Invia TUTTI i messaggi al broker RabbitMQ (sia inbound che outbound)
+        await publish_to_broker(valid_messages)
+        
+        # Separa i messaggi per logging
         inbound_messages = [msg for msg in valid_messages if not msg.get('is_sent', False)]
         outbound_messages = [msg for msg in valid_messages if msg.get('is_sent', False)]
         
-        # Pubblica solo i messaggi inbound sul broker RabbitMQ
+        log_info(f"✅ MICROSOFT - {len(valid_messages)} messaggi totali inviati al broker RabbitMQ")
         if inbound_messages:
-            await publish_to_broker(inbound_messages)
-            log_info(f"✅ MICROSOFT - {len(inbound_messages)} messaggi INBOUND inviati al broker RabbitMQ")
-        
-        # Log dei messaggi outbound solo per monitoraggio admin (non vanno al broker)
+            log_info(f"   📥 {len(inbound_messages)} messaggi INBOUND")
         if outbound_messages:
-            log_info(f"📤 MICROSOFT - {len(outbound_messages)} messaggi OUTBOUND rilevati (solo monitoraggio admin)")
-        
-        # Log dettagliato per ogni messaggio processato
-        for msg in valid_messages:
-            message_type = "OUTBOUND" if msg.get('is_sent', False) else "INBOUND"
-            action = "MONITORATO" if msg.get('is_sent', False) else "INVIATO AL BROKER"
-            
-            print("="*80)
-            print(f"🎯 MICROSOFT - Messaggio {message_type} processato e {action}:")
-            print(f"📧 Provider: {msg.get('provider')}")
-            print(f"📧 User: {msg.get('user_email')}")
-            print(f"📧 Da: {msg.get('from')}")
-            print(f"📧 A: {msg.get('to')}")
-            print(f"📧 Oggetto: {msg.get('subject')}")
-            print(f"📧 Labels: {msg.get('labels', [])}")
-            print(f"📧 Timestamp: {msg.get('timestamp')}")
-            print("="*80)
+            log_info(f"   � {len(outbound_messages)} messaggi OUTBOUND")
         
         total_processed = len(inbound_messages) + len(outbound_messages)
-        log_info(f"✅ MICROSOFT - Totale messaggi processati: {total_processed} ({len(inbound_messages)} inbound + {len(outbound_messages)} outbound)")
+        log_info(f"✅ MICROSOFT - Totale messaggi processati: {total_processed}")
     else:
         log_info("⚠️ MICROSOFT - Nessun messaggio valido da processare")
 
