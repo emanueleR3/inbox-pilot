@@ -231,9 +231,10 @@ class ThreadRepository:
             return False
     
     def update_thread_with_new_message(self, thread_id: str, message_id: str, message_timestamp: datetime, 
-                                     sender_email: str, cc_emails: List[str] = None) -> bool:
+                                     sender_email: str, cc_emails: List[str] = None, reply_to_id: str = None) -> bool:
         """
         Updates a thread with a new message (for received emails).
+        Ensures reply_to_id is in history before adding the new message_id.
         
         Args:
             thread_id: Thread ID to update
@@ -241,6 +242,7 @@ class ThreadRepository:
             message_timestamp: Timestamp of the new message
             sender_email: Email of the sender
             cc_emails: Optional CC emails to add
+            reply_to_id: Optional reply-to message ID to ensure is in history
             
         Returns:
             True if updated successfully
@@ -252,9 +254,20 @@ class ThreadRepository:
                 print(f"❌ [THREAD] Thread {thread_id} not found for message update")
                 return False
             
-            # Prepare updated data
+            # Prepare updated history with reply_to_id check
             current_history = current_thread.get("history", [])
-            updated_history = current_history + [message_id]
+            updated_history = current_history.copy()
+            
+            # Ensure reply_to_id is in history (if provided and missing)
+            if reply_to_id and reply_to_id != "no" and reply_to_id not in updated_history:
+                print(f"⚠️ [THREAD] Reply-to message {reply_to_id} missing from history, adding it")
+                updated_history.append(reply_to_id)
+            
+            # Add new message_id if not already present
+            if message_id not in updated_history:
+                updated_history.append(message_id)
+            else:
+                print(f"🔄 [THREAD] Message {message_id} already in history for thread {thread_id}")
             
             # Merge CC emails if provided
             current_cc_emails = current_thread.get("cc_emails", [])
@@ -369,3 +382,34 @@ class ThreadRepository:
         except Exception as e:
             print(f"❌ Error checking message_id existence: {e}")
             return False
+    
+    def find_thread_by_reply_to_global(self, reply_to_id: str) -> Optional[dict]:
+        """
+        Cerca un thread contenente reply_to_id in TUTTE le mailboxes.
+        Usato quando la ricerca locale fallisce per gestire conversazioni cross-mailbox.
+        
+        Args:
+            reply_to_id: Message ID to search for in thread histories
+            
+        Returns:
+            Thread data if found, None otherwise
+        """
+        try:
+            # Cerca in tutti i thread, senza filtro box_email
+            response = self.supabase.table("threads").select("*").execute()
+            
+            # Controlla manualmente nei risultati (stesso approccio di message_id_exists)
+            for thread in response.data:
+                history = thread.get("history", [])
+                last_message_id = thread.get("last_message_id")
+                
+                if (last_message_id == reply_to_id or 
+                    (history and reply_to_id in history)):
+                    print(f"🌐 [THREAD] Found thread {thread.get('thread_id')} in mailbox {thread.get('box_email')} for reply: {reply_to_id}")
+                    return thread
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error in global thread search: {e}")
+            return None

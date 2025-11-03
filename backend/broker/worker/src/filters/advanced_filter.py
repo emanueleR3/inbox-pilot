@@ -132,8 +132,14 @@ class AdvancedEmailFilter:
             # Step 1: Find thread containing reply_to_id
             thread = self.thread_repo.find_thread_by_reply_to(reply_to_id, box_email)
             if not thread:
-                print(f"❌ [FILTER] No thread found for reply_to_id: {reply_to_id}")
-                return None
+                print(f"🔍 [THREAD] No thread found in current mailbox for: {reply_to_id}")
+                # Fallback: cerca in tutte le mailboxes (cross-mailbox search)
+                thread = self.thread_repo.find_thread_by_reply_to_global(reply_to_id)
+                if not thread:
+                    print(f"❌ [FILTER] No thread found globally for reply_to_id: {reply_to_id}")
+                    return None
+                else:
+                    print(f"🌐 [THREAD] Found thread {thread.get('thread_id')} in different mailbox for reply: {reply_to_id}")
             
             thread_id = thread.get("thread_id")
             
@@ -149,8 +155,15 @@ class AdvancedEmailFilter:
                 message_datetime = self._parse_timestamp(timestamp_str)
                 sender_email = self._extract_email_address(email_data.get("from"))
                 
+                # Check if this is a cross-mailbox update
+                thread_box_email = thread.get("box_email")
+                is_cross_mailbox = thread_box_email != box_email
+                
                 if self.thread_repo.set_human_response_needed(thread_id, message_id, message_datetime, sender_email):
-                    print(f"👤 [FILTER] Human response set for thread {thread_id}")
+                    if is_cross_mailbox:
+                        print(f"👤 [FILTER] Human response set for cross-mailbox thread {thread_id} (from {box_email} to {thread_box_email})")
+                    else:
+                        print(f"👤 [FILTER] Human response set for thread {thread_id}")
                     # TODO: notifica, aggiornare summary e category
                     return {"action": "human_response_set", "thread_id": thread_id}
                 else:
@@ -163,10 +176,17 @@ class AdvancedEmailFilter:
                 sender_email = self._extract_email_address(email_data.get("from"))
                 cc_emails = self._extract_cc_emails(email_data.get("cc"))
                 
+                # Check if this is a cross-mailbox update
+                thread_box_email = thread.get("box_email")
+                is_cross_mailbox = thread_box_email != box_email
+                
                 if self.thread_repo.update_thread_with_new_message(
-                    thread_id, message_id, message_datetime, sender_email, cc_emails
+                    thread_id, message_id, message_datetime, sender_email, cc_emails, reply_to_id
                 ):
-                    print(f"📝 [FILTER] Thread {thread_id} updated with new message {message_id}")
+                    if is_cross_mailbox:
+                        print(f"📝 [FILTER] Thread {thread_id} updated with cross-mailbox message from {box_email} to {thread_box_email}")
+                    else:
+                        print(f"📝 [FILTER] Thread {thread_id} updated with new message {message_id}")
                     return {"action": "thread_updated", "thread_id": thread_id}
                 else:
                     print(f"❌ [FILTER] Failed to update thread {thread_id}")
