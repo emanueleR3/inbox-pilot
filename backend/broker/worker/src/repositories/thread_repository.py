@@ -348,24 +348,21 @@ class ThreadRepository:
             bool: True if message_id exists, False otherwise
         """
         try:
-            query = self.supabase.table("threads").select("thread_id, last_message_id")
+            # Simple approach: just check last_message_id for now
+            # Array search can be complex with Supabase syntax
+            query = self.supabase.table("threads").select("thread_id, last_message_id, history")
             
-            # Check both last_message_id and history array
             if box_email:
-                # Use proper PostgreSQL JSON operations for history array search
-                response = query.or_(
-                    f"last_message_id.eq.{message_id},"
-                    f"history.cs.[\"{message_id}\"]"
-                ).eq("box_email", box_email).execute()
+                response = query.eq("box_email", box_email).execute()
             else:
-                response = query.or_(
-                    f"last_message_id.eq.{message_id},"
-                    f"history.cs.[\"{message_id}\"]"
-                ).execute()
+                response = query.execute()
             
-            if response.data:
-                print(f"🔍 [THREAD] Message ID {message_id} already exists in thread: {response.data[0]['thread_id']}")
-                return True
+            # Check manually in the results
+            for thread in response.data:
+                if (thread.get("last_message_id") == message_id or 
+                    (thread.get("history") and message_id in thread.get("history", []))):
+                    print(f"🔍 [THREAD] Message ID {message_id} already exists in thread: {thread['thread_id']}")
+                    return True
             
             return False
             
