@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, status
+from fastapi import APIRouter, Depends, Body
 from src.core.dependecy import get_current_user
 from src.modules.auth.src.controllers.custom_provider_controller import CustomProviderController
 
@@ -96,5 +96,4 @@ async def custom_login_route(
     )
 ):
     res = CustomProviderController.custom_provider_login(payload)
-
     return {"status": "success", "message": "Credenziali custom provider salvate con successo", "data": res}

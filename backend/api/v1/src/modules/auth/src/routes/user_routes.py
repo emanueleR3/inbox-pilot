@@ -1,11 +1,4 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, status
-from src.core.dependecy import get_current_user
-from src.modules.auth.src.controllers.user_controller import UserController
-
-router = APIRouter()
-controller = UserController()
-
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Depends, Body, status
 from src.core.dependecy import get_current_user
 from src.modules.auth.src.controllers.user_controller import UserController
 
@@ -40,7 +33,7 @@ def get_user_by_email(email: str):
     status_code=status.HTTP_201_CREATED,
     summary="Crea un nuovo account utente",
     description="""
-    Crea un nuovo utente con la sua sottoscrizione associata.
+    Crea un nuovo utente con la sua sottoscrizione associata. Effettua anche il login.
     """,
     responses={
         201: {
@@ -52,12 +45,19 @@ def get_user_by_email(email: str):
                         "result": {
                             "user_id": "abc123",
                             "email": "user@example.com",
-                            "subscription": {
-                                "subscription_id": "sub_xyz789",
-                                "name": "TechVision Srl",
-                                "plan": "premium",
-                                "active": True
-                            }
+                            "subscriptions": [
+                                {
+                                    "subscription_id": "sub_xyz789",
+                                    "name": "TechVision Srl",
+                                    "vat_number": "IT123456789",
+                                    "adress": "Corso Francia 100",
+                                    "active": True,
+                                    "current_period_end": "2025-12-31T23:59:59Z",
+                                    "plan": "premium",
+                                }
+                            ],
+                            "jwt": "token",
+                            "sub_selected": 0
                         }
                     }
                 }
@@ -69,14 +69,8 @@ def get_user_by_email(email: str):
                 "application/json": {
                     "examples": {
                         "missing_fields": {
-                            "value": {"detail": "Email e password sono richiesti"}
+                            "value": {"detail": "Email e password e i dati della sottoscrizione sono richiesti"}
                         },
-                        "missing_subscription": {
-                            "value": {"detail": "I dati della sottoscrizione sono richiesti"}
-                        },
-                        "weak_password": {
-                            "value": {"detail": "Password troppo debole. Usa almeno 6 caratteri"}
-                        }
                     }
                 }
             }
@@ -145,18 +139,10 @@ def create_user_with_sub(
         400: {
             "description": "Richiesta non valida",
             "content": {
-                "application/json": {
-                    "examples": {
-                        "missing_fields": {
-                            "value": {"detail": "Email e password sono richiesti"}
-                        },
-                        "missing_subscription": {
-                            "value": {"detail": "I dati della sottoscrizione sono richiesti"}
-                        },
-                        "weak_password": {
-                            "value": {"detail": "Password troppo debole. Usa almeno 6 caratteri"}
-                        }
-                    }
+                "examples": {
+                    "missing_fields": {
+                        "value": {"detail": "Email e password e dettagli della subscription sono richiesti"}
+                    },
                 }
             }
         },
@@ -184,10 +170,11 @@ def add_new_user(
         example={
             "email": "user@example.com", 
             "password": "strongpassword123",
-            "subscription": "sub_id"
+            "subscription_id": "sub_id"
         },
         description="Email e password per la registrazione del nuovo utente.",
-    )
+    ),
+    #current_user=Depends(get_current_user)
 ):
     result = controller.add_new_user(payload)
     return {"message": "Registrazione completata", "result": result}
@@ -211,10 +198,13 @@ def add_new_user(
                                 "session of the user"
                             },
                             "subscription": {
-                                "subscription_id": "sub_xyz789",
                                 "name": "TechVision Srl",
+                                "vat_number": "IT12345678901",
+                                "city": "Milano",
+                                "address": "Via Roma 42",
+                                "active": True,
+                                "current_period_end": "2025-12-31T23:59:59Z",
                                 "plan": "premium",
-                                "active": True
                             }
                         }
                     }
@@ -227,14 +217,8 @@ def add_new_user(
                 "application/json": {
                     "examples": {
                         "missing_fields": {
-                            "value": {"detail": "Email e password sono richiesti"}
+                            "value": {"detail": "Email e password e dettagli della subscription sono richiesti"}
                         },
-                        "missing_subscription": {
-                            "value": {"detail": "I dati della sottoscrizione sono richiesti"}
-                        },
-                        "weak_password": {
-                            "value": {"detail": "Password troppo debole. Usa almeno 6 caratteri"}
-                        }
                     }
                 }
             }
@@ -243,7 +227,7 @@ def add_new_user(
             "description": "Conflitto",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Un utente con questa email esiste già"}
+                    "example": {"detail": "Questa sottoscrizione esiste già"}
                 }
             }
         },
@@ -261,16 +245,23 @@ def create_new_sub(
     payload: dict = Body(
         ...,
         example={
-            "email": "user@example.com", 
-            "password": "strongpassword123",
+            "user": {
+                "id": "userid",
+                "email": "email",
+                "subscriptions": [
+                    "...."
+                ],
+                "jwt": "jwt_token",
+                "sub_selected": "0"
+            },
             "subscription": {
-                "name": "TechVision Srl",
-                "vat_number": "IT12345678901",
-                "city": "Milano",
-                "address": "Via Roma 42",
+                "name": "Palestra Torino123",
+                "vat_number": "IT123456789",
+                "city": "Torino",
+                "address": "Corso Francia 100",
                 "active": True,
                 "current_period_end": "2025-12-31T23:59:59Z",
-                "plan": "premium",
+                "plan": "Premium"
             }
         },
         description="Email e password per la registrazione del nuovo utente.",
@@ -317,11 +308,23 @@ def get_users_by_subscription(subscription_id: str):
                 "application/json": {
                     "example": {
                         "message": "Login effettuato",
-                        "session": {
-                            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                            "refresh_token": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-                            "expires_in": 3600,
-                            "token_type": "bearer"
+                        "result": {
+                            "id": "user123",
+                            "email": "user@example.it",
+                            "subscriptions": [
+                                {
+                                    "subscription_id": "sub001",
+                                    "name": "example name",
+                                    "vat_number": "1234567890",
+                                    "city": "Torino",
+                                    "address": "via Bobbio 12",
+                                    "active": "true",
+                                    "current_period_end": "2025-12-04T00:00:00Z",
+                                    "plan": "Premium"
+                                }
+                            ],
+                            "jwt": "token",
+                            "sub_selected": 0
                         }
                     }
                 }
@@ -335,9 +338,6 @@ def get_users_by_subscription(subscription_id: str):
                         "missing_fields": {
                             "value": {"detail": "Email e password sono richiesti"}
                         },
-                        "unverified": {
-                            "value": {"detail": "Email non verificata. Controlla la tua casella email"}
-                        }
                     }
                 }
             }
@@ -346,7 +346,7 @@ def get_users_by_subscription(subscription_id: str):
             "description": "Autenticazione fallita",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Email o password non corretti"}
+                    "example": {"detail": "Credenziali non valide"}
                 }
             }
         },
@@ -354,7 +354,7 @@ def get_users_by_subscription(subscription_id: str):
             "description": "Errore interno del server",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Errore durante l'autenticazione"}
+                    "example": {"detail": "Errore interno nel servizio di autenticazione"}
                 }
             }
         }
@@ -451,7 +451,8 @@ def update_password(
             "new_password": "nuovapasswordSicura123",
         },
         description="Vecchia e nuova password dell'utente.",
-    )
+    ),
+    current_user=Depends(get_current_user)
 ):
     return controller.update_password(payload)
 
