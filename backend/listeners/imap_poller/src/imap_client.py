@@ -1,5 +1,6 @@
 import imaplib
 import email
+import email.message
 import ssl
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
