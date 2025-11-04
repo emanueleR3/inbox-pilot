@@ -97,6 +97,15 @@ class AttachmentService:
                 continue
         
         print(f"📎 [ATTACHMENT] Successfully processed {len(processed_attachments)}/{len(attachments_metadata)} attachments")
+        
+        # Update thread has_attachments flag if any attachments were processed
+        if processed_attachments:
+            try:
+                self.thread_repo.set_thread_has_attachments(thread_id, True)
+                print(f"📎 [ATTACHMENT] Updated has_attachments=True for thread {thread_id}")
+            except Exception as e:
+                print(f"❌ [ATTACHMENT] Failed to update has_attachments flag: {e}")
+        
         return processed_attachments
     
     def _create_storage_directory(self, provider: str, user_email: str, email_date: str) -> str:
@@ -521,7 +530,7 @@ class AttachmentService:
         self, attachment_info: dict, thread_id: int, email_data: dict
     ) -> Optional[Dict]:
         """
-        Save attachment metadata to database.
+        Save attachment metadata to database with deduplication check.
         
         Args:
             attachment_info: Processed attachment info
@@ -532,9 +541,53 @@ class AttachmentService:
             Database attachment record or None if failed
         """
         try:
-            user_email = email_data.get("user_email") or email_data.get("from")
+            # Extract sender and receiver information from email_data
+            sender_email = email_data.get("from", "")
+            receiver_email = email_data.get("to", "")
+            cc_emails = email_data.get("cc", [])
+            message_id = email_data.get("message_id")
             
-            # Get service_id for the email
+            # Check if attachment already exists (deduplication)
+            file_hash = attachment_info.get("file_hash")
+            if file_hash and message_id:
+                existing_attachment_id = self.thread_repo.attachment_exists_by_hash_and_message(file_hash, message_id)
+                if existing_attachment_id:
+                    print(f"❎ [ATTACHMENT] Attachment already exists with ID: {existing_attachment_id}")
+                    return {
+                        "attachment_id": existing_attachment_id,
+                        "filename": attachment_info["filename"],
+                        "file_path": attachment_info["file_path"],
+                        "size": attachment_info["size"],
+                        "file_hash": file_hash,
+                        "deduplication": True
+                    }
+            
+            # Normalize email fields to ensure consistency
+            if isinstance(receiver_email, str):
+                # If "to" is a single string, use it as receiver
+                receiver = receiver_email
+            elif isinstance(receiver_email, list) and len(receiver_email) > 0:
+                # If "to" is a list, take the first one as primary receiver
+                receiver = receiver_email[0]
+                # Add the rest to CC if not already there
+                additional_receivers = receiver_email[1:]
+                if isinstance(cc_emails, list):
+                    cc_emails.extend(additional_receivers)
+                else:
+                    cc_emails = additional_receivers
+            else:
+                receiver = ""
+            
+            # Ensure cc_emails is a list
+            if not isinstance(cc_emails, list):
+                if cc_emails:
+                    cc_emails = [cc_emails]
+                else:
+                    cc_emails = []
+            
+            # Get service_id - we can use any of the involved emails, 
+            # but let's prioritize the mailbox that's processing this (user_email)
+            user_email = email_data.get("user_email") or receiver
             service_id = self.thread_repo.get_service_id_by_email(user_email)
             
             if not service_id:
@@ -543,15 +596,19 @@ class AttachmentService:
             
             attachment_data = {
                 "thread_id": thread_id,
-                "message_id": email_data.get("message_id"),
-                "email": user_email,  # Email address of mailbox owner
+                "message_id": message_id,
+                "sender": sender_email,  # Email address of sender
+                "receiver": receiver,  # Primary receiver email
+                "cc": cc_emails,  # Array of CC addresses
                 "filename": attachment_info["filename"],  # Original filename
                 "file_path": attachment_info["file_path"],  # Full storage path
                 "mime_type": attachment_info["mime_type"],
                 "size": attachment_info["size"],  # Size in bytes
-                "file_hash": attachment_info["file_hash"],
+                "file_hash": file_hash,
                 "service_id": service_id
             }
+            
+            print(f"📎 [ATTACHMENT] Saving with sender:{sender_email}, receiver:{receiver}, cc:{cc_emails}")
             
             # Save to database using thread repository
             attachment_id = self.thread_repo.save_attachment(attachment_data)

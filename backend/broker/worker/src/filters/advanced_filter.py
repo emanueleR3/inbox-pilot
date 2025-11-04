@@ -204,8 +204,11 @@ class AdvancedEmailFilter:
                 thread_box_email = thread.get("box_email")
                 is_cross_mailbox = thread_box_email != box_email
                 
+                # Check if this email has attachments
+                has_attachments = bool(email_data.get("attachments"))
+                
                 if self.thread_repo.update_thread_with_new_message(
-                    thread_id, message_id, message_datetime, sender_email, cc_emails, reply_to_id
+                    thread_id, message_id, message_datetime, sender_email, cc_emails, reply_to_id, has_attachments
                 ):
                     if is_cross_mailbox:
                         print(f"📝 [FILTER] Thread {thread_id} updated with cross-mailbox message from {box_email} to {thread_box_email}")
@@ -283,6 +286,9 @@ class AdvancedEmailFilter:
             # For external emails, sender_email is the 'from' field, not user_email
             sender_email = self._extract_email_address(email_data.get("from"))
             
+            # Check if this email has attachments
+            has_attachments = bool(email_data.get("attachments"))
+            
             # Create the thread with minimal data as requested
             thread_data = self.thread_repo.create_thread(
                 started_at=message_datetime,
@@ -293,7 +299,7 @@ class AdvancedEmailFilter:
                 summary=None,  # Will be filled later by AI
                 last_message_id=email_data.get("message_id"),
                 last_message_at=message_datetime,
-                attachment_emails_id=None,  # Set to None as requested
+                has_attachments=has_attachments,  # Boolean flag for attachments
                 category=None,  # Set to None as requested
                 human_response=False,  # External user initiated, no human response yet
                 last_sender_email=sender_email,
@@ -324,6 +330,9 @@ class AdvancedEmailFilter:
             # Extract CC emails if present
             cc_emails = self._extract_cc_emails(email_data.get("cc"))
             
+            # Check if this email has attachments
+            has_attachments = bool(email_data.get("attachments"))
+            
             # Create the thread
             thread_data = self.thread_repo.create_thread(
                 started_at=message_datetime,
@@ -334,7 +343,7 @@ class AdvancedEmailFilter:
                 summary=None,  # Will be filled later by AI
                 last_message_id=email_data.get("message_id"),
                 last_message_at=message_datetime,
-                attachment_emails_id=None,  # No attachments for now
+                has_attachments=has_attachments,  # Boolean flag for attachments
                 category="STARTED_BY_HUMAN",  # Category for user-initiated conversations
                 human_response=True,  # User initiated, so it's a human response
                 last_sender_email=self._extract_email_address(email_data.get("user_email")),

@@ -29,7 +29,7 @@ class ThreadRepository:
         summary: str = None,
         last_message_id: str = None,
         last_message_at: datetime = None,
-        attachment_emails_id: List[str] = None,
+        has_attachments: bool = False,
         category: str = None,
         human_response: bool = None,
         last_sender_email: str = None,
@@ -49,7 +49,7 @@ class ThreadRepository:
             summary: Thread summary
             last_message_id: ID of the last message
             last_message_at: Timestamp of last message
-            attachment_emails_id: Array of message IDs with attachments
+            has_attachments: Boolean flag indicating if thread has attachments
             category: Thread category
             human_response: Whether human response is needed
             last_sender_email: Email of last sender
@@ -75,7 +75,7 @@ class ThreadRepository:
                 "summary": summary,  # Can be None now
                 "last_message_id": last_message_id,
                 "last_message_at": last_message_at.isoformat() if last_message_at else None,
-                "attachment_emails_id": attachment_emails_id if attachment_emails_id is not None else [],
+                "has_attachments": has_attachments,
                 "category": category if category is not None else "",  # Default to empty string if not provided
                 "human_response": human_response if human_response is not None else False,
                 "last_sender_email": last_sender_email,
@@ -231,7 +231,8 @@ class ThreadRepository:
             return False
     
     def update_thread_with_new_message(self, thread_id: str, message_id: str, message_timestamp: datetime, 
-                                     sender_email: str, cc_emails: List[str] = None, reply_to_id: str = None) -> bool:
+                                     sender_email: str, cc_emails: List[str] = None, reply_to_id: str = None, 
+                                     has_new_attachments: bool = False) -> bool:
         """
         Updates a thread with a new message (for received emails).
         Ensures reply_to_id is in history before adding the new message_id.
@@ -243,6 +244,7 @@ class ThreadRepository:
             sender_email: Email of the sender
             cc_emails: Optional CC emails to add
             reply_to_id: Optional reply-to message ID to ensure is in history
+            has_new_attachments: If True, sets has_attachments flag to True for the thread
             
         Returns:
             True if updated successfully
@@ -284,6 +286,11 @@ class ThreadRepository:
                 "last_sender_email": sender_email,
                 "cc_emails": updated_cc_emails
             }
+            
+            # If this message has attachments, set has_attachments to True
+            if has_new_attachments:
+                update_data["has_attachments"] = True
+                print(f"📎 [THREAD] Setting has_attachments=True for thread {thread_id} due to new attachments")
             
             # Update the thread
             response = self.supabase.table("threads").update(update_data).eq("thread_id", thread_id).execute()
@@ -503,6 +510,7 @@ class ThreadRepository:
                 cc_emails=cc_emails or [],
                 last_message_id=message_id,
                 last_message_at=message_timestamp,
+                has_attachments=False,  # Will be updated if attachments are processed
                 category="CROSS_MAILBOX_REPLY",
                 human_response=False,
                 last_sender_email=sender_email,
@@ -548,7 +556,9 @@ class ThreadRepository:
             attachment_data: Dictionary containing attachment metadata with keys:
                 - thread_id: UUID of the thread
                 - message_id: ID of the email message
-                - email: Email address of the mailbox owner
+                - sender: Email address of the sender
+                - receiver: Email address of the receiver
+                - cc: Array of CC email addresses
                 - filename: Original filename of the attachment
                 - file_path: Full path where file is stored on server
                 - mime_type: MIME type of the file
@@ -563,7 +573,9 @@ class ThreadRepository:
             # Map the attachment_data to the correct database fields
             db_data = {
                 "message_id": attachment_data.get("message_id"),
-                "email": attachment_data.get("email"),  # Email address of mailbox owner
+                "sender": attachment_data.get("sender"),  # Email address of sender
+                "receiver": attachment_data.get("receiver"),  # Email address of receiver
+                "cc": attachment_data.get("cc", []),  # Array of CC addresses
                 "file_name": attachment_data.get("filename"),  # Original filename
                 "file_path": attachment_data.get("file_path"),  # Full storage path
                 "mime_type": attachment_data.get("mime_type"),
@@ -614,3 +626,134 @@ class ThreadRepository:
         except Exception as e:
             print(f"❌ [DB] Error getting service_id for {email}: {e}")
             return None
+    
+    def attachment_exists_by_hash_and_message(self, file_hash: str, message_id: str) -> Optional[str]:
+        """
+        Check if an attachment with the same hash and message_id already exists.
+        This helps with deduplication when the same email is processed by multiple mailboxes.
+        
+        Args:
+            file_hash: SHA-256 hash of the file
+            message_id: ID of the email message
+            
+        Returns:
+            attachment_id (UUID) if found, None otherwise
+        """
+        try:
+            response = self.supabase.table("email_attachments").select("attachment_id").eq("file_hash", file_hash).eq("message_id", message_id).execute()
+            
+            if response.data and len(response.data) > 0:
+                attachment_id = response.data[0].get("attachment_id")
+                print(f"🔍 [DB] Found existing attachment with hash {file_hash[:16]}... and message_id {message_id}")
+                return attachment_id
+            else:
+                return None
+                
+        except Exception as e:
+            print(f"❌ [DB] Error checking attachment existence: {e}")
+            return None
+    
+    def get_thread_attachments(self, thread_id: int) -> List[Dict]:
+        """
+        Get all attachments for a specific thread.
+        
+        Args:
+            thread_id: ID of the thread
+            
+        Returns:
+            List of attachment records
+        """
+        try:
+            response = self.supabase.table("email_attachments").select("*").eq("thread_id", thread_id).order("created_at", desc=False).execute()
+            
+            if response.data:
+                print(f"📎 [DB] Found {len(response.data)} attachments for thread {thread_id}")
+                return response.data
+            else:
+                return []
+                
+        except Exception as e:
+            print(f"❌ [DB] Error getting thread attachments: {e}")
+            return []
+    
+    def get_attachment_by_id(self, attachment_id: str) -> Optional[Dict]:
+        """
+        Get attachment details by ID.
+        
+        Args:
+            attachment_id: UUID of the attachment
+            
+        Returns:
+            Attachment record if found, None otherwise
+        """
+        try:
+            response = self.supabase.table("email_attachments").select("*").eq("attachment_id", attachment_id).execute()
+            
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            else:
+                return None
+                
+        except Exception as e:
+            print(f"❌ [DB] Error getting attachment by ID: {e}")
+            return None
+    
+    def update_thread_attachment_status(self, thread_id: str) -> bool:
+        """
+        Update has_attachments status based on actual attachments count.
+        Call this after adding/removing attachments.
+        
+        Args:
+            thread_id: ID of the thread to update
+            
+        Returns:
+            True if update successful, False otherwise
+        """
+        try:
+            # Check if thread has any attachments
+            response = self.supabase.table("email_attachments").select("attachment_id").eq("thread_id", thread_id).limit(1).execute()
+            has_attachments = len(response.data) > 0
+            
+            # Update thread with the has_attachments flag
+            update_response = self.supabase.table("threads").update({
+                "has_attachments": has_attachments
+            }).eq("thread_id", thread_id).execute()
+            
+            if update_response.data:
+                print(f"📎 [THREAD] Updated has_attachments={has_attachments} for thread {thread_id}")
+                return True
+            else:
+                print(f"❌ [THREAD] Failed to update has_attachments for thread {thread_id}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ [THREAD] Error updating thread attachment status: {e}")
+            return False
+    
+    def set_thread_has_attachments(self, thread_id: str, has_attachments: bool = True) -> bool:
+        """
+        Directly set the has_attachments flag for a thread.
+        Use this when you know a thread has attachments without checking the database.
+        
+        Args:
+            thread_id: ID of the thread to update
+            has_attachments: Boolean flag to set
+            
+        Returns:
+            True if update successful, False otherwise
+        """
+        try:
+            update_response = self.supabase.table("threads").update({
+                "has_attachments": has_attachments
+            }).eq("thread_id", thread_id).execute()
+            
+            if update_response.data:
+                print(f"📎 [THREAD] Set has_attachments={has_attachments} for thread {thread_id}")
+                return True
+            else:
+                print(f"❌ [THREAD] Failed to set has_attachments for thread {thread_id}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ [THREAD] Error setting thread attachment flag: {e}")
+            return False
