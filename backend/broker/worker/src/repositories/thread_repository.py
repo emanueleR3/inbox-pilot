@@ -539,3 +539,78 @@ class ThreadRepository:
         
         # Confronta case-insensitive
         return clean1.lower() == clean2.lower() if clean1 and clean2 else False
+    
+    def save_attachment(self, attachment_data: dict) -> Optional[str]:
+        """
+        Save attachment metadata to the email_attachments table.
+        
+        Args:
+            attachment_data: Dictionary containing attachment metadata with keys:
+                - thread_id: UUID of the thread
+                - message_id: ID of the email message
+                - email: Email address of the mailbox owner
+                - filename: Original filename of the attachment
+                - file_path: Full path where file is stored on server
+                - mime_type: MIME type of the file
+                - size: Size in bytes
+                - file_hash: SHA-256 hash of the file
+                - service_id: UUID of the subscription service
+                
+        Returns:
+            attachment_id (UUID) of saved attachment or None if failed
+        """
+        try:
+            # Map the attachment_data to the correct database fields
+            db_data = {
+                "message_id": attachment_data.get("message_id"),
+                "email": attachment_data.get("email"),  # Email address of mailbox owner
+                "file_name": attachment_data.get("filename"),  # Original filename
+                "file_path": attachment_data.get("file_path"),  # Full storage path
+                "mime_type": attachment_data.get("mime_type"),
+                "size_bytes": attachment_data.get("size"),
+                "thread_id": attachment_data.get("thread_id"),
+                "service_id": attachment_data.get("service_id"),
+                "file_hash": attachment_data.get("file_hash")
+            }
+            
+            # Remove None values to let database handle defaults
+            db_data = {k: v for k, v in db_data.items() if v is not None}
+            
+            result = self.supabase.table("email_attachments").insert(db_data).execute()
+            
+            if result.data and len(result.data) > 0:
+                attachment_id = result.data[0].get("attachment_id")
+                print(f"✅ [DB] Saved attachment {attachment_data.get('filename')} with ID {attachment_id}")
+                return attachment_id
+            else:
+                print(f"❌ [DB] Failed to save attachment {attachment_data.get('filename')}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ [DB] Error saving attachment {attachment_data.get('filename')}: {e}")
+            return None
+    
+    def get_service_id_by_email(self, email: str) -> Optional[str]:
+        """
+        Get the service_id for a given email from subscription_services table.
+        
+        Args:
+            email: Email address to lookup
+            
+        Returns:
+            service_id (UUID) if found, None otherwise
+        """
+        try:
+            response = self.supabase.table("subscription_services").select("service_id").eq("email", email.lower()).execute()
+            
+            if response.data and len(response.data) > 0:
+                service_id = response.data[0].get("service_id")
+                print(f"🔍 [DB] Found service_id {service_id} for email {email}")
+                return service_id
+            else:
+                print(f"❌ [DB] No service_id found for email {email}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ [DB] Error getting service_id for {email}: {e}")
+            return None

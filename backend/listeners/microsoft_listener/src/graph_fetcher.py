@@ -111,6 +111,39 @@ def _is_no_reply_email(from_address: str) -> bool:
     
     return any(pattern in email_lower for pattern in no_reply_patterns)
 
+def _extract_microsoft_attachments_metadata(graph_data: dict) -> list:
+    """
+    Estrae i metadata degli allegati da Microsoft Graph senza scaricarli.
+    
+    Args:
+        graph_data: Dati del messaggio da Microsoft Graph
+        
+    Returns:
+        Lista di metadata degli allegati
+    """
+    attachments = []
+    
+    # Microsoft Graph fornisce attachments come array separato
+    graph_attachments = graph_data.get("attachments", [])
+    
+    for attachment in graph_attachments:
+        # Controlla se è un file attachment (non inline)
+        if attachment.get("@odata.type") == "#microsoft.graph.fileAttachment":
+            attachment_id = attachment.get("id", "")
+            filename = attachment.get("name", "")
+            mime_type = attachment.get("contentType", "application/octet-stream")
+            size = attachment.get("size", 0)
+            
+            if filename:  # Solo se ha un nome file valido
+                attachments.append({
+                    "attachment_id": attachment_id,
+                    "filename": filename,
+                    "mime_type": mime_type,
+                    "size": size
+                })
+    
+    return attachments
+
 def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: bool = False) -> dict:
     """
     Converte il messaggio di Microsoft Graph nel formato standard per RabbitMQ.
@@ -184,6 +217,9 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
         # Determina se è un'email no-reply
         is_no_reply = _is_no_reply_email(from_address)
         
+        # Estrai metadata degli allegati senza scaricarli
+        attachments_metadata = _extract_microsoft_attachments_metadata(graph_data)
+        
         return {
             "provider": "microsoft",
             "user_email": user_email,
@@ -200,6 +236,7 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
             "timestamp": message_datetime,
             "is_sent": is_sent_message,  # Flag aggiuntivo per identificare messaggi inviati
             "no_reply": is_no_reply,
+            "attachments": attachments_metadata,
         }
     except Exception as e:
         log_error(f"Errore nel parsing del messaggio Microsoft: {str(e)}", e)

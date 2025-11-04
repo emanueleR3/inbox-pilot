@@ -152,6 +152,9 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         else:
             to_field = user_email
     
+    # Estrai metadata degli allegati (senza scaricarli)
+    attachments_metadata = _extract_attachments_metadata(message.get("payload", {}))
+    
     payload = {
         "provider": "gmail",
         "user_email": user_email,
@@ -168,7 +171,7 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "body_text": body_text,
         "timestamp": message.get("internalDate"),
         "labels": message.get("labelIds", []),
-        "attachments": [],
+        "attachments": attachments_metadata,
         "no_reply": is_no_reply,
         "is_sent": is_sent,
     }
@@ -340,6 +343,45 @@ def _extract_message_body(payload: dict) -> str:
         return _decode_body_data(body_data)
     
     return ""
+
+def _extract_attachments_metadata(payload: dict) -> list:
+    """
+    Estrae i metadata degli allegati dal payload Gmail senza scaricarli.
+    
+    Args:
+        payload: Payload del messaggio Gmail
+        
+    Returns:
+        Lista di metadata degli allegati: [{"attachment_id": "...", "filename": "...", "mime_type": "...", "size": 123}]
+    """
+    attachments = []
+    
+    def _extract_from_parts(parts: list):
+        """Estrae ricorsivamente allegati dalle parti del messaggio."""
+        for part in parts:
+            # Se questa parte ha sottoparti, esplora ricorsivamente
+            if "parts" in part:
+                _extract_from_parts(part["parts"])
+            
+            # Se ha un filename ed è un allegato
+            filename = part.get("filename")
+            if filename and part.get("body", {}).get("attachmentId"):
+                attachment_id = part["body"]["attachmentId"]
+                mime_type = part.get("mimeType", "application/octet-stream")
+                size = part.get("body", {}).get("size", 0)
+                
+                attachments.append({
+                    "attachment_id": attachment_id,
+                    "filename": filename,
+                    "mime_type": mime_type,
+                    "size": size
+                })
+    
+    # Se il messaggio ha parti multiple (multipart)
+    if "parts" in payload:
+        _extract_from_parts(payload["parts"])
+    
+    return attachments
 
 # ESEMPIO DI COME SCARICARE GLI ALLEGATI E CARICARLI SU STORAGE ESTERNO
 """

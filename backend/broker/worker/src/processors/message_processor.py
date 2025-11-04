@@ -5,6 +5,7 @@ This is the central processing hub for all email messages.
 
 from src.filters.advanced_filter import AdvancedEmailFilter
 from src.managers.thread_manager import ThreadManager, ThreadInfo
+from src.utils.attachment_service import AttachmentService
 from typing import Optional
 
 
@@ -17,6 +18,7 @@ class EmailProcessor:
     def __init__(self):
         self.filter = AdvancedEmailFilter()
         self.thread_manager = ThreadManager()
+        self.attachment_service = AttachmentService()
     
     async def process_message(self, email_data: dict) -> Optional[dict]:
         """
@@ -50,6 +52,19 @@ class EmailProcessor:
                 # New thread was created
                 thread_data = filter_result.get("thread", {})
                 needs_ai = filter_result.get("needs_ai", False)
+                thread_id = thread_data.get("thread_id")
+                
+                # Process attachments for the new thread
+                if thread_id and email_data.get("attachments"):
+                    print(f"📎 [PROCESSOR] Processing attachments for new thread {thread_id}")
+                    try:
+                        processed_attachments = await self.attachment_service.process_attachments(
+                            email_data, thread_id
+                        )
+                        thread_data["attachments_processed"] = len(processed_attachments)
+                    except Exception as e:
+                        print(f"❌ [PROCESSOR] Attachment processing failed: {e}")
+                        thread_data["attachments_processed"] = 0
                 
                 if needs_ai:
                     print(f"🤖 [PROCESSOR] Thread created from external user - sending to AI workflow")
@@ -64,7 +79,8 @@ class EmailProcessor:
                 return {
                     "status": "thread_created",
                     "thread_id": thread_data.get("thread_id"),
-                    "needs_ai_processing": needs_ai
+                    "needs_ai_processing": needs_ai,
+                    "attachments_processed": thread_data.get("attachments_processed", 0)
                 }
             
             elif action == "process":
@@ -79,12 +95,28 @@ class EmailProcessor:
             elif action == "thread_updated":
                 # Existing thread was updated with new message
                 thread_id = filter_result.get("thread_id")
+                
+                # Process attachments for the updated thread
+                if thread_id and email_data.get("attachments"):
+                    print(f"📎 [PROCESSOR] Processing attachments for updated thread {thread_id}")
+                    try:
+                        processed_attachments = await self.attachment_service.process_attachments(
+                            email_data, thread_id
+                        )
+                        attachments_count = len(processed_attachments)
+                    except Exception as e:
+                        print(f"❌ [PROCESSOR] Attachment processing failed: {e}")
+                        attachments_count = 0
+                else:
+                    attachments_count = 0
+                
                 print(f"📝 [PROCESSOR] Thread {thread_id} updated with reply - sending to AI workflow")
                 # TODO: Send to AI workflow for processing the new message
                 return {
                     "status": "thread_updated",
                     "thread_id": thread_id,
-                    "needs_ai_processing": True
+                    "needs_ai_processing": True,
+                    "attachments_processed": attachments_count
                 }
             
             elif action == "human_response_marked":
