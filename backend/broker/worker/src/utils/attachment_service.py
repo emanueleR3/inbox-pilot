@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 import aiohttp
 import hashlib
+import re
 from datetime import datetime
 from typing import List, Dict, Optional
 from src.repositories.thread_repository import ThreadRepository
@@ -16,21 +17,49 @@ load_dotenv()
 
 class AttachmentService:
     """
-    Service for handling email attachment download, storage and database tracking.
-    Only downloads attachments for emails that have been processed and saved to threads.
+    Service for handling email attachments download and storage.
+    Supports Gmail API, Microsoft Graph API, and IMAP attachments.
     """
     
     def __init__(self):
+        self.base_storage_path = os.getenv("ATTACHMENT_STORAGE_PATH", "/data/attachments")
         self.thread_repo = ThreadRepository()
-        self.base_storage_path = os.getenv("ATTACHMENT_STORAGE_PATH", "/app/attachments")
+        # Security settings
+        self.max_file_size = 50 * 1024 * 1024  # 50MB
+        self.allowed_extensions = {
+            '.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.gif', 
+            '.zip', '.rar', '.xlsx', '.xls', '.ppt', '.pptx', '.csv'
+        }
+    
+    def _extract_email_address(self, email_field: str) -> str:
+        """
+        Extract email address from field that might contain name and email.
+        Examples:
+        - "Mario Rossi <mario@example.com>" -> "mario@example.com"
+        - "mario@example.com" -> "mario@example.com" 
+        - "<mario@example.com>" -> "mario@example.com"
         
-        # Security configurations
-        self.max_file_size = int(os.getenv("MAX_ATTACHMENT_SIZE", "50")) * 1024 * 1024  # Default 50MB
-        self.allowed_extensions = set(os.getenv("ALLOWED_EXTENSIONS", "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,zip,rar").split(","))
-        self.blocked_extensions = set(os.getenv("BLOCKED_EXTENSIONS", "exe,bat,cmd,scr,com,pif,vbs,js,jar").split(","))
+        Args:
+            email_field: Email field that might contain name and email
+            
+        Returns:
+            Clean email address or original string if no email found
+        """
+        if not email_field:
+            return ""
+            
+        # Cerca pattern <email@domain.com>
+        angle_bracket_match = re.search(r'<([^>]+)>', email_field)
+        if angle_bracket_match:
+            return angle_bracket_match.group(1).strip()
         
-        # Ensure base directory exists
-        os.makedirs(self.base_storage_path, exist_ok=True)
+        # Se non trova < >, cerca un pattern email diretto
+        email_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', email_field)
+        if email_match:
+            return email_match.group(0).strip()
+        
+        # Se non trova nessun pattern email, ritorna la stringa originale
+        return email_field.strip()
     
     async def process_attachments(self, email_data: dict, thread_id: int) -> List[Dict]:
         """
@@ -562,15 +591,18 @@ class AttachmentService:
                         "deduplication": True
                     }
             
-            # Normalize email fields to ensure consistency
+            # Normalize email fields to ensure consistency and extract email addresses
+            # Extract email from "Name <email>" format for sender
+            sender = self._extract_email_address(sender_email)
+            
             if isinstance(receiver_email, str):
-                # If "to" is a single string, use it as receiver
-                receiver = receiver_email
+                # If "to" is a single string, extract email and use as receiver
+                receiver = self._extract_email_address(receiver_email)
             elif isinstance(receiver_email, list) and len(receiver_email) > 0:
                 # If "to" is a list, take the first one as primary receiver
-                receiver = receiver_email[0]
+                receiver = self._extract_email_address(receiver_email[0])
                 # Add the rest to CC if not already there
-                additional_receivers = receiver_email[1:]
+                additional_receivers = [self._extract_email_address(email) for email in receiver_email[1:]]
                 if isinstance(cc_emails, list):
                     cc_emails.extend(additional_receivers)
                 else:
@@ -578,12 +610,13 @@ class AttachmentService:
             else:
                 receiver = ""
             
-            # Ensure cc_emails is a list
-            if not isinstance(cc_emails, list):
-                if cc_emails:
-                    cc_emails = [cc_emails]
-                else:
-                    cc_emails = []
+            # Normalize CC emails - extract email addresses from each CC entry
+            if isinstance(cc_emails, list):
+                cc_emails = [self._extract_email_address(email) for email in cc_emails if email]
+            elif cc_emails:
+                cc_emails = [self._extract_email_address(cc_emails)]
+            else:
+                cc_emails = []
             
             # Get service_id - we can use any of the involved emails, 
             # but let's prioritize the mailbox that's processing this (user_email)
@@ -597,9 +630,9 @@ class AttachmentService:
             attachment_data = {
                 "thread_id": thread_id,
                 "message_id": message_id,
-                "sender": sender_email,  # Email address of sender
-                "receiver": receiver,  # Primary receiver email
-                "cc": cc_emails,  # Array of CC addresses
+                "sender": sender,  # Normalized email address of sender
+                "receiver": receiver,  # Normalized primary receiver email
+                "cc": cc_emails,  # Array of normalized CC addresses
                 "filename": attachment_info["filename"],  # Original filename
                 "file_path": attachment_info["file_path"],  # Full storage path
                 "mime_type": attachment_info["mime_type"],
@@ -608,7 +641,7 @@ class AttachmentService:
                 "service_id": service_id
             }
             
-            print(f"📎 [ATTACHMENT] Saving with sender:{sender_email}, receiver:{receiver}, cc:{cc_emails}")
+            print(f"📎 [ATTACHMENT] Saving with sender:{sender}, receiver:{receiver}, cc:{cc_emails}")
             
             # Save to database using thread repository
             attachment_id = self.thread_repo.save_attachment(attachment_data)
