@@ -653,6 +653,32 @@ class ThreadRepository:
             print(f"❌ [DB] Error checking attachment existence: {e}")
             return None
     
+    def attachment_exists_in_thread_by_hash(self, thread_id: str, file_hash: str) -> Optional[str]:
+        """
+        Check if an attachment with the same hash already exists in this thread.
+        This prevents duplicate attachments within the same conversation.
+        
+        Args:
+            thread_id: ID of the thread to check
+            file_hash: SHA-256 hash of the file
+            
+        Returns:
+            attachment_id (UUID) if found, None otherwise
+        """
+        try:
+            response = self.supabase.table("email_attachments").select("attachment_id").eq("thread_id", thread_id).eq("file_hash", file_hash).execute()
+            
+            if response.data and len(response.data) > 0:
+                attachment_id = response.data[0].get("attachment_id")
+                print(f"🔄 [DB] Found duplicate attachment in thread {thread_id} with hash {file_hash[:16]}...")
+                return attachment_id
+            else:
+                return None
+                
+        except Exception as e:
+            print(f"❌ [DB] Error checking thread attachment existence: {e}")
+            return None
+    
     def get_thread_attachments(self, thread_id: int) -> List[Dict]:
         """
         Get all attachments for a specific thread.

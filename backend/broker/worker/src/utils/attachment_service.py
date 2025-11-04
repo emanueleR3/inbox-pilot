@@ -107,24 +107,73 @@ class AttachmentService:
                     print(f"🚫 [ATTACHMENT] Attachment validation failed: {attachment_meta.get('filename')}")
                     continue
                 
-                # Download and store attachment
+                filename = attachment_meta.get('filename', 'unknown')
+                
+                # FASE 1: Prova a calcolare l'hash senza scaricare (per allegati IMAP che hanno già payload)
+                potential_hash = None
+                if provider == "imap" and "payload" in attachment_meta:
+                    payload = attachment_meta["payload"]
+                    if payload and isinstance(payload, bytes):
+                        import hashlib
+                        potential_hash = hashlib.sha256(payload).hexdigest()
+                        print(f"🔍 [ATTACHMENT] Pre-calculated hash for {filename}: {potential_hash[:16]}...")
+                
+                # FASE 2: Controlla deduplicazione a livello di thread
+                if potential_hash:
+                    existing_attachment_id = self.thread_repo.attachment_exists_in_thread_by_hash(thread_id, potential_hash)
+                    if existing_attachment_id:
+                        print(f"♻️ [ATTACHMENT] Skipping duplicate attachment {filename} in thread {thread_id}")
+                        # Aggiungi comunque alle attachments processate con l'ID esistente
+                        processed_attachments.append({
+                            "attachment_id": existing_attachment_id,
+                            "filename": filename,
+                            "file_hash": potential_hash,
+                            "size": attachment_meta.get("size", 0),
+                            "duplicate": True
+                        })
+                        continue
+                
+                # FASE 3: Download e store attachment (se non è duplicato)
                 stored_attachment = await self._download_and_store_attachment(
                     attachment_meta, email_data, storage_dir
                 )
                 
                 if stored_attachment:
-                    # Save to database
+                    # FASE 4: Controlla deduplicazione dopo download (per provider che non hanno payload pre-calcolato)
+                    file_hash = stored_attachment.get("file_hash")
+                    if file_hash and not potential_hash:  # Solo se non abbiamo già controllato
+                        existing_attachment_id = self.thread_repo.attachment_exists_in_thread_by_hash(thread_id, file_hash)
+                        if existing_attachment_id:
+                            print(f"♻️ [ATTACHMENT] Found duplicate after download {filename} in thread {thread_id}")
+                            # Rimuovi il file scaricato dato che è duplicato
+                            try:
+                                os.remove(stored_attachment["file_path"])
+                                print(f"🗑️ [ATTACHMENT] Removed duplicate file: {stored_attachment['file_path']}")
+                            except:
+                                pass
+                            
+                            # Aggiungi alle attachments processate con l'ID esistente
+                            processed_attachments.append({
+                                "attachment_id": existing_attachment_id,
+                                "filename": filename,
+                                "file_hash": file_hash,
+                                "size": stored_attachment.get("size", 0),
+                                "duplicate": True
+                            })
+                            continue
+                    
+                    # FASE 5: Save to database (attachment nuovo)
                     db_attachment = await self._save_attachment_to_db(
                         stored_attachment, thread_id, email_data
                     )
                     
                     if db_attachment:
                         processed_attachments.append(db_attachment)
-                        print(f"✅ [ATTACHMENT] Processed: {attachment_meta.get('filename')}")
+                        print(f"✅ [ATTACHMENT] Processed new attachment: {filename}")
                     else:
-                        print(f"❌ [ATTACHMENT] Failed to save to DB: {attachment_meta.get('filename')}")
+                        print(f"❌ [ATTACHMENT] Failed to save to DB: {filename}")
                 else:
-                    print(f"❌ [ATTACHMENT] Failed to download: {attachment_meta.get('filename')}")
+                    print(f"❌ [ATTACHMENT] Failed to download: {filename}")
                     
             except Exception as e:
                 print(f"❌ [ATTACHMENT] Error processing {attachment_meta.get('filename')}: {e}")

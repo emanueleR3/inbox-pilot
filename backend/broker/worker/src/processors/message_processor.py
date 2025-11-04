@@ -72,6 +72,12 @@ class EmailProcessor:
                     print(f"📧 Subject: {thread_data.get('subject')}")
                     print(f"👤 Sender: {thread_data.get('sender_email')}")
                     print(f"📮 Mailbox: {thread_data.get('box_email')}")
+                    
+                    # Prepare automation payload
+                    automation_payload = self._prepare_automation_payload(
+                        email_data, thread_data, processed_attachments if 'processed_attachments' in locals() else []
+                    )
+                    print(f"🤖 [AUTOMATION PAYLOAD] {automation_payload}")
                     # TODO: Send to AI workflow
                 else:
                     print(f"👤 [PROCESSOR] Thread created from user - no AI processing needed")
@@ -111,6 +117,12 @@ class EmailProcessor:
                     attachments_count = 0
                 
                 print(f"📝 [PROCESSOR] Thread {thread_id} updated with reply - sending to AI workflow")
+                
+                # Prepare automation payload for thread update
+                automation_payload = self._prepare_automation_payload(
+                    email_data, {"thread_id": thread_id}, processed_attachments if 'processed_attachments' in locals() else []
+                )
+                print(f"🤖 [AUTOMATION PAYLOAD] {automation_payload}")
                 # TODO: Send to AI workflow for processing the new message
                 return {
                     "status": "thread_updated",
@@ -201,3 +213,43 @@ class EmailProcessor:
         """
         # TODO: Implement human response handling
         pass
+    
+    def _prepare_automation_payload(self, email_data: dict, thread_data: dict, processed_attachments: list) -> dict:
+        """
+        Prepare payload for automation service with attachment IDs.
+        
+        Args:
+            email_data: Original email data
+            thread_data: Thread information
+            processed_attachments: List of processed attachments with IDs
+            
+        Returns:
+            Automation payload dictionary
+        """
+        # Extract attachment IDs from processed attachments
+        attachment_ids = []
+        for attachment in processed_attachments:
+            if attachment.get("attachment_id"):
+                attachment_ids.append(attachment["attachment_id"])
+        
+        # Build automation payload
+        automation_payload = {
+            "thread_id": thread_data.get("thread_id"),
+            "message_id": email_data.get("message_id"),
+            "from": email_data.get("from"),
+            "to": email_data.get("to"),
+            "cc": email_data.get("cc"),
+            "subject": email_data.get("subject"),
+            "body_text": email_data.get("body_text"),
+            "body_html": email_data.get("body_html"),
+            "timestamp": email_data.get("timestamp"),
+            "provider": email_data.get("provider"),
+            "user_email": email_data.get("user_email"),
+            "reply_to_id": email_data.get("reply_to_id"),
+            "attachment_ids": attachment_ids,  # Array of attachment IDs in database
+            "has_attachments": len(attachment_ids) > 0,
+            "sender_email": thread_data.get("sender_email"),
+            "box_email": thread_data.get("box_email")
+        }
+        
+        return automation_payload
