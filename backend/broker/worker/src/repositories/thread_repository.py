@@ -576,7 +576,8 @@ class ThreadRepository:
                 "sender": attachment_data.get("sender"),  # Email address of sender
                 "receiver": attachment_data.get("receiver"),  # Email address of receiver
                 "cc": attachment_data.get("cc", []),  # Array of CC addresses
-                "file_name": attachment_data.get("filename"),  # Original filename
+                "file_name": attachment_data.get("filename"),  # Nome file effettivo salvato su disco
+                "original_filename": attachment_data.get("original_filename"),  # Nome file originale dall'email
                 "file_path": attachment_data.get("file_path"),  # Full storage path
                 "mime_type": attachment_data.get("mime_type"),
                 "size_bytes": attachment_data.get("size"),
@@ -592,7 +593,12 @@ class ThreadRepository:
             
             if result.data and len(result.data) > 0:
                 attachment_id = result.data[0].get("attachment_id")
-                print(f"✅ [DB] Saved attachment {attachment_data.get('filename')} with ID {attachment_id}")
+                original_name = attachment_data.get("original_filename", "")
+                actual_name = attachment_data.get("filename", "")
+                if original_name != actual_name:
+                    print(f"✅ [DB] Saved attachment {original_name} → {actual_name} with ID {attachment_id}")
+                else:
+                    print(f"✅ [DB] Saved attachment {actual_name} with ID {attachment_id}")
                 return attachment_id
             else:
                 print(f"❌ [DB] Failed to save attachment {attachment_data.get('filename')}")
@@ -653,6 +659,42 @@ class ThreadRepository:
             print(f"❌ [DB] Error checking attachment existence: {e}")
             return None
     
+    def attachment_exists_in_thread_by_name_and_size(self, thread_id: str, filename: str, file_size: int) -> Optional[str]:
+        """
+        Check if an attachment with the same filename and size already exists in the thread.
+        
+        Args:
+            thread_id: Thread ID to check
+            filename: Attachment filename to check
+            file_size: File size in bytes
+            
+        Returns:
+            Attachment ID if duplicate found, None otherwise
+        """
+        try:
+            cursor = self.connection.cursor()
+            
+            query = """
+                SELECT attachment_id FROM email_attachments 
+                WHERE thread_id = %s AND filename = %s AND file_size = %s
+                LIMIT 1
+            """
+            
+            cursor.execute(query, (thread_id, filename, file_size))
+            result = cursor.fetchone()
+            cursor.close()
+            
+            if result:
+                attachment_id = result[0]
+                print(f"🔄 [DB] Found duplicate attachment in thread {thread_id} by name/size: {filename} ({file_size} bytes)")
+                return attachment_id
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ [DB] Error checking attachment by name/size: {e}")
+            return None
+
     def attachment_exists_in_thread_by_hash(self, thread_id: str, file_hash: str) -> Optional[str]:
         """
         Check if an attachment with the same hash already exists in this thread.

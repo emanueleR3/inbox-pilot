@@ -114,7 +114,6 @@ class AttachmentService:
                 if provider == "imap" and "payload" in attachment_meta:
                     payload = attachment_meta["payload"]
                     if payload and isinstance(payload, bytes):
-                        import hashlib
                         potential_hash = hashlib.sha256(payload).hexdigest()
                         print(f"🔍 [ATTACHMENT] Pre-calculated hash for {filename}: {potential_hash[:16]}...")
                 
@@ -126,9 +125,27 @@ class AttachmentService:
                         # Aggiungi comunque alle attachments processate con l'ID esistente
                         processed_attachments.append({
                             "attachment_id": existing_attachment_id,
-                            "filename": filename,
+                            "original_filename": filename,
+                            "actual_filename": filename,  # Per i duplicati pre-download, usiamo il nome originale
                             "file_hash": potential_hash,
                             "size": attachment_meta.get("size", 0),
+                            "duplicate": True
+                        })
+                        continue
+                
+                # FASE 2.5: Per provider senza payload, controlla duplicati basati su nome file e dimensione
+                if not potential_hash:
+                    file_size = attachment_meta.get("size", 0)
+                    existing_attachment_id = self.thread_repo.attachment_exists_in_thread_by_name_and_size(thread_id, filename, file_size)
+                    if existing_attachment_id:
+                        print(f"♻️ [ATTACHMENT] Skipping duplicate attachment by name/size {filename} in thread {thread_id}")
+                        # Aggiungi comunque alle attachments processate con l'ID esistente
+                        processed_attachments.append({
+                            "attachment_id": existing_attachment_id,
+                            "original_filename": filename,
+                            "actual_filename": filename,  # Per i duplicati by name/size, usiamo il nome originale
+                            "file_hash": None,  # Non abbiamo l'hash in questo caso
+                            "size": file_size,
                             "duplicate": True
                         })
                         continue
@@ -141,10 +158,12 @@ class AttachmentService:
                 if stored_attachment:
                     # FASE 4: Controlla deduplicazione dopo download (per provider che non hanno payload pre-calcolato)
                     file_hash = stored_attachment.get("file_hash")
-                    if file_hash and not potential_hash:  # Solo se non abbiamo già controllato
+                    if file_hash and not potential_hash:  # Solo se non abbiamo già controllato con payload
                         existing_attachment_id = self.thread_repo.attachment_exists_in_thread_by_hash(thread_id, file_hash)
                         if existing_attachment_id:
-                            print(f"♻️ [ATTACHMENT] Found duplicate after download {filename} in thread {thread_id}")
+                            actual_filename = stored_attachment.get("actual_filename", filename)
+                            print(f"🔄 [DB] Found duplicate attachment in thread {thread_id} with hash {file_hash[:16]}...")
+                            print(f"♻️ [ATTACHMENT] Found duplicate after download {actual_filename} in thread {thread_id}")
                             # Rimuovi il file scaricato dato che è duplicato
                             try:
                                 os.remove(stored_attachment["file_path"])
@@ -155,7 +174,8 @@ class AttachmentService:
                             # Aggiungi alle attachments processate con l'ID esistente
                             processed_attachments.append({
                                 "attachment_id": existing_attachment_id,
-                                "filename": filename,
+                                "original_filename": filename,
+                                "actual_filename": actual_filename,
                                 "file_hash": file_hash,
                                 "size": stored_attachment.get("size", 0),
                                 "duplicate": True
@@ -169,7 +189,8 @@ class AttachmentService:
                     
                     if db_attachment:
                         processed_attachments.append(db_attachment)
-                        print(f"✅ [ATTACHMENT] Processed new attachment: {filename}")
+                        actual_filename = stored_attachment.get("actual_filename", filename)
+                        print(f"✅ [ATTACHMENT] Processed new attachment: {actual_filename}")
                     else:
                         print(f"❌ [ATTACHMENT] Failed to save to DB: {filename}")
                 else:
@@ -234,7 +255,7 @@ class AttachmentService:
         self, attachment_meta: dict, email_data: dict, storage_dir: str
     ) -> Optional[Dict]:
         """
-        Download attachment and store to filesystem.
+        Download attachment and store to filesystem with unique filename handling.
         
         Args:
             attachment_meta: Attachment metadata from listener
@@ -242,7 +263,7 @@ class AttachmentService:
             storage_dir: Directory to store the attachment
             
         Returns:
-            Stored attachment info or None if failed
+            Stored attachment info with actual filename used, or None if failed
         """
         provider = email_data.get("provider")
         filename = attachment_meta.get("filename", "unknown_attachment")
@@ -253,11 +274,17 @@ class AttachmentService:
         
         # Generate unique filename if file already exists
         file_path = os.path.join(storage_dir, safe_filename)
+        actual_filename = safe_filename
         counter = 1
         while os.path.exists(file_path):
             name, ext = os.path.splitext(safe_filename)
-            file_path = os.path.join(storage_dir, f"{name}_{counter}{ext}")
+            actual_filename = f"{name}_{counter}{ext}"
+            file_path = os.path.join(storage_dir, actual_filename)
             counter += 1
+        
+        # Log filename resolution if collision was resolved
+        if actual_filename != safe_filename:
+            print(f"🔄 [ATTACHMENT] Filename collision resolved: {safe_filename} → {actual_filename}")
         
         try:
             if provider == "gmail":
@@ -291,10 +318,11 @@ class AttachmentService:
                 if expected_size > 0 and abs(file_size - expected_size) > 1024:  # Allow 1KB difference
                     print(f"⚠️ [ATTACHMENT] File size mismatch for {filename}: expected {expected_size}, got {file_size}")
                 
-                print(f"✅ [ATTACHMENT] File downloaded successfully: {filename} ({file_size} bytes)")
+                print(f"✅ [ATTACHMENT] File downloaded successfully: {actual_filename} ({file_size} bytes)")
                 
                 return {
-                    "filename": filename,
+                    "original_filename": filename,      # Nome originale dall'email
+                    "actual_filename": actual_filename, # Nome effettivo salvato su disco
                     "file_path": file_path,
                     "size": file_size,
                     "mime_type": attachment_meta.get("mime_type", "application/octet-stream"),
@@ -655,7 +683,8 @@ class AttachmentService:
                     print(f"❎ [ATTACHMENT] Attachment already exists with ID: {existing_attachment_id}")
                     return {
                         "attachment_id": existing_attachment_id,
-                        "filename": attachment_info["filename"],
+                        "original_filename": attachment_info.get("original_filename", attachment_info.get("filename")),
+                        "actual_filename": attachment_info.get("actual_filename", attachment_info.get("filename")),
                         "file_path": attachment_info["file_path"],
                         "size": attachment_info["size"],
                         "file_hash": file_hash,
@@ -704,7 +733,8 @@ class AttachmentService:
                 "sender": sender,  # Normalized email address of sender
                 "receiver": receiver,  # Normalized primary receiver email
                 "cc": cc_emails,  # Array of normalized CC addresses
-                "filename": attachment_info["filename"],  # Original filename
+                "filename": attachment_info["actual_filename"],  # Nome file effettivo salvato su disco
+                "original_filename": attachment_info.get("original_filename", attachment_info.get("filename")),  # Nome originale dall'email
                 "file_path": attachment_info["file_path"],  # Full storage path
                 "mime_type": attachment_info["mime_type"],
                 "size": attachment_info["size"],  # Size in bytes

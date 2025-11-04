@@ -160,32 +160,6 @@ class EmailProcessor:
             print(f"❌ [PROCESSOR] Error processing message: {e}")
             return None
     
-    async def should_skip_message(self, email_data: dict) -> bool:
-        """
-        Determines if message should be skipped using advanced filtering.
-        
-        Args:
-            email_data: Email data from listeners
-            
-        Returns:
-            True if message should be skipped
-        """
-        # TODO: Implement skip logic
-        pass
-    
-    async def save_to_database(self, email_data: dict) -> ThreadInfo:
-        """
-        Saves message to database and returns thread information.
-        
-        Args:
-            email_data: Email data from listeners
-            
-        Returns:
-            ThreadInfo with processing requirements
-        """
-        # TODO: Implement database save logic
-        pass
-    
     async def route_to_ai_workflow(self, email_data: dict, thread_info: ThreadInfo) -> bool:
         """
         Routes message to appropriate AI workflow if needed.
@@ -198,20 +172,6 @@ class EmailProcessor:
             True if successfully routed to AI workflow
         """
         # TODO: Implement AI workflow routing
-        pass
-    
-    async def handle_human_response(self, email_data: dict, thread_info: ThreadInfo) -> bool:
-        """
-        Handles human response notifications and thread updates.
-        
-        Args:
-            email_data: Email data from listeners
-            thread_info: Thread information
-            
-        Returns:
-            True if human response handled successfully
-        """
-        # TODO: Implement human response handling
         pass
     
     def _prepare_automation_payload(self, email_data: dict, thread_data: dict, processed_attachments: list) -> dict:
