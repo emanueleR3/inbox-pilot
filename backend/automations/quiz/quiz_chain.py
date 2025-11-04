@@ -4,8 +4,8 @@ import os
 
 from langchain_openai import ChatOpenAI
 
-from models import Question, Answer, Quiz, CompanyInfo, Address
-from prompts import Prompts
+from .models import Question, Answer, Quiz, CompanyInfo, Address
+from .prompts import Prompts
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -18,9 +18,7 @@ class QuizChain:
     Maximum of 20 questions will be asked.
     """
     
-    MAX_QUESTIONS = 5
-    
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, max_questions: int = 5):
         """
         Initialize the QuizChain with GPT-4o-mini model.
         
@@ -32,6 +30,7 @@ class QuizChain:
             temperature=0.7,
             api_key=api_key or os.getenv("OPENAI_API_KEY")
         )
+        self.max_questions = max_questions
     
     def generate_next_question(self, questions: List[Question], answers: List[Answer], company_info: Optional[CompanyInfo] = None) -> Optional[Question]:
         """
@@ -46,6 +45,9 @@ class QuizChain:
             Next Question object or None if quiz is complete
         """
         current_count = len(answers)
+
+        if current_count >= self.max_questions:
+            return None
         
         # Format history
         history = "\n".join([
@@ -63,7 +65,7 @@ class QuizChain:
         chain = (
             {
                 "current_count": lambda _: current_count + 1,
-                "max_questions": lambda _: self.MAX_QUESTIONS,
+                "max_questions": lambda _: self.max_questions,
                 "history": lambda _: history,
                 "company_info": lambda _: company_info_str
             }
@@ -134,10 +136,8 @@ class QuizChain:
             Completed Quiz object with all questions and answers
         """
         print(f"=== Company Information Quiz ===")
-        print(f"Maximum {self.MAX_QUESTIONS} questions will be asked.\n")
+        print(f"Maximum {self.max_questions} questions will be asked.\n")
         
-
-
         company_address = Address(
             street="Via Roma, 10",
             city="Milano",
@@ -166,7 +166,7 @@ class QuizChain:
         answers: List[Answer] = []
         questions: List[Question] = []
         
-        while len(answers) < self.MAX_QUESTIONS:
+        while len(answers) < self.max_questions:
             # Generate next question with current company info
             question = self.generate_next_question(questions, answers, company_info)
 
@@ -177,7 +177,7 @@ class QuizChain:
             quiz.questions.append(question)
             
             # Display question
-            print(f"\nQuestion {len(answers) + 1}/{self.MAX_QUESTIONS}")
+            print(f"\nQuestion {len(answers) + 1}/{self.max_questions}")
             print(f"{question.text}")
             
             if question.helper_text:
