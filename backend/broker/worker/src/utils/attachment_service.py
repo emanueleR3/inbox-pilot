@@ -483,7 +483,7 @@ class AttachmentService:
         Download attachment from IMAP raw email data.
         
         Args:
-            attachment_meta: Attachment metadata
+            attachment_meta: Attachment metadata (può contenere payload o essere vuoto)
             email_data: Email data with raw email content
             file_path: Where to save the file
             
@@ -495,7 +495,18 @@ class AttachmentService:
             import base64
             from email.header import decode_header
             
-            # Get raw email data
+            # Se abbiamo già il payload nei metadati, usalo direttamente
+            if "payload" in attachment_meta and attachment_meta["payload"]:
+                attachment_data = attachment_meta["payload"]
+                if isinstance(attachment_data, bytes):
+                    # Write to file
+                    with open(file_path, 'wb') as f:
+                        f.write(attachment_data)
+                    
+                    print(f"✅ [ATTACHMENT] IMAP attachment saved from cached payload: {attachment_meta.get('filename')}")
+                    return True
+            
+            # Altrimenti, cerca nell'email raw
             raw_email = email_data.get("raw")
             if not raw_email:
                 print(f"❌ [ATTACHMENT] No raw email data for IMAP attachment")
@@ -507,11 +518,9 @@ class AttachmentService:
             else:
                 msg = email.message_from_string(raw_email)
             
-            # Find the attachment by filename
+            # Find the attachment by filename or content type
             target_filename = attachment_meta.get("filename")
-            if not target_filename:
-                print(f"❌ [ATTACHMENT] No filename provided for IMAP attachment")
-                return False
+            target_content_type = attachment_meta.get("mime_type") or attachment_meta.get("content_type")
             
             # Walk through email parts to find the attachment
             for part in msg.walk():
@@ -521,6 +530,8 @@ class AttachmentService:
                 
                 # Get filename from part
                 part_filename = part.get_filename()
+                part_content_type = part.get_content_type()
+                
                 if part_filename:
                     # Decode filename if necessary
                     try:
@@ -531,24 +542,30 @@ class AttachmentService:
                             part_filename = decoded_filename[0]
                     except:
                         pass
+                
+                # Check if this is our target attachment (by filename or content type)
+                is_match = (
+                    (target_filename and part_filename == target_filename) or
+                    (target_content_type and part_content_type == target_content_type and 
+                     part_content_type not in ["text/plain", "text/html"])
+                )
+                
+                if is_match:
+                    # Get attachment data
+                    attachment_data = part.get_payload(decode=True)
                     
-                    # Check if this is our target attachment
-                    if part_filename == target_filename:
-                        # Get attachment data
-                        attachment_data = part.get_payload(decode=True)
+                    if attachment_data:
+                        # Write to file
+                        with open(file_path, 'wb') as f:
+                            f.write(attachment_data)
                         
-                        if attachment_data:
-                            # Write to file
-                            with open(file_path, 'wb') as f:
-                                f.write(attachment_data)
-                            
-                            print(f"✅ [ATTACHMENT] IMAP attachment saved: {target_filename}")
-                            return True
-                        else:
-                            print(f"❌ [ATTACHMENT] Failed to decode IMAP attachment: {target_filename}")
-                            return False
+                        print(f"✅ [ATTACHMENT] IMAP attachment saved from email parsing: {target_filename or 'unnamed'}")
+                        return True
+                    else:
+                        print(f"❌ [ATTACHMENT] Failed to decode IMAP attachment: {target_filename or 'unnamed'}")
+                        return False
             
-            print(f"❌ [ATTACHMENT] IMAP attachment not found in email: {target_filename}")
+            print(f"❌ [ATTACHMENT] IMAP attachment not found in email: {target_filename or 'unnamed'}")
             return False
             
         except Exception as e:

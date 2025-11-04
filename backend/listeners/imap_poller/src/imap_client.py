@@ -23,26 +23,30 @@ def _extract_imap_attachments_metadata(msg: email.message.Message) -> list:
     attachments = []
     
     for part in msg.walk():
-        # Salta il messaggio principale e le parti text/html
+        # Salta il messaggio principale e le parti multipart
         if part.get_content_maintype() == 'multipart':
             continue
             
         # Controlla se è un attachment
         disposition = part.get("Content-Disposition", "")
+        filename = part.get_filename()
+        content_type = part.get_content_type()
         
-        # È un attachment se ha Content-Disposition: attachment o se ha un filename
+        # È un attachment se:
+        # 1. Ha Content-Disposition: attachment
+        # 2. Ha un filename
+        # 3. Non è text/plain o text/html (a meno che non sia esplicitamente attachment)
         is_attachment = (
             "attachment" in disposition.lower() or
-            part.get_filename() is not None
+            filename is not None or
+            (content_type not in ["text/plain", "text/html"] and content_type != "multipart/alternative")
         )
         
-        # Salta parti text/plain e text/html che non sono attachment
-        content_type = part.get_content_type()
-        if content_type in ["text/plain", "text/html"] and not is_attachment:
+        # Salta parti text/plain e text/html che non sono attachment espliciti
+        if content_type in ["text/plain", "text/html"] and "attachment" not in disposition.lower() and filename is None:
             continue
             
-        filename = part.get_filename()
-        if filename and is_attachment:
+        if is_attachment:
             # Decodifica il filename se necessario
             if filename:
                 try:
@@ -51,19 +55,49 @@ def _extract_imap_attachments_metadata(msg: email.message.Message) -> list:
                         filename = decoded_filename[0].decode(decoded_filename[1] or 'utf-8')
                     else:
                         filename = decoded_filename[0]
-                except:
+                except Exception as e:
+                    print(f"⚠️ [IMAP] Error decoding filename: {e}")
+                    # Mantieni il filename originale se la decodifica fallisce
                     pass
+            else:
+                # Se non c'è filename, genera uno basato sul content-type
+                ext_map = {
+                    'image/jpeg': '.jpg',
+                    'image/png': '.png',
+                    'image/gif': '.gif',
+                    'application/pdf': '.pdf',
+                    'application/msword': '.doc',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+                    'application/zip': '.zip'
+                }
+                ext = ext_map.get(content_type, '.bin')
+                filename = f"attachment{ext}"
             
-            # Ottieni la dimensione del contenuto (approssimativa)
-            payload = part.get_payload()
-            size = len(payload) if payload else 0
+            # Calcola la dimensione reale del contenuto
+            payload = part.get_payload(decode=True)  # decode=True per ottenere i bytes reali
+            if payload:
+                size = len(payload)
+            else:
+                # Fallback: prova con payload non decodificato
+                payload_raw = part.get_payload()
+                size = len(payload_raw) if payload_raw else 0
             
-            attachments.append({
-                "attachment_id": f"imap_{hash(filename + str(size))}",  # ID generato
+            attachment_data = {
+                "attachment_id": f"imap_{hash(filename + str(size) + content_type)}",  # ID più univoco
                 "filename": filename,
                 "mime_type": content_type,
+                "content_type": content_type,  # Alias per compatibilità
                 "size": size
-            })
+                # Non includiamo il payload per evitare problemi di memoria
+            }
+            
+            attachments.append(attachment_data)
+            print(f"📎 [IMAP] Found attachment: {filename} ({size} bytes, {content_type})")
+    
+    if attachments:
+        print(f"📎 [IMAP] Total attachments found: {len(attachments)}")
+    else:
+        print(f"📎 [IMAP] No attachments found in message")
     
     return attachments
 

@@ -81,6 +81,7 @@ async def poll_account_inbound(account):
                         "charset": message["charset"],
                         "size": message["size"],
                         "raw": message["raw"].decode(errors="ignore"),
+                        "attachments": message.get("attachments", []),  # Aggiungi allegati
                         "subscription_id": account.get("subscription_id"),
                         "folder_type": "inbox",
                         "no_reply": is_no_reply_email(message.get("from", "")),
@@ -160,6 +161,7 @@ async def poll_account(account):
                 "charset": mail["charset"],
                 "size": mail["size"],
                 "raw": mail["raw"].decode(errors="ignore"),
+                "attachments": mail.get("attachments", []),  # Aggiungi allegati
                 "subscription_id": account.get("subscription_id"),  # Aggiunge riferimento alla subscription
                 "folder_type": "inbox",  # Indica che è un messaggio in arrivo
                 "no_reply": is_no_reply_email(mail.get("from", "")),
@@ -246,6 +248,7 @@ async def poll_account_outbound(account):
                         "charset": message["charset"],
                         "size": message["size"],
                         "raw": message["raw"].decode(errors="ignore"),
+                        "attachments": message.get("attachments", []),  # Aggiungi allegati
                         "subscription_id": account.get("subscription_id"),
                         "folder_type": "sent",
                         "no_reply": is_no_reply_email(message.get("from", "")),
