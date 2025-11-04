@@ -30,6 +30,11 @@ class AttachmentService:
             '.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.gif', 
             '.zip', '.rar', '.xlsx', '.xls', '.ppt', '.pptx', '.csv'
         }
+        # Blocked dangerous extensions
+        self.blocked_extensions = {
+            '.exe', '.bat', '.cmd', '.com', '.scr', '.pif', '.vbs', '.js', 
+            '.jar', '.app', '.deb', '.pkg', '.dmg', '.iso', '.msi'
+        }
     
     def _extract_email_address(self, email_field: str) -> str:
         """
@@ -743,16 +748,16 @@ class AttachmentService:
                 return False
             
             # Check file extension
-            file_ext = filename.split('.')[-1].lower() if '.' in filename else ""
+            file_ext = '.' + filename.split('.')[-1].lower() if '.' in filename else ""
             
             # Block dangerous extensions
             if file_ext in self.blocked_extensions:
-                print(f"🚫 [ATTACHMENT] Blocked file extension: {filename} (.{file_ext})")
+                print(f"🚫 [ATTACHMENT] Blocked file extension: {filename} ({file_ext})")
                 return False
             
             # Check allowed extensions (if configured)
             if self.allowed_extensions and file_ext not in self.allowed_extensions:
-                print(f"🚫 [ATTACHMENT] File extension not allowed: {filename} (.{file_ext})")
+                print(f"🚫 [ATTACHMENT] File extension not allowed: {filename} ({file_ext})")
                 return False
             
             # Check for suspicious MIME types
