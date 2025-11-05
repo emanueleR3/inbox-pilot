@@ -83,6 +83,16 @@ services:
     networks:
       - broker_net
 
+  automations:
+    image: ghcr.io/correttoai/backend/automations:latest
+    container_name: automations
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8010:8010"
+    #networks:
+
 volumes:
   rabbitmq_data:
 

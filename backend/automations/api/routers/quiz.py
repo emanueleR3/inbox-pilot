@@ -39,7 +39,6 @@ class StartQuizResponse(BaseModel):
 async def start_quiz(req: StartQuizRequest):
     """Start a new quiz for a given company and return the first question."""
     sess = create_session(req.service_id)
-    print(sess)
 
     # Generate first question
     question = sess.chain.generate_next_question(sess.quiz.questions, sess.quiz.answers, sess.company_info)
