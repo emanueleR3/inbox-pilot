@@ -1,5 +1,6 @@
 import imaplib
 import email
+import email.message
 import ssl
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
@@ -8,6 +9,97 @@ import re
 from datetime import datetime, timedelta, timezone
 from src.utils.logger import log_info, log_error
 from src.utils.mail_parser import clean_email_body, extract_plain_text_from_html
+
+def _extract_imap_attachments_metadata(msg: email.message.Message) -> list:
+    """
+    Estrae i metadata degli allegati da un messaggio IMAP senza scaricarli.
+    
+    Args:
+        msg: Oggetto email.message.Message
+        
+    Returns:
+        Lista di metadata degli allegati
+    """
+    attachments = []
+    
+    for part in msg.walk():
+        # Salta il messaggio principale e le parti multipart
+        if part.get_content_maintype() == 'multipart':
+            continue
+            
+        # Controlla se è un attachment
+        disposition = part.get("Content-Disposition", "")
+        filename = part.get_filename()
+        content_type = part.get_content_type()
+        
+        # È un attachment se:
+        # 1. Ha Content-Disposition: attachment
+        # 2. Ha un filename
+        # 3. Non è text/plain o text/html (a meno che non sia esplicitamente attachment)
+        is_attachment = (
+            "attachment" in disposition.lower() or
+            filename is not None or
+            (content_type not in ["text/plain", "text/html"] and content_type != "multipart/alternative")
+        )
+        
+        # Salta parti text/plain e text/html che non sono attachment espliciti
+        if content_type in ["text/plain", "text/html"] and "attachment" not in disposition.lower() and filename is None:
+            continue
+            
+        if is_attachment:
+            # Decodifica il filename se necessario
+            if filename:
+                try:
+                    decoded_filename = decode_header(filename)[0]
+                    if isinstance(decoded_filename[0], bytes):
+                        filename = decoded_filename[0].decode(decoded_filename[1] or 'utf-8')
+                    else:
+                        filename = decoded_filename[0]
+                except Exception as e:
+                    print(f"⚠️ [IMAP] Error decoding filename: {e}")
+                    # Mantieni il filename originale se la decodifica fallisce
+                    pass
+            else:
+                # Se non c'è filename, genera uno basato sul content-type
+                ext_map = {
+                    'image/jpeg': '.jpg',
+                    'image/png': '.png',
+                    'image/gif': '.gif',
+                    'application/pdf': '.pdf',
+                    'application/msword': '.doc',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+                    'application/zip': '.zip'
+                }
+                ext = ext_map.get(content_type, '.bin')
+                filename = f"attachment{ext}"
+            
+            # Calcola la dimensione reale del contenuto
+            payload = part.get_payload(decode=True)  # decode=True per ottenere i bytes reali
+            if payload:
+                size = len(payload)
+            else:
+                # Fallback: prova con payload non decodificato
+                payload_raw = part.get_payload()
+                size = len(payload_raw) if payload_raw else 0
+            
+            attachment_data = {
+                "attachment_id": f"imap_{hash(filename + str(size) + content_type)}",  # ID più univoco
+                "filename": filename,
+                "mime_type": content_type,
+                "content_type": content_type,  # Alias per compatibilità
+                "size": size
+                # Non includiamo il payload per evitare problemi di memoria
+            }
+            
+            attachments.append(attachment_data)
+            print(f"📎 [IMAP] Found attachment: {filename} ({size} bytes, {content_type})")
+    
+    if attachments:
+        print(f"📎 [IMAP] Total attachments found: {len(attachments)}")
+    else:
+        print(f"📎 [IMAP] No attachments found in message")
+    
+    return attachments
 
 class ImapClient:
     def __init__(self, host: str, port: int, username: str, password: str, use_ssl: bool = True):
@@ -390,6 +482,9 @@ class ImapClient:
             # Estrae Message-ID e Thread-ID
             message_id = self._extract_message_id(msg)
             reply_to_id = self._extract_thread_id(msg)
+            
+            # Estrae metadata degli allegati senza scaricarli
+            attachments_metadata = _extract_imap_attachments_metadata(msg)
 
             email_data = {
                 "id": mail_id.decode(),
@@ -405,6 +500,7 @@ class ImapClient:
                 "body_text": body_text,
                 "body_html": body_html,
                 "raw": raw_email,
+                "attachments": attachments_metadata,
                 # Metadati aggiuntivi
                 "content_type": msg.get_content_type(),
                 "charset": msg.get_content_charset() or "utf-8",
@@ -560,6 +656,9 @@ class ImapClient:
                 
                 # Estrae Thread-ID
                 reply_to_id = self._extract_thread_id(msg)
+                
+                # Estrae metadata degli allegati senza scaricarli
+                attachments_metadata = _extract_imap_attachments_metadata(msg)
 
                 email_data = {
                     "id": mail_id.decode(),
@@ -575,6 +674,7 @@ class ImapClient:
                     "body_text": body_text,
                     "body_html": body_html,
                     "raw": raw_email,
+                    "attachments": attachments_metadata,
                     "folder": "INBOX",  # Indica che è dalla cartella INBOX
                     "is_inbound": True,    # Flag per indicare che è un messaggio ricevuto
                     # Metadati aggiuntivi
@@ -814,6 +914,9 @@ class ImapClient:
                 
                 # Estrae Thread-ID
                 reply_to_id = self._extract_thread_id(msg)
+                
+                # Estrae metadata degli allegati senza scaricarli
+                attachments_metadata = _extract_imap_attachments_metadata(msg)
 
                 email_data = {
                     "id": mail_id.decode(),
@@ -829,6 +932,7 @@ class ImapClient:
                     "body_text": body_text,
                     "body_html": body_html,
                     "raw": raw_email,
+                    "attachments": attachments_metadata,
                     "folder": sent_folder,  # Indica che è dalla cartella Sent
                     "is_outbound": True,    # Flag per indicare che è un messaggio inviato
                     # Metadati aggiuntivi
