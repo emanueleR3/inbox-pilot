@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from src.core.model.subscription import SubscriptionRead, Subscription  
+from typing import List
 
 class UserCrate(BaseModel):
     email: EmailStr
@@ -21,3 +22,11 @@ class UserReadSub(BaseModel):
     id: str
     email: EmailStr
     subscription: SubscriptionRead
+    jwt: str
+
+class UserReadSubs(BaseModel):
+    id: str
+    email: str
+    subscriptions: List[SubscriptionRead]  
+    jwt: str
+    sub_selected: int

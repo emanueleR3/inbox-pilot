@@ -148,7 +148,6 @@ def update_history_id(email: str, history_id: str) -> bool:
             print(f"Nessun utente trovato con email {email} per aggiornare history_id")
             return False
             
-        print(f"History ID aggiornato con successo per {email}: {history_id}")
         return True
         
     except Exception as e:

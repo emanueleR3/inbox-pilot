@@ -73,13 +73,13 @@ def get_supabase_client() -> Client:
                 _supabase_client = create_client(supabase_url, supabase_key)
     return _supabase_client
 
-async def get_user_credentials(subscription_id: str) -> Dict:
+async def get_user_credentials_inbound(microsoft_subscription_id_inbound: str) -> Dict:
     """
-    Recupera le credenziali dell'utente Microsoft dal database Supabase usando il microsoft_subscription_id.
+    Recupera le credenziali dell'utente Microsoft dal database Supabase usando il microsoft_subscription_id_inbound.
     I token vengono automaticamente decrittati.
     
     Args:
-        subscription_id (str): ID della subscription Microsoft
+        microsoft_subscription_id_inbound (str): ID della subscription Microsoft inbound
         
     Returns:
         dict: Dizionario contenente le credenziali dell'utente decrittate
@@ -91,11 +91,11 @@ async def get_user_credentials(subscription_id: str) -> Dict:
         supabase = get_supabase_client()
         
         # Query per ottenere le credenziali dell'utente dalla tabella subscription_services
-        # Cerchiamo per microsoft_subscription_id
-        response = supabase.table("subscription_services").select("*").eq("microsoft_subscription_id", subscription_id).execute()
+        # Cerchiamo per microsoft_subscription_id_inbound
+        response = supabase.table("subscription_services").select("*").eq("microsoft_subscription_id_inbound", microsoft_subscription_id_inbound).execute()
         
         if not response.data:
-            raise Exception(f"Utente con microsoft_subscription_id {subscription_id} non trovato")
+            raise Exception(f"Utente con microsoft_subscription_id_inbound {microsoft_subscription_id_inbound} non trovato")
         
         user_data = response.data[0]
         
@@ -117,10 +117,110 @@ async def get_user_credentials(subscription_id: str) -> Dict:
             "refresh_token": refresh_token,
             "token_expiry": user_data.get("expiry_token"),
             "subscription_id": user_data.get("subscription_id"),
-            "microsoft_subscription_id": user_data.get("microsoft_subscription_id"),
-            "microsoft_expiration_datetime": user_data.get("microsoft_expiration_datetime")
+            "microsoft_subscription_id_inbound": user_data.get("microsoft_subscription_id_inbound"),
+            "microsoft_expiration_datetime_inbound": user_data.get("microsoft_expiration_datetime_inbound")
         }
         
     except Exception as e:
-        print(f"Errore nel recupero delle credenziali per subscription_id {subscription_id}: {str(e)}")
+        print(f"Errore nel recupero delle credenziali inbound per subscription_id {microsoft_subscription_id_inbound}: {str(e)}")
         raise
+
+async def get_user_credentials_outbound(microsoft_subscription_id_outbound: str) -> Dict:
+    """
+    Recupera le credenziali dell'utente Microsoft dal database Supabase usando il microsoft_subscription_id_outbound.
+    I token vengono automaticamente decrittati.
+    
+    Args:
+        microsoft_subscription_id_outbound (str): ID della subscription Microsoft outbound
+        
+    Returns:
+        dict: Dizionario contenente le credenziali dell'utente decrittate
+        
+    Raises:
+        Exception: Se l'utente non viene trovato o si verifica un errore
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Query per ottenere le credenziali dell'utente dalla tabella subscription_services
+        # Cerchiamo per microsoft_subscription_id_outbound
+        response = supabase.table("subscription_services").select("*").eq("microsoft_subscription_id_outbound", microsoft_subscription_id_outbound).execute()
+        
+        if not response.data:
+            raise Exception(f"Utente con microsoft_subscription_id_outbound {microsoft_subscription_id_outbound} non trovato")
+        
+        user_data = response.data[0]
+        
+        # Decrittare i token se presenti
+        access_token = ""
+        refresh_token = ""
+        
+        if user_data.get("hashed_access_token"):
+            access_token = _decrypt_token(user_data["hashed_access_token"])
+        
+        if user_data.get("hashed_refresh_token"):
+            refresh_token = _decrypt_token(user_data["hashed_refresh_token"])
+        
+        # Ritorna le credenziali necessarie per Microsoft Graph API con i token decrittati
+        return {
+            "email": user_data.get("email"),
+            "oauth_user_id": user_data.get("oauth_user_id"),
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_expiry": user_data.get("expiry_token"),
+            "subscription_id": user_data.get("subscription_id"),
+            "microsoft_subscription_id_outbound": user_data.get("microsoft_subscription_id_outbound"),
+            "microsoft_expiration_datetime_outbound": user_data.get("microsoft_expiration_datetime_outbound")
+        }
+        
+    except Exception as e:
+        print(f"Errore nel recupero delle credenziali outbound per subscription_id {microsoft_subscription_id_outbound}: {str(e)}")
+        raise
+
+async def get_subscription_type(subscription_id: str) -> str:
+    """
+    Determina se una subscription è 'inbound' o 'outbound' dal database.
+    
+    Args:
+        subscription_id (str): ID della subscription Microsoft
+        
+    Returns:
+        str: 'inbound' se è una subscription inbound, 'outbound' se outbound
+        
+    Raises:
+        Exception: Se la subscription non viene trovata
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Cerca prima nelle subscription inbound
+        response = supabase.table("subscription_services").select("microsoft_subscription_id_inbound").eq("microsoft_subscription_id_inbound", subscription_id).execute()
+        
+        if response.data:
+            return "inbound"
+        
+        # Se non trovata, cerca nelle subscription outbound
+        response = supabase.table("subscription_services").select("microsoft_subscription_id_outbound").eq("microsoft_subscription_id_outbound", subscription_id).execute()
+        
+        if response.data:
+            return "outbound"
+        
+        raise Exception(f"Subscription {subscription_id} non trovata nel database")
+        
+    except Exception as e:
+        print(f"Errore nel determinare il tipo di subscription {subscription_id}: {str(e)}")
+        raise
+
+# Mantieni anche il metodo originale per retrocompatibilità (deprecato)
+async def get_user_credentials(subscription_id: str) -> Dict:
+    """
+    DEPRECATO: Usa get_user_credentials_inbound o get_user_credentials_outbound invece.
+    """
+    # Per ora cerca prima inbound, poi outbound
+    try:
+        return await get_user_credentials_inbound(subscription_id)
+    except:
+        try:
+            return await get_user_credentials_outbound(subscription_id)
+        except:
+            raise Exception(f"Utente con subscription_id {subscription_id} non trovato in nessuna categoria")

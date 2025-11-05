@@ -9,7 +9,7 @@ router = APIRouter(
 controller = SubscriptionServiceController()
 
 @router.get(
-    "/getConfig/{subscription_id}",
+    "/get-config/{subscription_id}",
     summary="Recupera la configurazione di un abbonamento",
     description="Restituisce i parametri di configurazione associati all'abbonamento specificato.",
     responses={
@@ -71,7 +71,7 @@ def get_configuration(subscription_id: str):
     return {"status": "ok", "result": filtered}
 
 @router.patch(
-    "/updateConfig/{subscription_id}",
+    "/update-config/{subscription_id}",
     summary="Aggiorna una configurazione esistente",
     description="Aggiorna uno o più parametri di configurazione per un abbonamento esistente.",
     responses={

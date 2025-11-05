@@ -2,30 +2,49 @@ import asyncio
 import aiohttp
 import json
 from src.utils.broker_client import get_connection
+from src.processors.message_processor import EmailProcessor
 
 # Limita la concorrenza (evita di sovraccaricare API o risorse)
 SEM = asyncio.Semaphore(10)
 
 AUTOMATION_API_URL = "http://automations:8000/api/v1/process_email"  # TODO esempio
 
+# Initialize the email processor
+email_processor = EmailProcessor()
+
 async def process_email(email_data):
     """
-    Processa una singola email - MODALITÀ DEBUG: stampa il messaggio.
+    Processa una singola email utilizzando la nuova architettura con filtering e DB save.
     """
     async with SEM:
         try:
-            print(f"\n🎯 RABBITMQ - Messaggio ricevuto e processato:")
+            print(f"\n🎯 RABBITMQ - Messaggio ricevuto:")
             print("=" * 80)
             print(f"📧 Provider: {email_data.get('provider', 'N/A')}")
             print(f"📧 User: {email_data.get('user_email', 'N/A')}")
             print(f"📧 Da: {email_data.get('from', 'N/A')}")
             print(f"📧 A: {email_data.get('to', 'N/A')}")
             print(f"📧 Oggetto: {email_data.get('subject', 'N/A')}")
-            print(f"📧 Data: {email_data.get('date', 'N/A')}")
-            print(f"📧 Thread ID: {email_data.get('thread_id', 'N/A')}")
+            print(f"📧 No Reply: {email_data.get('no_reply', False)}")
+            print(f"📧 Is Sent: {email_data.get('is_sent', False)}")
+            print(f"📧 Reply To ID: {email_data.get('reply_to_id', 'N/A')}")
             print(f"📧 Message ID: {email_data.get('message_id', 'N/A')}")
-            print(f"📧 Labels: {', '.join(email_data.get('labels', []))}")
             
+            # Process through the new architecture
+            result = await email_processor.process_message(email_data)
+            
+            if result:
+                print(f"🔄 [PROCESSING] Result: {result}")
+                
+                if result.get('status') == 'thread_created':
+                    print(f"🗂️ [THREAD] New thread created with ID: {result.get('thread_id')}")
+                elif result.get('status') == 'ready_for_ai':
+                    print(f"🤖 [AI] Message ready for AI processing")
+                    # TODO: Route to AI workflow
+            else:
+                print(f"🚫 [PROCESSING] Message was filtered out or failed processing")
+            
+            # Debug: Show message body
             body = email_data.get('body_text', '')
             if body:
                 print("\n📄 CORPO DEL MESSAGGIO:")
@@ -38,7 +57,6 @@ async def process_email(email_data):
                     print(body)
                 print("-" * 40)
             
-            print(f"📧 Timestamp: {email_data.get('timestamp', 'N/A')}")
             print("=" * 80)
             print(f"✅ [RabbitMQ] Email processata con successo!")
             

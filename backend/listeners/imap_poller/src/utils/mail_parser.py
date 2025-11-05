@@ -34,13 +34,7 @@ def extract_email_addresses(address_string: str) -> List[Dict[str, str]]:
 
 def clean_email_body(body_text: str) -> str:
     """
-    Pulisce il corpo dell'email rimuovendo caratteri indesiderati.
-    
-    Args:
-        body_text: Testo del corpo dell'email
-    
-    Returns:
-        Testo pulito
+    Pulisce il corpo dell'email rimuovendo caratteri indesiderati e normalizzando il testo.
     """
     if not body_text:
         return ""
@@ -48,9 +42,40 @@ def clean_email_body(body_text: str) -> str:
     # Rimuove caratteri di controllo e normalizza gli spazi
     cleaned = re.sub(r'[\r\n\t]+', '\n', body_text)
     cleaned = re.sub(r' +', ' ', cleaned)
-    cleaned = cleaned.strip()
     
-    return cleaned
+    # Rimuove righe vuote multiple consecutive
+    cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
+    
+    # Rimuove spazi all'inizio e fine delle righe
+    lines = [line.strip() for line in cleaned.split('\n')]
+    cleaned = '\n'.join(lines)
+    
+    # Rimuove quoted-printable artifacts comuni
+    cleaned = re.sub(r'=\d{2}', '', cleaned)  # Rimuove =20, =3D, etc.
+    cleaned = re.sub(r'=\n', '', cleaned)     # Rimuove soft line breaks
+    
+    return cleaned.strip()
+
+def extract_plain_text_from_html(html_content: str) -> str:
+    """
+    Estrae il testo semplice da contenuto HTML.
+    Rimuove tag HTML e decodifica entità HTML.
+    """
+    if not html_content:
+        return ""
+    
+    import html
+    
+    # Rimuove tag HTML comuni
+    text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', '', text)
+    
+    # Decodifica entità HTML
+    text = html.unescape(text)
+    
+    # Pulisce il testo risultante
+    return clean_email_body(text)
 
 def extract_urls_from_text(text: str) -> List[str]:
     """
@@ -135,6 +160,78 @@ def is_automated_email(from_address: str, subject: str, body: str) -> bool:
             return True
     
     return False
+
+def extract_email_from_address(address_string: str) -> str:
+    """
+    Estrae solo l'indirizzo email da una stringa che può contenere nome e email.
+    
+    Args:
+        address_string: Stringa tipo "Nome <email@domain.com>" o "email@domain.com"
+    
+    Returns:
+        Solo l'indirizzo email estratto
+    """
+    if not address_string:
+        return ""
+    
+    # Usa parseaddr per estrarre l'email
+    name, email = parseaddr(address_string.strip())
+    return email.strip() if email else ""
+
+def is_no_reply_email(from_address: str) -> bool:
+    """
+    Determina se un'email proviene da un indirizzo no-reply.
+    
+    Args:
+        from_address: Indirizzo del mittente (può includere il nome)
+    
+    Returns:
+        True se è un indirizzo no-reply
+    """
+    if not from_address:
+        return False
+    
+    # Estrai solo l'indirizzo email
+    email = extract_email_from_address(from_address)
+    if not email:
+        return False
+    
+    email_lower = email.lower()
+    no_reply_patterns = [
+        'no-reply', 'noreply', 'do-not-reply', 'donotreply',
+        'no_reply', 'donot-reply', 'auto-reply', 'autoreply',
+        'mailer-daemon', 'postmaster', 'bounce'
+    ]
+    
+    return any(pattern in email_lower for pattern in no_reply_patterns)
+
+def is_sent_message(from_address: str, user_email: str, folder_type: str = None) -> bool:
+    """
+    Determina se un messaggio è stato inviato dall'account stesso.
+    
+    Args:
+        from_address: Indirizzo del mittente (può includere il nome)
+        user_email: Email dell'account IMAP
+        folder_type: Tipo di cartella (opzionale, es. "sent", "inbox")
+    
+    Returns:
+        True se il messaggio è stato inviato dall'account stesso
+    """
+    if not from_address or not user_email:
+        return False
+    
+    # Estrai solo l'indirizzo email del mittente
+    sender_email = extract_email_from_address(from_address)
+    if not sender_email:
+        return False
+    
+    # Confronta gli indirizzi email (case-insensitive)
+    is_same_sender = sender_email.lower() == user_email.lower()
+    
+    # Se è specificato il tipo di cartella, considera anche quello
+    is_sent_folder = folder_type and 'sent' in folder_type.lower()
+    
+    return is_same_sender or is_sent_folder
 
 def extract_quoted_text(body: str) -> Tuple[str, str]:
     """

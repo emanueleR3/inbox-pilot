@@ -118,58 +118,86 @@ class SubscriptionServiceDAO:
         access_token: str, 
         refresh_token: str, 
         expiry,
-        microsoft_subscription_id: str,
-        microsoft_expiration_datetime
+        microsoft_subscription_id_inbound: str = None,
+        microsoft_subscription_id_outbound: str = None,
+        microsoft_expiration_datetime_inbound = None,
+        microsoft_expiration_datetime_outbound = None
     ) -> bool:
         """
         Salva le credenziali Microsoft nel database per l'utente con l'email specificata.
         I token vengono cifrati prima del salvataggio.
+        
+        Args:
+            email: Email dell'utente
+            subscription_id: ID della subscription
+            access_token: Token di accesso Microsoft
+            refresh_token: Token di refresh Microsoft
+            expiry: Data di scadenza del token (secondi o datetime)
+            microsoft_subscription_id_inbound: ID della subscription Microsoft Graph per email in entrata
+            microsoft_subscription_id_outbound: ID della subscription Microsoft Graph per email in uscita
+            microsoft_expiration_datetime_inbound: Data di scadenza della subscription Graph inbound
+            microsoft_expiration_datetime_outbound: Data di scadenza della subscription Graph outbound
         """
         try:
             # Cifra i token prima del salvataggio
             encrypted_access_token = self._encrypt(access_token, "token")
             encrypted_refresh_token = self._encrypt(refresh_token, "token")
 
-            # Converti expiry (expires_in in secondi) e microsoft_expiration_datetime (ISO string) in oggetti datetime
+            # Converti expiry (expires_in in secondi) in oggetto datetime
             expiry_datetime = None
             if expiry:
-                # Se expiry è un numero (expires_in in secondi), calcolalo dal momento attuale
                 if isinstance(expiry, (int, float)):
-                    # expires_in è il numero di secondi dalla emissione del token
                     now = datetime.now(timezone.utc)
                     expiry_datetime = now + timedelta(seconds=expiry)
                     logging.info(f"Microsoft token expiry calculation: now={now.isoformat()}, expires_in={expiry}s, expiry={expiry_datetime.isoformat()}")
-                # Se expiry è già una stringa ISO, parsala
                 elif isinstance(expiry, str):
                     expiry_datetime = datetime.fromisoformat(expiry.replace('Z', '+00:00'))
                     logging.info(f"Microsoft token expiry from ISO string: {expiry} -> {expiry_datetime.isoformat()}")
-                # Se è già un datetime, usalo direttamente
                 elif isinstance(expiry, datetime):
                     expiry_datetime = expiry
                     logging.info(f"Microsoft token expiry from datetime: {expiry_datetime.isoformat()}")
             
-            microsoft_expiration_dt = None
-            if microsoft_expiration_datetime:
-                # Microsoft restituisce solitamente date in formato ISO string
-                if isinstance(microsoft_expiration_datetime, str):
-                    # Rimuovi 'Z' e sostituisci con '+00:00' per il parsing corretto
-                    microsoft_expiration_dt = datetime.fromisoformat(microsoft_expiration_datetime.replace('Z', '+00:00'))
-                elif isinstance(microsoft_expiration_datetime, datetime):
-                    microsoft_expiration_dt = microsoft_expiration_datetime
-
+            # Converti le date di scadenza Microsoft Graph
+            microsoft_expiration_dt_inbound = None
+            if microsoft_expiration_datetime_inbound:
+                if isinstance(microsoft_expiration_datetime_inbound, str):
+                    microsoft_expiration_dt_inbound = datetime.fromisoformat(microsoft_expiration_datetime_inbound.replace('Z', '+00:00'))
+                elif isinstance(microsoft_expiration_datetime_inbound, datetime):
+                    microsoft_expiration_dt_inbound = microsoft_expiration_datetime_inbound
             
-            # controllo se esiste già un record con questa email
+            microsoft_expiration_dt_outbound = None
+            if microsoft_expiration_datetime_outbound:
+                if isinstance(microsoft_expiration_datetime_outbound, str):
+                    microsoft_expiration_dt_outbound = datetime.fromisoformat(microsoft_expiration_datetime_outbound.replace('Z', '+00:00'))
+                elif isinstance(microsoft_expiration_datetime_outbound, datetime):
+                    microsoft_expiration_dt_outbound = microsoft_expiration_datetime_outbound
+
+            # Controllo se esiste già un record con questa email
             email_exists = self.email_exists(email)
             if email_exists:
                 # Aggiorna il record esistente
                 data = {
-                    "email_provider": "microsoft",
                     "hashed_access_token": encrypted_access_token,
                     "hashed_refresh_token": encrypted_refresh_token,
                     "expiry_token": expiry_datetime.isoformat() if expiry_datetime else None,
-                    "microsoft_subscription_id": microsoft_subscription_id,
-                    "microsoft_expiration_datetime": microsoft_expiration_dt.isoformat() if microsoft_expiration_dt else None
+                    "calendar_provider": "microsoft"
                 }
+                
+                # Aggiungi i campi Microsoft subscription se presenti
+                if microsoft_subscription_id_inbound is not None:
+                    data["microsoft_subscription_id_inbound"] = microsoft_subscription_id_inbound
+                    data["email_provider"] = "microsoft"
+                
+                if microsoft_subscription_id_outbound is not None:
+                    data["microsoft_subscription_id_outbound"] = microsoft_subscription_id_outbound
+                    data["email_provider"] = "microsoft"
+                
+                if microsoft_expiration_dt_inbound is not None:
+                    data["microsoft_expiration_datetime_inbound"] = microsoft_expiration_dt_inbound.isoformat()
+                
+                if microsoft_expiration_dt_outbound is not None:
+                    data["microsoft_expiration_datetime_outbound"] = microsoft_expiration_dt_outbound.isoformat()
+                
                 response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
                     
                 if not response.data:
@@ -184,8 +212,11 @@ class SubscriptionServiceDAO:
                     hashed_access_token=encrypted_access_token,
                     hashed_refresh_token=encrypted_refresh_token,
                     expiry_token=expiry_datetime,
-                    microsoft_subscription_id=microsoft_subscription_id,
-                    microsoft_expiration_datetime=microsoft_expiration_dt,
+                    microsoft_subscription_id_inbound=microsoft_subscription_id_inbound,
+                    microsoft_subscription_id_outbound=microsoft_subscription_id_outbound,
+                    microsoft_expiration_datetime_inbound=microsoft_expiration_dt_inbound,
+                    microsoft_expiration_datetime_outbound=microsoft_expiration_dt_outbound,
+                    calendar_provider="microsoft",
                     config_completed=False,
                     activated=False
                 )
@@ -200,10 +231,19 @@ class SubscriptionServiceDAO:
             print(f"Errore nel salvataggio delle credenziali Microsoft: {e}")
             return False  
 
-    def save_google_credentials(self, email: str, subscription_id: str, access_token: str, refresh_token: str, expiry, history_id: str) -> bool:
+    def save_google_credentials(self, email: str, subscription_id: str, access_token: str, refresh_token: str, expiry, history_id: str = None) -> bool:
         """
         Salva le credenziali Google nel database per l'utente con l'email specificata.
         I token vengono cifrati prima del salvataggio.
+        
+        Args:
+            email: Email dell'utente
+            subscription_id: ID della subscription
+            access_token: Token di accesso Google
+            refresh_token: Token di refresh Google
+            expiry: Data di scadenza del token
+            history_id: ID dello storico Gmail (None se services="calendar")
+            calendar_provider: Provider del calendar ("google" se services="calendar", None se services="all")
         """
         try:
             # Cifra i token prima del salvataggio
@@ -215,11 +255,17 @@ class SubscriptionServiceDAO:
             if email_exists:
                 # Aggiorna il record esistente
                 data = {
-                    "email_provider": "google",
                     "hashed_access_token": encrypted_access_token,
                     "hashed_refresh_token": encrypted_refresh_token,
-                    "expiry_token": expiry.isoformat() if expiry else None
+                    "expiry_token": expiry.isoformat() if expiry else None,
+                    "calendar_provider": "google"
                 }
+                
+                # Aggiungi history_id solo se non è None
+                if history_id is not None:
+                    data["history_id"] = history_id
+                    data["email_provider"] = "google"
+                
                 response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
                     
                 if not response.data:
@@ -236,7 +282,8 @@ class SubscriptionServiceDAO:
                     expiry_token=expiry,
                     config_completed=False,
                     activated=False,
-                    history_id=history_id
+                    history_id=history_id,  # Può essere None
+                    calendar_provider="google"
                 )
                 
                 if response is None:
@@ -324,11 +371,18 @@ class SubscriptionServiceDAO:
         confidence_classification_threshold: float = None,
         urgent_meeting_threshold: float = None,
         history_id: str = None,
-        microsoft_subscription_id: str = None,
-        microsoft_expiration_datetime = None,
+        microsoft_subscription_id_inbound: str = None,
+        microsoft_subscription_id_outbound: str = None,
+        microsoft_expiration_datetime_inbound = None,
+        microsoft_expiration_datetime_outbound = None,
         oauth_user_id: str = None,
         config_completed: bool = False,
-        activated: bool = False
+        activated: bool = False,
+        quiz_q_a: dict = None,
+        last_sent_message_id: str = None,
+        last_sent_timestamp: datetime = None,
+        last_received_message_id: str = None,
+        last_received_timestamp: datetime = None
     ) -> dict | None:
         """
         Crea un nuovo record nella tabella subscription_services.
@@ -339,8 +393,6 @@ class SubscriptionServiceDAO:
             dict: Il record creato se successo, None se errore
         """
         try:
-            #TODO: funzione per effettuare l'accesso al server imap
-
             data = {
                 "email": email,
                 "subscription_id": str(subscription_id) if subscription_id else None,
@@ -356,17 +408,24 @@ class SubscriptionServiceDAO:
                 "hashed_access_token": hashed_access_token,
                 "hashed_refresh_token": hashed_refresh_token,
                 "expiry_token": expiry_token.isoformat() if expiry_token else None,
-                "confidence_response_threshold": confidence_response_threshold,
-                "confidence_review_mail": confidence_review_mail,
-                "priority_threshold": priority_threshold,
-                "confidence_classification_threshold": confidence_classification_threshold,
-                "urgent_meeting_threshold": urgent_meeting_threshold,
+                "confidence_response_threshold": "0.8",
+                "confidence_review_mail": "0.7",
+                "priority_threshold": "0.6",
+                "confidence_classification_threshold": "0.75",
+                "urgent_meeting_threshold": "0.9",
                 "history_id": history_id,
-                "microsoft_subscription_id": microsoft_subscription_id,
-                "microsoft_expiration_datetime": microsoft_expiration_datetime.isoformat() if microsoft_expiration_datetime else None,
+                "microsoft_subscription_id_inbound": microsoft_subscription_id_inbound,
+                "microsoft_subscription_id_outbound": microsoft_subscription_id_outbound,
+                "microsoft_expiration_datetime_inbound": microsoft_expiration_datetime_inbound.isoformat() if microsoft_expiration_datetime_inbound else None,
+                "microsoft_expiration_datetime_outbound": microsoft_expiration_datetime_outbound.isoformat() if microsoft_expiration_datetime_outbound else None,
                 "oauth_user_id": oauth_user_id,
                 "config_completed": config_completed,
-                "activated": activated
+                "activated": activated,
+                "quiz_q_a": quiz_q_a,
+                "last_sent_message_id": last_sent_message_id,
+                "last_sent_timestamp": last_sent_timestamp.isoformat() if last_sent_timestamp else None,
+                "last_received_message_id": last_received_message_id,
+                "last_received_timestamp": last_received_timestamp.isoformat() if last_received_timestamp else None
             }
 
             
@@ -404,31 +463,141 @@ class SubscriptionServiceDAO:
             return False
 
     def get_configuration(self, subscription_id: str):
-        try:
-            result = self.supabase.table("subscription_services").select(
-                "subscription_id, confidence_response_threshold, confidence_review_mail, priority_threshold, confidence_classification_threshold, urgent_meeting_threshold"
-            ).eq("subscription_id", subscription_id).execute()
+        result = self.supabase.table("subscription_services").select(
+            "subscription_id, confidence_response_threshold, confidence_review_mail, priority_threshold, confidence_classification_threshold, urgent_meeting_threshold"
+        ).eq("subscription_id", subscription_id).execute()
 
-            if not result.data:
-                return None
-            return result.data[0]
-
-        except Exception as e:
-            raise e
+        if not result.data:
+            return None
+        
+        return result.data[0]
 
     def update_configuration(self, subscription_id: str, updates: dict):
+        config = SubscriptionServiceConfigCrate.model_validate(updates)
+
+        upload_dict = config.model_dump()
+
         try:
-            config = SubscriptionServiceConfigCrate.model_validate(updates)
-
-            upload_dict = config.model_dump()
-
             result = (
                 self.supabase.table("subscription_services")
                 .update(upload_dict)
                 .eq("subscription_id", subscription_id)
                 .execute()
             )
-
             return result.data[0]
         except Exception as e:
-            raise e
+            print(f"Errore nell'aggiornamento della configurazione: {e}")
+            return None
+
+    def get_microsoft_credentials_inbound(self, microsoft_subscription_id_inbound: str) -> dict | None:
+        """
+        Recupera le credenziali Microsoft per subscription inbound dal database.
+        """
+        try:
+            response = self.supabase.table("subscription_services").select("*").eq("microsoft_subscription_id_inbound", microsoft_subscription_id_inbound).execute()
+            
+            if not response.data:
+                return None
+            
+            user_data = response.data[0]
+            
+            # Decrittare i token se presenti
+            access_token = ""
+            refresh_token = ""
+            
+            if user_data.get("hashed_access_token"):
+                access_token = self._decrypt(user_data["hashed_access_token"], "token")
+            
+            if user_data.get("hashed_refresh_token"):
+                refresh_token = self._decrypt(user_data["hashed_refresh_token"], "token")
+            
+            return {
+                "email": user_data.get("email"),
+                "oauth_user_id": user_data.get("oauth_user_id"),
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_expiry": user_data.get("expiry_token"),
+                "subscription_id": user_data.get("subscription_id"),
+                "microsoft_subscription_id_inbound": user_data.get("microsoft_subscription_id_inbound"),
+                "microsoft_expiration_datetime_inbound": user_data.get("microsoft_expiration_datetime_inbound")
+            }
+            
+        except Exception as e:
+            print(f"Errore nel recupero delle credenziali Microsoft inbound per subscription_id {microsoft_subscription_id_inbound}: {str(e)}")
+            return None
+
+    def get_microsoft_credentials_outbound(self, microsoft_subscription_id_outbound: str) -> dict | None:
+        """
+        Recupera le credenziali Microsoft per subscription outbound dal database.
+        """
+        try:
+            response = self.supabase.table("subscription_services").select("*").eq("microsoft_subscription_id_outbound", microsoft_subscription_id_outbound).execute()
+            
+            if not response.data:
+                return None
+            
+            user_data = response.data[0]
+            
+            # Decrittare i token se presenti
+            access_token = ""
+            refresh_token = ""
+            
+            if user_data.get("hashed_access_token"):
+                access_token = self._decrypt(user_data["hashed_access_token"], "token")
+            
+            if user_data.get("hashed_refresh_token"):
+                refresh_token = self._decrypt(user_data["hashed_refresh_token"], "token")
+            
+            return {
+                "email": user_data.get("email"),
+                "oauth_user_id": user_data.get("oauth_user_id"),
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_expiry": user_data.get("expiry_token"),
+                "subscription_id": user_data.get("subscription_id"),
+                "microsoft_subscription_id_outbound": user_data.get("microsoft_subscription_id_outbound"),
+                "microsoft_expiration_datetime_outbound": user_data.get("microsoft_expiration_datetime_outbound")
+            }
+            
+        except Exception as e:
+            print(f"Errore nel recupero delle credenziali Microsoft outbound per subscription_id {microsoft_subscription_id_outbound}: {str(e)}")
+            return None
+
+    def get_microsoft_credentials_by_email(self, email: str) -> dict | None:
+        """
+        Recupera le credenziali Microsoft complete (inbound + outbound) per email.
+        """
+        try:
+            response = self.supabase.table("subscription_services").select("*").eq("email", email).execute()
+            
+            if not response.data:
+                return None
+            
+            user_data = response.data[0]
+            
+            # Decrittare i token se presenti
+            access_token = ""
+            refresh_token = ""
+            
+            if user_data.get("hashed_access_token"):
+                access_token = self._decrypt(user_data["hashed_access_token"], "token")
+            
+            if user_data.get("hashed_refresh_token"):
+                refresh_token = self._decrypt(user_data["hashed_refresh_token"], "token")
+            
+            return {
+                "email": user_data.get("email"),
+                "oauth_user_id": user_data.get("oauth_user_id"),
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_expiry": user_data.get("expiry_token"),
+                "subscription_id": user_data.get("subscription_id"),
+                "microsoft_subscription_id_inbound": user_data.get("microsoft_subscription_id_inbound"),
+                "microsoft_subscription_id_outbound": user_data.get("microsoft_subscription_id_outbound"),
+                "microsoft_expiration_datetime_inbound": user_data.get("microsoft_expiration_datetime_inbound"),
+                "microsoft_expiration_datetime_outbound": user_data.get("microsoft_expiration_datetime_outbound")
+            }
+            
+        except Exception as e:
+            print(f"Errore nel recupero delle credenziali Microsoft per email {email}: {str(e)}")
+            return None

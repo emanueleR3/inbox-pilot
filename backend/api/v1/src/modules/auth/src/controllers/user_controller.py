@@ -6,6 +6,32 @@ class UserController:
     def __init__(self):
         self.user_dao = UserDAO()
 
+    def get_users_by_subscription(self, subscription_id: str):
+        if not subscription_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="subscription_id richiesto"
+            )
+
+        try:
+            users = self.user_dao.get_users_by_subscription(subscription_id)
+            
+            if not users:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Nessun utente trovato per questa sottoscrizione"
+                )
+
+            return users
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Errore interno durante il recupero degli utenti: {str(e)}"
+            )
+
     def create_user_with_sub(self, payload: dict):
         email = payload.get("email")
         password = payload.get("password")
@@ -30,28 +56,31 @@ class UserController:
                 detail=str(e)
             )
         
-    def get_user_by_subscription(self, subscription_id: str):
-        
+    def add_new_user(self, payload: dict):
+        email = payload.get("email")
+        password = payload.get("password")
+        subscription_id = payload.get("subscription_id")
 
-        if not subscription_id:
+        if not all([email, password, subscription_id]):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="UserId richiesto"
+                detail="Email e password e i dati della sottoscrizione sono richiesti"
             )
+        
         try:
-            return self.user_dao.get_user_by_subscription(subscription_id)
+            return self.user_dao.add_new_user(email, password, subscription_id)
         except AuthApiError as e:
-            if "User not found" in str(e):
+            if "User already registered" in str(e):
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Subscription_id non trovata"
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Un utente con questa email esiste già"
                 )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Errore durante il retrive della subscription_id"
+                detail=str(e)
             )
         
-
+    
     def login_user(self, payload: dict):
         email = payload.get("email")
         password = payload.get("password")
