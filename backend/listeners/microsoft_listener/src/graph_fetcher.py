@@ -140,6 +140,7 @@ def _extract_microsoft_attachments_metadata(graph_data: dict) -> list:
             size = attachment.get("size", 0)
             
             log_info(f"📎 [MICROSOFT] File attachment: {filename} ({size} bytes, {mime_type})")
+            log_info(f"📎 [MICROSOFT] Attachment ID: '{attachment_id}'")
             
             if filename:  # Solo se ha un nome file valido
                 attachments.append({
@@ -210,6 +211,9 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
         if message_id and message_id.startswith('<') and message_id.endswith('>'):
             message_id = message_id[1:-1]
         
+        # Salva anche l'ID interno di Microsoft Graph per downloads degli allegati
+        microsoft_message_id = graph_data.get("id", "")
+        
         # Cerca In-Reply-To negli header MIME
         reply_to_id = headers.get("in-reply-to", "")
         if reply_to_id and reply_to_id.startswith('<') and reply_to_id.endswith('>'):
@@ -241,6 +245,7 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
             "body_text": body_text,
             "date": message_datetime,
             "message_id": message_id,
+            "microsoft_message_id": microsoft_message_id,  # ID interno per Microsoft Graph API
             "reply_to_id": reply_to_id,
             "labels": labels,  # Aggiungi SENT per messaggi inviati
             "timestamp": message_datetime,

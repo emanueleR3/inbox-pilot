@@ -453,8 +453,13 @@ class AttachmentService:
             
             # Get required data for Microsoft Graph API call
             attachment_id = attachment_meta.get("attachment_id")
-            message_id = email_data.get("message_id")
+            # Usa microsoft_message_id se disponibile, altrimenti message_id
+            message_id = email_data.get("microsoft_message_id") or email_data.get("message_id")
             user_email = email_data.get("user_email")
+            
+            print(f"📎 [ATTACHMENT] Microsoft download - attachment_id: {attachment_id}")
+            print(f"📎 [ATTACHMENT] Microsoft download - message_id: {message_id}")
+            print(f"📎 [ATTACHMENT] Microsoft download - user_email: {user_email}")
             
             if not all([attachment_id, message_id, user_email]):
                 print(f"❌ [ATTACHMENT] Missing required data for Microsoft attachment download")
@@ -471,7 +476,15 @@ class AttachmentService:
             
             # Microsoft Graph API endpoint for attachment download
             # Format: /users/{user}/messages/{message}/attachments/{attachment}/$value
-            url = f"https://graph.microsoft.com/v1.0/users/{user_email}/messages/{message_id}/attachments/{attachment_id}/$value"
+            # URL encode the attachment_id to handle special characters
+            from urllib.parse import quote
+            encoded_attachment_id = quote(attachment_id, safe='')
+            encoded_message_id = quote(message_id, safe='')
+            encoded_user_email = quote(user_email, safe='@.')
+            
+            url = f"https://graph.microsoft.com/v1.0/users/{encoded_user_email}/messages/{encoded_message_id}/attachments/{encoded_attachment_id}/$value"
+            
+            print(f"📎 [ATTACHMENT] Microsoft Graph URL: {url}")
             
             headers = {
                 "Authorization": f"Bearer {access_token}",
