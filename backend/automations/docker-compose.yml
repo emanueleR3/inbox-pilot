@@ -1,0 +1,15 @@
+services:
+  automations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: automations
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    ports:
+      - "8010:8010"
+    #networks:
+
+#networks:
+  
