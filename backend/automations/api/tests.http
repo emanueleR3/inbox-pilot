@@ -1,0 +1,116 @@
+### Automations API HTTP Tests
+### Base URL
+@baseUrl = http://localhost:8010
+
+###############################################################################
+### Health Check
+###############################################################################
+
+### GET Health Check
+GET {{baseUrl}}/health
+Accept: application/json
+
+###############################################################################
+### Agents - Main Routes
+###############################################################################
+
+### GET List of Available Agents
+GET {{baseUrl}}/agents/
+Accept: application/json
+
+###############################################################################
+### Agents - Calendar Routes
+###############################################################################
+
+### GET Calendar Agents
+GET {{baseUrl}}/agents/calendars/
+Accept: application/json
+
+###############################################################################
+### Agents - Email Routes
+###############################################################################
+
+### GET Email Agents
+GET {{baseUrl}}/agents/emails/
+Accept: application/json
+
+###############################################################################
+### Chatbot Routes
+###############################################################################
+
+### GET Chat History - Session 1
+GET {{baseUrl}}/chatbot/history/test-session-123
+Accept: application/json
+
+### GET Chat History - Session 2
+GET {{baseUrl}}/chatbot/history/user-456-session
+Accept: application/json
+
+### GET Chat History - Session 3
+GET {{baseUrl}}/chatbot/history/abc-xyz-789
+Accept: application/json
+
+###############################################################################
+### Quiz Routes
+###############################################################################
+
+### Start a quiz
+POST {{baseUrl}}/quiz/start
+Content-Type: application/json
+
+{
+	"service_id": "b53b25ee-d52f-49b8-aee9-585bd55ecf27"
+}
+
+### Submit an answer
+POST {{baseUrl}}/quiz/answer
+Content-Type: application/json
+
+{
+	"session_id": "7dd42f9c-8c4b-4beb-bad4-91f1db802dac",
+	"value": "IDK, maybe Rome?"
+}
+
+### Get quiz state
+GET {{baseUrl}}/quiz/7dd42f9c-8c4b-4beb-bad4-91f1db802dac/state
+Accept: application/json
+
+### Finish quiz (force extraction)
+POST {{baseUrl}}/quiz/finish
+Content-Type: application/json
+
+{
+	"session_id": "c181be4d-5fd1-4714-8f69-2c53bd889ec1"
+}
+
+### List all active quiz sessions
+GET {{baseUrl}}/quiz/sessions
+Accept: application/json
+
+###############################################################################
+### API Documentation
+###############################################################################
+
+### GET OpenAPI Schema
+GET {{baseUrl}}/openapi.json
+Accept: application/json
+
+### GET Swagger UI Documentation
+GET {{baseUrl}}/docs
+Accept: text/html
+
+### GET ReDoc Documentation
+GET {{baseUrl}}/redoc
+Accept: text/html
+
+###############################################################################
+### Error Handling Tests
+###############################################################################
+
+### GET Non-existent Route (404)
+GET {{baseUrl}}/non-existent-route
+Accept: application/json
+
+### POST to GET-only endpoint (405)
+POST {{baseUrl}}/health
+Accept: application/json

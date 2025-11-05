@@ -33,6 +33,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    volumes:
+      - ./data/attachments:/app/attachments
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -54,6 +56,7 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account-key.json
     volumes:
       - ./listeners/service-account-key.json:/app/credentials/service-account-key.json:ro
+      - ./data/attachments:/app/attachments
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -82,6 +85,16 @@ services:
       - "8000:8000"
     networks:
       - broker_net
+
+  automations:
+    image: ghcr.io/correttoai/backend/automations:latest
+    container_name: automations
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8010:8010"
+    #networks:
 
 volumes:
   rabbitmq_data:

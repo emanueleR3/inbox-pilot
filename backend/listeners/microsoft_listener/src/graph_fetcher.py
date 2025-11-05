@@ -68,6 +68,93 @@ def _extract_body_content(body_content: dict) -> str:
     # Se è testo, pulisce e ritorna
     return _clean_text(content)
 
+def _extract_email_from_address(email_address: str) -> str:
+    """
+    Estrae l'indirizzo email dal campo Microsoft Graph.
+    Esempi:
+    - "Emanuele Romano <emanuele.romano@example.com>" -> "emanuele.romano@example.com"
+    - "emanuele.romano@example.com" -> "emanuele.romano@example.com"
+    """
+    if not email_address:
+        return ""
+    
+    import re
+    # Regex per estrarre l'email tra < > o l'email diretta
+    email_match = re.search(r'<([^>]+)>|([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', email_address)
+    if email_match:
+        return email_match.group(1) or email_match.group(2)
+    
+    return ""
+
+def _is_no_reply_email(from_address: str) -> bool:
+    """
+    Determina se un'email proviene da un indirizzo no-reply.
+    Esempi:
+    - "no-reply@example.com" -> True
+    - "noreply@example.com" -> True
+    - "do-not-reply@example.com" -> True
+    - "support@example.com" -> False
+    """
+    if not from_address:
+        return False
+    
+    email = _extract_email_from_address(from_address)
+    if not email:
+        return False
+    
+    email_lower = email.lower()
+    no_reply_patterns = [
+        'no-reply', 'noreply', 'do-not-reply', 'donotreply',
+        'no_reply', 'donot-reply', 'auto-reply', 'autoreply',
+        'mailer-daemon', 'postmaster', 'bounce'
+    ]
+    
+    return any(pattern in email_lower for pattern in no_reply_patterns)
+
+def _extract_microsoft_attachments_metadata(graph_data: dict) -> list:
+    """
+    Estrae i metadata degli allegati da Microsoft Graph senza scaricarli.
+    
+    Args:
+        graph_data: Dati del messaggio da Microsoft Graph
+        
+    Returns:
+        Lista di metadata degli allegati
+    """
+    attachments = []
+    
+    # Microsoft Graph fornisce attachments come array separato
+    graph_attachments = graph_data.get("attachments", [])
+    
+    log_info(f"📎 [MICROSOFT] Found {len(graph_attachments)} attachments in Graph data")
+    
+    for attachment in graph_attachments:
+        attachment_type = attachment.get("@odata.type", "")
+        log_info(f"📎 [MICROSOFT] Processing attachment type: {attachment_type}")
+        
+        # Controlla se è un file attachment (non inline)
+        if attachment_type == "#microsoft.graph.fileAttachment":
+            attachment_id = attachment.get("id", "")
+            filename = attachment.get("name", "")
+            mime_type = attachment.get("contentType", "application/octet-stream")
+            size = attachment.get("size", 0)
+            
+            log_info(f"📎 [MICROSOFT] File attachment: {filename} ({size} bytes, {mime_type})")
+            log_info(f"📎 [MICROSOFT] Attachment ID: '{attachment_id}'")
+            
+            if filename:  # Solo se ha un nome file valido
+                attachments.append({
+                    "attachment_id": attachment_id,
+                    "filename": filename,
+                    "mime_type": mime_type,
+                    "size": size
+                })
+        else:
+            log_info(f"📎 [MICROSOFT] Skipping attachment type: {attachment_type}")
+    
+    log_info(f"📎 [MICROSOFT] Returning {len(attachments)} valid attachments")
+    return attachments
+
 def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: bool = False) -> dict:
     """
     Converte il messaggio di Microsoft Graph nel formato standard per RabbitMQ.
@@ -86,6 +173,22 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
             email_addr = recipient.get("emailAddress", {})
             to_addresses.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
         to_field = ", ".join(to_addresses)
+        
+        # Gestisci i destinatari in CC
+        cc_recipients = graph_data.get("ccRecipients", [])
+        cc_addresses = []
+        for recipient in cc_recipients:
+            email_addr = recipient.get("emailAddress", {})
+            cc_addresses.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
+        cc_field = ", ".join(cc_addresses) if cc_addresses else None
+        
+        # Gestisci i destinatari in BCC (se disponibili)
+        bcc_recipients = graph_data.get("bccRecipients", [])
+        bcc_addresses = []
+        for recipient in bcc_recipients:
+            email_addr = recipient.get("emailAddress", {})
+            bcc_addresses.append(f"{email_addr.get('name', '')} <{email_addr.get('address', '')}>")
+        bcc_field = ", ".join(bcc_addresses) if bcc_addresses else None
         
         # Estrai il corpo del messaggio usando la nuova funzione
         body_content = graph_data.get("body", {})
@@ -108,12 +211,15 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
         if message_id and message_id.startswith('<') and message_id.endswith('>'):
             message_id = message_id[1:-1]
         
+        # Salva anche l'ID interno di Microsoft Graph per downloads degli allegati
+        microsoft_message_id = graph_data.get("id", "")
+        
         # Cerca In-Reply-To negli header MIME
-        thread_id = headers.get("in-reply-to", "")
-        if thread_id and thread_id.startswith('<') and thread_id.endswith('>'):
-            thread_id = thread_id[1:-1]
-        if not thread_id:
-            thread_id = "no"
+        reply_to_id = headers.get("in-reply-to", "")
+        if reply_to_id and reply_to_id.startswith('<') and reply_to_id.endswith('>'):
+            reply_to_id = reply_to_id[1:-1]
+        if not reply_to_id:
+            reply_to_id = "no"
         
         # Simula le labels per essere consistente con Gmail
         labels = []
@@ -122,19 +228,30 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
         else:
             labels.append("INBOX")
         
+        # Determina se è un'email no-reply
+        is_no_reply = _is_no_reply_email(from_address)
+        
+        # Estrai metadata degli allegati senza scaricarli
+        attachments_metadata = _extract_microsoft_attachments_metadata(graph_data)
+        
         return {
             "provider": "microsoft",
             "user_email": user_email,
             "from": from_address,
             "to": to_field,
+            "cc": cc_field,
+            "bcc": bcc_field,
             "subject": subject,
             "body_text": body_text,
             "date": message_datetime,
             "message_id": message_id,
-            "thread_id": thread_id,
+            "microsoft_message_id": microsoft_message_id,  # ID interno per Microsoft Graph API
+            "reply_to_id": reply_to_id,
             "labels": labels,  # Aggiungi SENT per messaggi inviati
             "timestamp": message_datetime,
-            "is_sent": is_sent_message  # Flag aggiuntivo per identificare messaggi inviati
+            "is_sent": is_sent_message,  # Flag aggiuntivo per identificare messaggi inviati
+            "no_reply": is_no_reply,
+            "attachments": attachments_metadata,
         }
     except Exception as e:
         log_error(f"Errore nel parsing del messaggio Microsoft: {str(e)}", e)
@@ -164,7 +281,8 @@ async def fetch_new_message(subscription_id: str, message_id: str, actual_user_i
         user_email = credentials.get("email", actual_user_id)
 
         # Aggiungi parentFolderId per capire se è un messaggio inviato o ricevuto
-        url = f"{GRAPH_BASE_URL}/users/{actual_user_id}/messages/{message_id}?$select=*,internetMessageHeaders,parentFolderId"
+        # Includi anche attachments per ottenere i metadata degli allegati
+        url = f"{GRAPH_BASE_URL}/users/{actual_user_id}/messages/{message_id}?$select=*,internetMessageHeaders,parentFolderId&$expand=attachments"
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, headers={"Authorization": f"Bearer {access_token}"})

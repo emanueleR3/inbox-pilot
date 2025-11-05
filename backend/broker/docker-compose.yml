@@ -33,6 +33,8 @@ services:
     environment:
       RABBITMQ_URL: "amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/"
       RABBITMQ_QUEUE: "emails_queue"
+    volumes:
+      - ./data/attachments:/app/attachments
     restart: unless-stopped
     networks:
       - broker_net
