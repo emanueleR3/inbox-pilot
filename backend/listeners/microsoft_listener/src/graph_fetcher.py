@@ -126,13 +126,20 @@ def _extract_microsoft_attachments_metadata(graph_data: dict) -> list:
     # Microsoft Graph fornisce attachments come array separato
     graph_attachments = graph_data.get("attachments", [])
     
+    log_info(f"📎 [MICROSOFT] Found {len(graph_attachments)} attachments in Graph data")
+    
     for attachment in graph_attachments:
+        attachment_type = attachment.get("@odata.type", "")
+        log_info(f"📎 [MICROSOFT] Processing attachment type: {attachment_type}")
+        
         # Controlla se è un file attachment (non inline)
-        if attachment.get("@odata.type") == "#microsoft.graph.fileAttachment":
+        if attachment_type == "#microsoft.graph.fileAttachment":
             attachment_id = attachment.get("id", "")
             filename = attachment.get("name", "")
             mime_type = attachment.get("contentType", "application/octet-stream")
             size = attachment.get("size", 0)
+            
+            log_info(f"📎 [MICROSOFT] File attachment: {filename} ({size} bytes, {mime_type})")
             
             if filename:  # Solo se ha un nome file valido
                 attachments.append({
@@ -141,7 +148,10 @@ def _extract_microsoft_attachments_metadata(graph_data: dict) -> list:
                     "mime_type": mime_type,
                     "size": size
                 })
+        else:
+            log_info(f"📎 [MICROSOFT] Skipping attachment type: {attachment_type}")
     
+    log_info(f"📎 [MICROSOFT] Returning {len(attachments)} valid attachments")
     return attachments
 
 def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: bool = False) -> dict:
@@ -266,7 +276,8 @@ async def fetch_new_message(subscription_id: str, message_id: str, actual_user_i
         user_email = credentials.get("email", actual_user_id)
 
         # Aggiungi parentFolderId per capire se è un messaggio inviato o ricevuto
-        url = f"{GRAPH_BASE_URL}/users/{actual_user_id}/messages/{message_id}?$select=*,internetMessageHeaders,parentFolderId"
+        # Includi anche attachments per ottenere i metadata degli allegati
+        url = f"{GRAPH_BASE_URL}/users/{actual_user_id}/messages/{message_id}?$select=*,internetMessageHeaders,parentFolderId&$expand=attachments"
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, headers={"Authorization": f"Bearer {access_token}"})
