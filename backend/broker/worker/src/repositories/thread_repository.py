@@ -27,6 +27,7 @@ class ThreadRepository:
         sender_email: str = None,
         cc_emails: List[str] = None,
         summary: str = None,
+        extended_summary: str = None,
         last_message_id: str = None,
         last_message_at: datetime = None,
         has_attachments: bool = False,
@@ -47,6 +48,7 @@ class ThreadRepository:
             sender_email: Email of the thread initiator
             cc_emails: Array of CC email addresses
             summary: Thread summary
+            extended_summary: Extended thread summary (più dettagliato)
             last_message_id: ID of the last message
             last_message_at: Timestamp of last message
             has_attachments: Boolean flag indicating if thread has attachments
@@ -73,6 +75,7 @@ class ThreadRepository:
                 "sender_email": sender_email,
                 "cc_emails": cc_emails if cc_emails is not None else [],
                 "summary": summary,  # Can be None now
+                "extended_summary": extended_summary,  # Can be None (default)
                 "last_message_id": last_message_id,
                 "last_message_at": last_message_at.isoformat() if last_message_at else None,
                 "has_attachments": has_attachments,
@@ -783,4 +786,31 @@ class ThreadRepository:
                 
         except Exception as e:
             print(f"❌ [THREAD] Error setting thread attachment flag: {e}")
+            return False
+
+    def update_extended_summary(self, thread_id: str, extended_summary: str) -> bool:
+        """
+        Update the extended_summary field for a thread.
+        
+        Args:
+            thread_id: ID of the thread to update
+            extended_summary: Extended summary text to set
+            
+        Returns:
+            True if update successful, False otherwise
+        """
+        try:
+            response = self.supabase.table("threads").update({
+                "extended_summary": extended_summary
+            }).eq("thread_id", thread_id).execute()
+            
+            if response.data:
+                print(f"📝 [THREAD] Updated extended_summary for thread {thread_id}")
+                return True
+            else:
+                print(f"❌ [THREAD] Failed to update extended_summary for thread {thread_id}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error updating extended_summary: {e}")
             return False

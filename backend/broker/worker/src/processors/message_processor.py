@@ -6,6 +6,7 @@ This is the central processing hub for all email messages.
 from src.filters.advanced_filter import AdvancedEmailFilter
 from src.managers.thread_manager import ThreadManager, ThreadInfo
 from src.utils.attachment_service import AttachmentService
+from src.utils.email_cleaner import EmailCleaner
 from typing import Optional
 
 
@@ -19,6 +20,7 @@ class EmailProcessor:
         self.filter = AdvancedEmailFilter()
         self.thread_manager = ThreadManager()
         self.attachment_service = AttachmentService()
+        self.email_cleaner = EmailCleaner()
     
     async def process_message(self, email_data: dict) -> Optional[dict]:
         """
@@ -38,14 +40,17 @@ class EmailProcessor:
         try:
             print(f"🚀 [PROCESSOR] Processing message: {email_data.get('message_id')} from {email_data.get('from')}")
             
-            # Step 1: Apply advanced filtering
+            # Step 1: Clean email content before processing
+            email_data = self.email_cleaner.clean_email_content(email_data)
+            
+            # Step 2: Apply advanced filtering
             filter_result = await self.filter.process_message(email_data)
             
             if not filter_result:
                 print(f"🚫 [PROCESSOR] Message filtered out")
                 return None
             
-            # Step 2: Handle the result based on filter outcome
+            # Step 3: Handle the result based on filter outcome
             action = filter_result.get("action")
             
             if action == "thread_created":
