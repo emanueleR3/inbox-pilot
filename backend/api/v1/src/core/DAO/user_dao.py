@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status
 from supabase_auth.errors import AuthApiError
 from src.core.model.user import UserRead, UserReadSub, UserReadSubs
-from src.core.model.subscription import SubscriptionRead
+from src.core.model.subscription import SubscriptionRead, SubscriptionReadWithConfig
 from src.core.redis_client import get_redis_client
 from src.core.DAO.subscription_dao import SubscriptionDAO
 from src.core.database import get_supabase_client, get_fresh_supabase_client
@@ -41,20 +41,22 @@ class UserDAO:
 
             return result
 
-    def get_subscriptions_by_user(self, user_id: str) -> list[SubscriptionRead]:            
+    def get_subscriptions_by_user(self, user_id: str) -> list[SubscriptionReadWithConfig]:
+        # Recupera i link utente ↔ sottoscrizioni
         link_response = (
             self.supabase
-                .table("users_has_subscriptions")
-                .select("subscription_id")
-                .eq("user_id", user_id)
-                .execute()
-            )
+            .table("users_has_subscriptions")
+            .select("subscription_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
 
         if not link_response.data:
             return []
 
         subscription_ids = [row["subscription_id"] for row in link_response.data]
 
+        # Recupera i dettagli delle sottoscrizioni
         subs_response = (
             self.supabase
             .table("subscriptions")
@@ -66,8 +68,24 @@ class UserDAO:
         if not subs_response.data:
             return []
 
+        # Recupera le configurazioni completate
+        config_response = (
+            self.supabase
+            .table("subscription_services")
+            .select("subscription_id, config_completed")
+            .in_("subscription_id", subscription_ids)
+            .execute()
+        )
+
+        # Crea un dizionario {subscription_id: config_completed}
+        config_map = {
+            c["subscription_id"]: c.get("config_completed", False)
+            for c in (config_response.data or [])
+        }
+
+        # Crea l’elenco finale di sottoscrizioni con flag di configurazione
         subscriptions = [
-            SubscriptionRead(
+            SubscriptionReadWithConfig(
                 subscription_id=sub["subscription_id"],
                 name=sub["name"],
                 vat_number=sub.get("vat_number"),
@@ -76,11 +94,13 @@ class UserDAO:
                 active=sub["active"],
                 current_period_end=sub["current_period_end"],
                 plan=sub.get("plan"),
+                is_configurated=config_map.get(sub["subscription_id"], False),
             )
             for sub in subs_response.data
         ]
 
         return subscriptions
+
 
     def login_with_password(self, email: str, password: str) -> UserReadSubs:
         response = self.supabase_auth.auth.sign_in_with_password({

@@ -21,3 +21,14 @@ class SubscriptionRead(BaseModel):
     active: bool
     current_period_end: datetime
     plan: Optional[str] = None
+
+class SubscriptionReadWithConfig(BaseModel):
+    subscription_id: str
+    name: str
+    vat_number: Optional[str] = None
+    city: str
+    address: str
+    active: bool
+    current_period_end: datetime
+    plan: Optional[str] = None
+    is_configurated: bool = False

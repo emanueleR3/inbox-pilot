@@ -50,14 +50,23 @@ def get_user_by_email(email: str):
                     "example": {
                         "message": "Registrazione completata",
                         "result": {
-                            "user_id": "abc123",
+                            "id": "id_12345",
                             "email": "user@example.com",
-                            "subscription": {
-                                "subscription_id": "sub_xyz789",
-                                "name": "TechVision Srl",
-                                "plan": "premium",
-                                "active": True
-                            }
+                            "subscriptions": [
+                                {
+                                    "subscription_id": "sub_id12345",
+                                    "name": "Palestra Torino17",
+                                    "vat_number": "IT123456789",
+                                    "city": "Torino",
+                                    "address": "Corso Francia 100",
+                                    "active": "true",
+                                    "current_period_end": "2025-12-31T23:59:59Z",
+                                    "plan": "Premium",
+                                    "is_configurated": "false"
+                                }
+                            ],
+                            "jwt": "jwt_token",
+                            "sub_selected": 0
                         }
                     }
                 }
@@ -230,11 +239,24 @@ def get_users_by_subscription(subscription_id: str):
                 "application/json": {
                     "example": {
                         "message": "Login effettuato",
-                        "session": {
-                            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                            "refresh_token": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-                            "expires_in": 3600,
-                            "token_type": "bearer"
+                        "result": {
+                            "id": "id_12345",
+                            "email": "user@example.com",
+                            "subscriptions": [
+                                {
+                                    "subscription_id": "sub_id12345",
+                                    "name": "Name Srl",
+                                    "vat_number": "0987654321",
+                                    "city": "Lecce",
+                                    "address": "Via Enrico Fermi, 8",
+                                    "active": "true",
+                                    "current_period_end": "2025-12-20T00:00:00Z",
+                                    "plan": "personal",
+                                    "is_configurated": "true"
+                                }
+                            ],
+                            "jwt": "jwt_token",
+                            "sub_selected": 0
                         }
                     }
                 }
