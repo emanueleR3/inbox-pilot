@@ -25,7 +25,7 @@ jobs:
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           SHA_TAG=${{ github.sha }}
           API_IMAGE=ghcr.io/${REPO_LOWER}/api
-          docker build --no-cache -t ${API_IMAGE}:latest -t ${API_IMAGE}:${SHA_TAG} -f api/Dockerfile api
+          docker build --no-cache -t ${API_IMAGE}:latest -t ${API_IMAGE}:${SHA_TAG} api
           docker push ${API_IMAGE}:latest
           docker push ${API_IMAGE}:${SHA_TAG}
 
@@ -58,6 +58,16 @@ jobs:
           docker build --no-cache -t ${REFRESHERS_IMAGE}:latest -t ${REFRESHERS_IMAGE}:${SHA_TAG} refreshers
           docker push ${REFRESHERS_IMAGE}:latest
           docker push ${REFRESHERS_IMAGE}:${SHA_TAG}
+
+      - name: Build and push Docker image (automations)
+        run: |
+          set -e
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          SHA_TAG=${{ github.sha }}
+          AUTOMATIONS_IMAGE=ghcr.io/${REPO_LOWER}/automations
+          docker build --no-cache -t ${AUTOMATIONS_IMAGE}:latest -t ${AUTOMATIONS_IMAGE}:${SHA_TAG} automations
+          docker push ${AUTOMATIONS_IMAGE}:latest
+          docker push ${AUTOMATIONS_IMAGE}:${SHA_TAG}
 
       - name: Ensure remote directory exists
         uses: appleboy/ssh-action@v1.1.0

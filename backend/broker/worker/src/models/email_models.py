@@ -96,6 +96,7 @@ class EmailThread:
     message_count: int = 0
     human_response: bool = False
     ai_summary: Optional[str] = None
+    extended_summary: Optional[str] = None  # Campo per summary esteso
     category: Optional[str] = None
     processing_status: ProcessingStatus = ProcessingStatus.PENDING
     

@@ -56,23 +56,37 @@ class AdvancedEmailFilter:
                     print(f"❌ [FILTER] Failed to create new thread from external")
                     return None
             
-            # Apply the third filter: replies to existing threads
+            # Apply the third filter: replies and forwards to existing threads
             if await self._is_reply_to_existing_thread(email_data):
-                reply_result = await self._handle_reply_to_thread(email_data)
-                if reply_result:
-                    action = reply_result.get("action")
-                    if action == "duplicate_skipped":
-                        print(f"🔄 [FILTER] Duplicate message skipped")
-                        return {"action": "skip", "reason": "duplicate"}
-                    elif action == "thread_updated":
-                        print(f"✅ [FILTER] Thread updated with reply")
-                        return {"action": "thread_updated", "thread_id": reply_result.get("thread_id"), "needs_ai": True}
-                    elif action == "human_response_set":
-                        print(f"👤 [FILTER] Human response marked for thread")
-                        return {"action": "human_response_marked", "thread_id": reply_result.get("thread_id"), "needs_ai": False}
+                # Check email type to determine handling strategy
+                email_type = email_data.get("email_type", "original")
+                
+                if email_type == "forward":
+                    # Handle forwarded messages differently
+                    forward_result = await self._handle_forwarded_message(email_data)
+                    if forward_result:
+                        print(f"📧 [FILTER] Forwarded message handled")
+                        return {"action": "forward_processed", "thread_id": forward_result.get("thread_id"), "needs_ai": True}
+                    else:
+                        print(f"❌ [FILTER] Failed to handle forwarded message")
+                        return None
                 else:
-                    print(f"❌ [FILTER] Failed to handle reply")
-                    return None
+                    # Handle regular replies
+                    reply_result = await self._handle_reply_to_thread(email_data)
+                    if reply_result:
+                        action = reply_result.get("action")
+                        if action == "duplicate_skipped":
+                            print(f"🔄 [FILTER] Duplicate message skipped")
+                            return {"action": "skip", "reason": "duplicate"}
+                        elif action == "thread_updated":
+                            print(f"✅ [FILTER] Thread updated with reply")
+                            return {"action": "thread_updated", "thread_id": reply_result.get("thread_id"), "needs_ai": True}
+                        elif action == "human_response_set":
+                            print(f"👤 [FILTER] Human response marked for thread")
+                            return {"action": "human_response_marked", "thread_id": reply_result.get("thread_id"), "needs_ai": False}
+                    else:
+                        print(f"❌ [FILTER] Failed to handle reply")
+                        return None
             
             # TODO: Add more filters here
             # - Check for replies to existing threads
@@ -499,3 +513,61 @@ class AdvancedEmailFilter:
         """
         # TODO: Implement human response detection logic
         pass
+    
+    async def _handle_forwarded_message(self, email_data: dict) -> Optional[dict]:
+        """
+        Handle forwarded messages - these should be treated differently from replies.
+        
+        Forwards contain new information and should:
+        1. Create a new message in the thread without removing quoted content
+        2. Always trigger AI processing since they contain new context
+        3. Preserve the original forwarded content for analysis
+        
+        Args:
+            email_data: Email data from listeners
+            
+        Returns:
+            Processing result or None if failed
+        """
+        try:
+            reply_to_id = email_data.get("reply_to_id")
+            box_email = email_data.get("user_email")
+            
+            # Find the thread containing the referenced message
+            thread = self.thread_repo.find_thread_by_message_id(reply_to_id, box_email)
+            
+            if not thread:
+                print(f"⚠️ [FILTER] No thread found for forwarded message reference: {reply_to_id}")
+                return None
+            
+            thread_id = thread["thread_id"]
+            
+            # Check for duplicate message_id in thread
+            if self.thread_repo.message_exists_in_thread(thread_id, email_data.get("message_id")):
+                print(f"🔄 [FILTER] Duplicate forwarded message - already exists in thread {thread_id}")
+                return {"action": "duplicate_skipped", "thread_id": thread_id}
+            
+            # Add forwarded message to thread
+            # Note: For forwards, we preserve more content since it's new information
+            success = self.thread_repo.add_message_to_thread(
+                thread_id=thread_id,
+                message_id=email_data.get("message_id"),
+                from_email=email_data.get("from"),
+                to_email=email_data.get("to"),
+                subject=email_data.get("subject"),
+                body=email_data.get("body", ""),  # Preserve full body for forwards
+                date=email_data.get("date"),
+                box_email=box_email,
+                attachments=email_data.get("attachments", [])
+            )
+            
+            if success:
+                print(f"📧 [FILTER] Forwarded message added to thread {thread_id}")
+                return {"action": "thread_updated", "thread_id": thread_id}
+            else:
+                print(f"❌ [FILTER] Failed to add forwarded message to thread")
+                return None
+                
+        except Exception as e:
+            print(f"❌ [FILTER] Error handling forwarded message: {e}")
+            return None

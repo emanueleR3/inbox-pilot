@@ -67,48 +67,82 @@ class SubscriptionServiceDAO:
 
         return cipher.decrypt(encrypted_token.encode()).decode()
     
-    def save_custom_provider_credentials(self, server_imap: str, server_smtp: str, imap_port: int, smtp_port: int, email: str, password: str, subscription_id: str) -> bool:
+    def save_custom_provider_credentials(
+        self,
+        server_imap: str,
+        server_smtp: str,
+        imap_port: int,
+        smtp_port: int,
+        email: str,
+        password: str,
+        subscription_id: str
+    ) -> SubscriptionServiceRead:
         try:
             encrypted_password = self._encrypt(password, "pass")
-            
-            email_exists = self.email_exists(email)
-            if email_exists:
-                # rimuovi i token di accesso precedenti se esistono
-                data = {
-                    "email_provider": "imap",
-                    "imap_server": server_imap, 
-                    "smtp_server": server_smtp, 
-                    "imap_port": imap_port, 
-                    "smtp_port": smtp_port, 
-                    "hashed_password": encrypted_password, 
-                    "hashed_access_token": None,
-                    "hashed_refresh_token": None,
-                    "expiry_token": None
-                }
-                response = self.supabase.table("subscription_services").update(data).eq("email", email).execute()
+
+            data = {
+                "email_provider": "imap",
+                "imap_server": server_imap,
+                "smtp_server": server_smtp,
+                "imap_port": imap_port,
+                "smtp_port": smtp_port,
+                "hashed_password": encrypted_password,
+                "hashed_access_token": None,
+                "hashed_refresh_token": None,
+                "expiry_token": None,
+            }
+
+            if self.email_exists(email):
+                response = (
+                    self.supabase.table("subscription_services")
+                    .update(data)
+                    .eq("email", email)
+                    .execute()
+                )
+
                 if not response.data:
-                    logging.info(f"Nessun record aggiornato per email: {email}")
-                    return False
-                return True
+                    logging.warning(f"Nessun record aggiornato per email: {email}")
+                    raise ValueError(f"Nessun record aggiornato per {email}")
+                
+                record = response.data[0]
+
             else:
                 response = self.create_subscription_service(
                     email=email,
                     email_provider="imap",
-                    imap_server=server_imap, 
-                    smtp_server=server_smtp, 
-                    imap_port=imap_port, 
-                    smtp_port=smtp_port, 
-                    hashed_password=encrypted_password, 
-                    subscription_id=subscription_id
+                    imap_server=server_imap,
+                    smtp_server=server_smtp,
+                    imap_port=imap_port,
+                    smtp_port=smtp_port,
+                    hashed_password=encrypted_password,
+                    subscription_id=subscription_id,
                 )
 
-                if response is None:
-                    logging.info(f"Errore nella creazione del nuovo record per email: {email}")
-                    return False
-                
-                return True
+                if not response or not isinstance(response, dict):
+                    logging.error(f"Errore nella creazione del nuovo record per {email}")
+                    raise ValueError(f"Errore nella creazione del record per {email}")
+
+                record = response
+
+            return SubscriptionServiceRead(
+                email=record.get("email"),
+                subscription_id=record.get("subscription_id"),
+                email_provider=record.get("email_provider"),
+                imap_server=record.get("imap_server"),
+                imap_port=record.get("imap_port"),
+                smtp_server=record.get("smtp_server"),
+                smtp_port = record.get("smtp_port"),
+                confidence_response_threshold = record.get("confidence_response_threshold"),
+                confidence_review_mail = record.get("confidence_review_mail"),
+                priority_threshold=record.get("priority_threshold"),
+                confidence_classification_threshold = record.get("confidence_classification_threshold"),
+                urgent_meeting_threshold = record.get("urgent_meeting_threshold"),
+            )
+
         except Exception as e:
-            raise e
+            logging.exception(f"Errore nel salvataggio delle credenziali per {email}: {e}")
+            raise
+
 
 
     def save_microsoft_credentials(

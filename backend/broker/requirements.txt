@@ -5,3 +5,6 @@ asyncio
 aiohttp
 supabase
 cryptography
+html2text
+beautifulsoup4
+email-reply-parser

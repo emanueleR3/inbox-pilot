@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, status
+from fastapi import APIRouter, Depends, Body
 from src.core.dependecy import get_current_user
 from src.modules.auth.src.controllers.custom_provider_controller import CustomProviderController
 
@@ -20,11 +20,30 @@ router = APIRouter(tags=["Auth Custom Provider"])
                         "status": "success",
                         "message": "Credenziali custom provider salvate con successo",
                         "data": {
-                            "email": "user@example.com",
-                            "subscription_id": "sub_12345",
+                            "email": "user1@example.com",
                             "email_provider": "imap",
+                            "calendar_provider": "null",
+                            "calendar_names": "null",
+                            "information": "null",
                             "imap_server": "imap.example.com",
-                            "smtp_server": "smtp.example.com"
+                            "imap_port": 993,
+                            "smtp_server": "smtp.example.com",
+                            "smtp_port": 465,
+                            "hashed_password": "null",
+                            "hashed_access_token": "null",
+                            "hashed_refresh_token": "null",
+                            "expiry_token": "null",
+                            "confidence_response_threshold": 0.8,
+                            "confidence_review_mail": 0.7,
+                            "priority_threshold": 0.6,
+                            "confidence_classification_threshold": 0.75,
+                            "urgent_meeting_threshold": 0.9,
+                            "history_id": "null",
+                            "microsoft_subscription_id_inbound": "null",
+                            "microsoft_subscription_id_outbound": "null",
+                            "microsoft_expiration_datetime_inbound": "null",
+                            "microsoft_expiration_datetime_outbound": "null",
+                            "oauth_user_id": "null"
                         }
                     }
                 }
@@ -76,4 +95,5 @@ async def custom_login_route(
         description="Credenziali e configurazione del server di posta personalizzato"
     )
 ):
-    return await CustomProviderController.custom_provider_login(payload)
+    res = CustomProviderController.custom_provider_login(payload)
+    return {"status": "success", "message": "Credenziali custom provider salvate con successo", "data": res}

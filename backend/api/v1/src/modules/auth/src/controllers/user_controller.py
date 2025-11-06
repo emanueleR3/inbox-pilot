@@ -80,6 +80,29 @@ class UserController:
                 detail=str(e)
             )
         
+    def create_new_sub(self, payload: dict):
+        user = payload.get("user")
+        subscription_data = payload.get("subscription")
+
+        if not all([user, subscription_data]):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="i dati dell'utente e i dati della sottoscrizione sono richiesti"
+            )
+        
+        try:
+            return self.user_dao.create_new_sub(user, subscription_data)
+        except AuthApiError as e:
+            if "Subs already created" in str(e):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Questa sottoscrizione esiste già"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(e)
+            )
+        
     
     def login_user(self, payload: dict):
         email = payload.get("email")
