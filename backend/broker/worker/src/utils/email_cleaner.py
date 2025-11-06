@@ -7,6 +7,9 @@ import re
 import html2text
 from bs4 import BeautifulSoup
 from email_reply_parser import EmailReplyParser
+import logging
+
+logger = logging.getLogger(__name__)
 from typing import Optional, Dict, Tuple
 
 
@@ -45,10 +48,18 @@ class EmailCleaner:
             # Step 1: Get the best text representation
             clean_text = self._get_best_text_content(body_text, body_html)
             
-            # Step 2: Remove quoted content (replies)
-            clean_text = self._remove_quoted_content(clean_text)
+            # Step 2: Detect email type (reply vs forward) before quote removal
+            email_type = self._detect_email_type(email_data, clean_text)
+            email_data["email_type"] = email_type
             
-            # Step 3: Clean and normalize text
+            # Step 3: Remove quoted content (replies) - but preserve forward content
+            if email_type != "forward":
+                clean_text = self._remove_quoted_content(clean_text)
+            else:
+                # For forwards, preserve the forwarded content but clean it
+                clean_text = self._clean_forwarded_content(clean_text)
+            
+            # Step 4: Clean and normalize text
             clean_text = self._normalize_text(clean_text)
             
             # Step 4: Remove signatures if detected
@@ -279,3 +290,84 @@ class EmailCleaner:
             "had_html": self._looks_like_html(original_text),
             "had_quotes": len(cleaned_text) < len(original_text) * 0.8,  # Heuristic
         }
+    
+    def _detect_email_type(self, email_data: dict, body_text: str) -> str:
+        """
+        Detect if email is a forward, reply, or original message
+        
+        Returns:
+            - "forward": Email è un messaggio inoltrato
+            - "reply": Email è una risposta 
+            - "original": Email originale
+        """
+        try:
+            subject = email_data.get("subject", "").lower()
+            body_lower = body_text.lower()
+            
+            # 1. Check subject for forward indicators
+            forward_subject_patterns = [
+                "fwd:", "fw:", "forward:", "forwarded:",
+                "i:", "tr:", "trasf:", "inolt:",  # Italian
+                "enc:", "reenviado:",  # Spanish
+                "weiterleitung:", "wg:",  # German
+                "rép:", "transféré:",  # French
+            ]
+            
+            for pattern in forward_subject_patterns:
+                if subject.startswith(pattern):
+                    logger.debug(f"Forward detected via subject pattern: {pattern}")
+                    return "forward"
+            
+            # 2. Check body for forward indicators
+            forward_body_patterns = [
+                "forwarded message", "messaggio inoltrato", "mensaje reenviado",
+                "nachricht weiterleiten", "message transféré",
+                "-----original message-----", "-----messaggio originale-----",
+                "-----mensaje original-----", "-----ursprüngliche nachricht-----",
+                "-----message d'origine-----",
+                "from:", "sent:", "to:", "subject:",  # Email header block
+                "da:", "inviato:", "a:", "oggetto:",  # Italian headers
+                "de:", "enviado:", "para:", "asunto:",  # Spanish headers
+            ]
+            
+            forward_indicators = 0
+            for pattern in forward_body_patterns:
+                if pattern in body_lower:
+                    forward_indicators += 1
+                    if forward_indicators >= 2:  # Multiple indicators = likely forward
+                        logger.debug(f"Forward detected via body patterns")
+                        return "forward"
+            
+            # 3. Check for reply indicators (after ruling out forward)
+            reply_indicators = [
+                email_data.get("in_reply_to"),
+                email_data.get("references"),
+            ]
+            
+            if any(reply_indicators):
+                logger.debug("Reply detected via headers")
+                return "reply"
+            
+            # 4. Default to original message
+            return "original"
+            
+        except Exception as e:
+            logger.error(f"Error detecting email type: {e}")
+            return "original"
+    
+    def _clean_forwarded_content(self, text: str) -> str:
+        """
+        Clean forwarded content while preserving the forwarded message
+        """
+        try:
+            # Remove multiple newlines but preserve structure
+            text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+            
+            # Clean up header blocks but don't remove them entirely
+            text = re.sub(r'(From|Da|De|Sent|Inviato|Enviado|To|A|Para|Subject|Oggetto|Asunto):\s*', r'\1: ', text)
+            
+            return text.strip()
+            
+        except Exception as e:
+            logger.error(f"Error cleaning forwarded content: {e}")
+            return text if text else ""
