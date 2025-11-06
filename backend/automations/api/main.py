@@ -19,7 +19,7 @@ app = FastAPI(title="Automations API", version="1.0.0")
 
 app.include_router(agents_router, prefix="/agents")
 app.include_router(chatbot_router, prefix="/chatbot")
-app.include_router(quiz_router, prefix="/quiz")
+app.include_router(quiz_router, prefix="/internal-quiz")
 
 app.add_middleware(
     CORSMiddleware,
