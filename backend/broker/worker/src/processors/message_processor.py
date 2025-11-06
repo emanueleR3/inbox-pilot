@@ -82,7 +82,6 @@ class EmailProcessor:
                     automation_payload = self._prepare_automation_payload(
                         email_data, thread_data, processed_attachments if 'processed_attachments' in locals() else []
                     )
-                    print(f"🤖 [AUTOMATION PAYLOAD] {automation_payload}")
                     # TODO: Send to AI workflow
                 else:
                     print(f"👤 [PROCESSOR] Thread created from user - no AI processing needed")
@@ -127,7 +126,6 @@ class EmailProcessor:
                 automation_payload = self._prepare_automation_payload(
                     email_data, {"thread_id": thread_id}, processed_attachments if 'processed_attachments' in locals() else []
                 )
-                print(f"🤖 [AUTOMATION PAYLOAD] {automation_payload}")
                 # TODO: Send to AI workflow for processing the new message
                 return {
                     "status": "thread_updated",
