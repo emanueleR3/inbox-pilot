@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Body, Depends
 from src.core.dependecy import get_current_user
 from src.modules.subscription_service.src.controllers.subscription_service_controller import SubscriptionServiceController
+from src.modules.subscription_service.src.utils.utils import forward_post, forward_get
 
 router = APIRouter(
-    dependencies=[Depends(get_current_user)],
+    #dependencies=[Depends(get_current_user)],
     tags=["Subscription Service"],
 )
 controller = SubscriptionServiceController()
@@ -146,3 +147,278 @@ def update_configuration(
 ):
     updated = controller.update_configuration(subscription_id, payload)
     return {"status": "ok", "result": updated}
+
+
+@router.post(
+    "/quiz/start",
+    summary="Avvia una nuova sessione di quiz",
+    description="Crea una nuova sessione di quiz per un determinato servizio e restituisce la prima domanda.",
+    responses={
+        200: {
+            "description": "Sessione avviata con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                        "question": {
+                            "id": "1",
+                            "text": "Quali servizi o prodotti offre la tua azienda?",
+                            "helper_text": "Indica una lista dei principali servizi o prodotti che fornite ai vostri clienti.",
+                            "order": 1
+                        },
+                        "max_questions": 5
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_service_id": {
+                            "summary": "Service ID mancante",
+                            "value": {"detail": "Service ID richiesto"}
+                        }
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante l'avvio del quiz"}
+                }
+            },
+        },
+    },
+)
+async def start_quiz( 
+    req: dict = Body(
+            ...,
+            example={
+                "service_id": "id12345"
+            },
+            description="Parametri da inviare per iniziare un quiz",
+        ),
+    ):
+    return await forward_post("/start", req)
+
+
+@router.post(
+    "/quiz/answer",
+    summary="Invia una risposta alla domanda corrente",
+    description="Registra la risposta fornita e restituisce la prossima domanda, oppure il risultato finale se il quiz è completato.",
+    responses={
+        200: {
+            "description": "Risposta elaborata con successo",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "next_question": {
+                            "summary": "Quiz ancora in corso",
+                            "value": {
+                                "done": False,
+                                "next_question": {
+                                    "id": "Q3",
+                                    "text": "Qual è il pubblico target principale della vostra azienda?",
+                                    "helper_text": "Questa informazione ci aiuterà a capire come adattare il tono e il contenuto delle risposte alle email.",
+                                    "order": 3
+                                },
+                                "total_answers": 1
+                            },
+                        },
+                        "quiz_completed": {
+                            "summary": "Quiz completato",
+                            "value": {
+                                "done": True,
+                                "extracted_markdown": "```markdown\n# Profilo Aziendale\n...```",
+                                "total_answers": 5
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_session": {
+                            "summary": "Session ID mancante",
+                            "value": {"detail": "Session ID e risposta sono obbligatori"}
+                        },
+                        "no_questions": {
+                            "summary": "Quiz non ancora avviato",
+                            "value": {"detail": "Nessuna domanda da rispondere. Avvia prima il quiz."}
+                        },
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Sessione non trovata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Sessione non trovata"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno durante l'invio della risposta",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante l'invio della risposta"}
+                }
+            },
+        },
+    },
+)
+async def submit_answer(
+    req: dict = Body(
+            ...,
+            example={
+                "session_id": "id12345",
+	            "value": "answer"
+            },
+            description="Parametri per inviare una risposta",
+        ),
+):
+    return await forward_post("/answer", req)
+
+
+@router.get(
+    "/quiz/{session_id}/state",
+    summary="Recupera lo stato corrente della sessione",
+    description="Restituisce tutte le domande e risposte attuali associate alla sessione del quiz.",
+    responses={
+        200: {
+            "description": "Stato della sessione recuperato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "session_id": "e16b55d3-240d-44c8-8d6b-101ccbf78120",
+                        "questions": [
+                            {
+                                "id": "1",
+                                "text": "Quali sono i principali servizi o prodotti offerti dalla vostra azienda?",
+                                "helper_text": "Questa informazione ci aiuterà a comprendere meglio come rappresentare le vostre offerte nelle comunicazioni.",
+                                "order": 1
+                            }
+                        ],
+                        "answers": ["IDK, maybe Rome?"],
+                        "total": 1
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Session ID mancante",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Session ID richiesto"}
+                }
+            },
+        },
+        404: {
+            "description": "Sessione non trovata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Sessione non trovata"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore durante il recupero dello stato",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante il recupero dello stato"}
+                }
+            },
+        },
+    },
+)
+async def get_state(session_id: str):
+    return await forward_get(f"/{session_id}/state")
+
+
+@router.post(
+    "/quiz/finish",
+    summary="Termina la sessione di quiz",
+    description="Completa la sessione di quiz e restituisce il profilo aziendale generato in formato markdown.",
+    responses={
+        200: {
+            "description": "Quiz completato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "extracted_markdown": "```markdown\n# Profilo Aziendale\n...```"
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Session ID mancante",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Session ID richiesto"}
+                }
+            },
+        },
+        404: {
+            "description": "Sessione non trovata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Sessione non trovata"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore durante la conclusione del quiz",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante la conclusione del quiz"}
+                }
+            },
+        },
+    },
+)
+async def finish_quiz(
+    req: dict = Body(
+            ...,
+            example={
+                "session_id": "id12345",
+            },
+            description="Parametri forzare la risposta ad un quiz",
+        ),
+):
+    return await forward_post("/finish", req)
+
+
+@router.get(
+    "/quiz/sessions",
+    summary="Elenca le sessioni attive",
+    description="Restituisce una lista degli ID di sessione attualmente attivi nel sistema.",
+    responses={
+        200: {
+            "description": "Elenco delle sessioni recuperato con successo",
+            "content": {
+                "application/json": {
+                    "example": ["sess_1", "sess_2", "sess_3"]
+                }
+            },
+        },
+        500: {
+            "description": "Errore durante il recupero delle sessioni",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante il recupero delle sessioni"}
+                }
+            },
+        },
+    },
+)
+async def list_sessions():
+    return await forward_get("/sessions")
