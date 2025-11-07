@@ -430,3 +430,32 @@ def logout(current_user=Depends(get_current_user)):
 def delete_user(user_id: str, current_user=Depends(get_current_user)):
     controller.delete_account(user_id)
     return {"message": "Account cancellato"}
+
+@router.get(
+    "/get_subscription/{subscription_id}",
+    summary="Recupera i dati di una sottoscrizione",
+    description="Restituisce tutti i dettagli della sottoscrizione identificata dall'ID specificato.",
+    responses={
+        200: {
+            "description": "Sottoscrizione trovata",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "subscription_id": "d7a8dfe2-47af-4c98-a02c-2fcb49c4716c",
+                        "name": "ACME S.r.l.",
+                        "vat_number": "IT123456789",
+                        "city": "Milano",
+                        "address": "Via Roma 1",
+                        "active": True,
+                        "plan": "pro",
+                        "current_period_end": "2025-12-01T12:00:00Z"
+                    }
+                }
+            }
+        },
+        404: {"description": "Sottoscrizione non trovata"},
+        500: {"description": "Errore interno del server"}
+    }
+)
+async def get_subscription_by_id(subscription_id: str):
+    return controller.get_subscription_by_id(subscription_id)

@@ -1,10 +1,12 @@
 from fastapi import HTTPException, status
 from supabase_auth.errors import AuthApiError
 from src.core.DAO.user_dao import UserDAO
+from src.core.DAO.subscription_dao import SubscriptionDAO
 
 class UserController:
     def __init__(self):
         self.user_dao = UserDAO()
+        self.subscription_dao = SubscriptionDAO()
 
     def get_users_by_subscription(self, subscription_id: str):
         if not subscription_id:
@@ -221,4 +223,27 @@ class UserController:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Errore durante il logout"
+            )
+    
+    def get_subscription_by_id(self, subscription_id: str):
+        if not subscription_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="ID sottoscrizione non valido"
+            )
+
+        try:
+            sub = self.subscription_dao.get_subscription_by_id(subscription_id)
+            if not sub:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Sottoscrizione non trovata"
+                )
+            return sub
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Errore durante il recupero della sottoscrizione: {str(e)}"
             )

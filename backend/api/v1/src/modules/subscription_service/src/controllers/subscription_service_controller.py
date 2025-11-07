@@ -53,3 +53,26 @@ class SubscriptionServiceController:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Errore durante l'aggiornamento della configurazione"
             )
+        
+    def get_services_by_subscription(self, service_id: str):
+        if not service_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="ID sottoscrizione non valido"
+            )
+
+        try:
+            services = self.subscription_service_dao.get_services_by_subscription(service_id)
+            if not services:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Nessun servizio associato trovato"
+                )
+            return services
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Errore durante il recupero dei servizi: {str(e)}"
+            )

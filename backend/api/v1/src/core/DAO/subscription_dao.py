@@ -18,3 +18,17 @@ class SubscriptionDAO:
                 raise ValueError("Nessun dato restituito da Supabase dopo l'inserimento")
 
             return SubscriptionRead.model_validate(result.data[0])
+    
+    def get_subscription_by_id(self, subscription_id: str) -> SubscriptionRead:
+        resp = (
+            self.supabase
+            .table("subscriptions")
+            .select("*")
+            .eq("subscription_id", subscription_id)
+            .execute()
+        )
+
+        if not resp.data:
+            return None
+
+        return SubscriptionRead(**resp.data[0])

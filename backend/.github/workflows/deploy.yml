@@ -2,7 +2,7 @@ name: CI/CD Deploy to VPS
 
 on:
   push:
-    branches: [ main, backend_v2, save-threads ]
+    branches: [ main, backend_v2, save-threads, backend ]
 
 permissions:
   contents: read

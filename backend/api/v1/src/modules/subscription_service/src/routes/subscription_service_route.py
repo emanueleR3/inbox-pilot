@@ -422,3 +422,32 @@ async def finish_quiz(
 )
 async def list_sessions():
     return await forward_get("/sessions")
+
+@router.get(
+    "/get_subscription_service/{service_id}",
+    summary="Recupera i servizi associati a una sottoscrizione",
+    description="Restituisce tutti i record della tabella `subscription_services` collegati alla sottoscrizione indicata.",
+    responses={
+        200: {
+            "description": "Servizi trovati",
+            "content": {
+                "application/json": {
+                    "example": [
+                        {
+                            "service_id": "a6a6a6a6-1111-2222-3333-bbbbbbcccccc",
+                            "email": "info@acme.com",
+                            "calendar_provider": "google",
+                            "activated": True,
+                            "config_completed": True,
+                            "email_provider": "gmail"
+                        }
+                    ]
+                }
+            }
+        },
+        404: {"description": "Nessun servizio associato trovato"},
+        500: {"description": "Errore interno del server"}
+    }
+)
+async def get_services_by_subscription(service_id: str):
+    return controller.get_services_by_subscription(service_id)
