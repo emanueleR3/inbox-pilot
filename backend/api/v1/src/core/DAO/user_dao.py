@@ -42,7 +42,6 @@ class UserDAO:
             return result
 
     def get_subscriptions_by_user(self, user_id: str) -> list[SubscriptionReadWithConfig]:
-        # Recupera i link utente ↔ sottoscrizioni
         link_response = (
             self.supabase
             .table("users_has_subscriptions")
@@ -56,7 +55,6 @@ class UserDAO:
 
         subscription_ids = [row["subscription_id"] for row in link_response.data]
 
-        # Recupera i dettagli delle sottoscrizioni
         subs_response = (
             self.supabase
             .table("subscriptions")
@@ -68,7 +66,6 @@ class UserDAO:
         if not subs_response.data:
             return []
 
-        # Recupera le configurazioni completate
         config_response = (
             self.supabase
             .table("subscription_services")
@@ -77,13 +74,11 @@ class UserDAO:
             .execute()
         )
 
-        # Crea un dizionario {subscription_id: config_completed}
         config_map = {
             c["subscription_id"]: c.get("config_completed", False)
             for c in (config_response.data or [])
         }
 
-        # Crea l’elenco finale di sottoscrizioni con flag di configurazione
         subscriptions = [
             SubscriptionReadWithConfig(
                 subscription_id=sub["subscription_id"],
@@ -137,18 +132,28 @@ class UserDAO:
         return True
 
     def create_user_with_sub(self, email: str, password: str, subscription_data: dict) -> UserReadSubs:
-        subscription = SubscriptionDAO().create_subscription(subscription_data)
-        user = self.create_user(email, password)
-
-        self.link_user_subscription(user.id, subscription.subscription_id)
-
-        response = self.login_with_password(email, password)
+        response = self.supabase_auth.rpc(
+            "create_user_with_subscription",
+            {
+                "p_email": email,
+                "p_password": password,
+                "p_subscription": subscription_data
+            }
+        ).execute()
 
         return response
     
     def add_new_user(self, email: str, password: str, subscription_id: str) -> bool:
-        user = self.create_user(email, password)
-        return self.link_user_subscription(user.id, subscription_id)
+        response = self.supabase.rpc(
+            "add_new_user",
+            {
+                "p_email": "user@example.com",
+                "p_password": "hashedpass123",
+                "p_subscription_id": "b9b9a9e2-4455-42d5-9a3a-3c42aef91234"
+            }
+        ).execute()
+
+        return response
 
 
     def get_user_by_email(self, email: str):
