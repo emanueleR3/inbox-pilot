@@ -54,15 +54,16 @@ class SubscriptionServiceController:
                 detail="Errore durante l'aggiornamento della configurazione"
             )
         
-    def get_services_by_subscription(self, service_id: str):
-        if not service_id:
+    def get_services_by_subscription(self, subscription_id: str, email: str):
+     
+        if not subscription_id or not email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="ID sottoscrizione non valido"
+                detail="ID sottoscrizione o email non valida"
             )
 
         try:
-            services = self.subscription_service_dao.get_services_by_subscription(service_id)
+            services = self.subscription_service_dao.get_services_by_subscription(subscription_id, email)
             if not services:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,

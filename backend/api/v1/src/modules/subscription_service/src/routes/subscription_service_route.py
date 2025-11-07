@@ -424,7 +424,7 @@ async def list_sessions():
     return await forward_get("/sessions")
 
 @router.get(
-    "/get_subscription_service/{service_id}",
+    "/get_subscription_service/{subscription_id}/{email}",
     summary="Recupera i servizi associati a una sottoscrizione",
     description=(
         "Restituisce tutti i record della tabella `subscription_services` collegati alla sottoscrizione indicata. "
@@ -537,5 +537,5 @@ async def list_sessions():
         500: {"description": "Errore interno del server"}
     }
 )
-async def get_services_by_subscription(service_id: str):
-    return controller.get_services_by_subscription(service_id)
+async def get_services_by_subscription(subscription_id: str, email: str):
+    return controller.get_services_by_subscription(subscription_id, email)

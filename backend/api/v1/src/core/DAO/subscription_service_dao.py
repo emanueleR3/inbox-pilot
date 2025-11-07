@@ -603,16 +603,17 @@ class SubscriptionServiceDAO:
             print(f"Errore nel recupero delle credenziali Microsoft per email {email}: {str(e)}")
             return None
 
-    def get_services_by_subscription(self, service_Id: str) -> SubscriptionServiceRead:
+    def get_services_by_subscription(self, subscription_id: str, email: str) -> SubscriptionServiceRead | None:
         resp = (
             self.supabase
             .table("subscription_services")
             .select("*")
-            .eq("service_id", service_Id)
+            .eq("subscription_id", subscription_id)
+            .eq("email", email)
             .execute()
         )
 
         if not resp.data:
-            return []
+            return None
 
-        return [SubscriptionServiceRead(**s) for s in resp.data]
+        return SubscriptionServiceRead(**resp.data[0])
