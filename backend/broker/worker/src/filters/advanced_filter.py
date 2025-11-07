@@ -315,6 +315,7 @@ class AdvancedEmailFilter:
                 last_message_at=message_datetime,
                 has_attachments=has_attachments,  # Boolean flag for attachments
                 category=None,  # Set to None as requested
+                subcategory=None,  # Default null for external threads
                 human_response=False,  # External user initiated, no human response yet
                 last_sender_email=sender_email,
                 box_email=email_data.get("user_email")  # Email of the monitored mailbox
@@ -359,6 +360,7 @@ class AdvancedEmailFilter:
                 last_message_at=message_datetime,
                 has_attachments=has_attachments,  # Boolean flag for attachments
                 category="STARTED_BY_HUMAN",  # Category for user-initiated conversations
+                subcategory=None,  # Default null for human-initiated threads
                 human_response=True,  # User initiated, so it's a human response
                 last_sender_email=self._extract_email_address(email_data.get("user_email")),
                 box_email=email_data.get("user_email")  # Email of the monitored mailbox
