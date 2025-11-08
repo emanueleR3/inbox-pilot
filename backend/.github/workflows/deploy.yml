@@ -2,7 +2,7 @@ name: CI/CD Deploy to VPS
 
 on:
   push:
-    branches: [ main, backend_v2, save-threads ]
+    branches: [ main, backend_v2, save-threads, initial_workflow ]
 
 permissions:
   contents: read
@@ -15,11 +15,56 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed modules
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          fi
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          if echo "$CHANGED_FILES" | grep -q "^api/"; then
+            echo "api_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "api_changed=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^broker/"; then
+            echo "broker_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "broker_changed=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^listeners/"; then
+            echo "listeners_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "listeners_changed=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^refreshers/"; then
+            echo "refreshers_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "refreshers_changed=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^automations/"; then
+            echo "automations_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "automations_changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build and push Docker image (API)
+        if: steps.changes.outputs.api_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -30,6 +75,7 @@ jobs:
           docker push ${API_IMAGE}:${SHA_TAG}
 
       - name: Build and push Docker image (broker)
+        if: steps.changes.outputs.broker_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -40,6 +86,7 @@ jobs:
           docker push ${BROKER_IMAGE}:${SHA_TAG}
 
       - name: Build and push Docker image (listeners)
+        if: steps.changes.outputs.listeners_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -50,6 +97,7 @@ jobs:
           docker push ${LISTENERS_IMAGE}:${SHA_TAG}
 
       - name: Build and push Docker image (refreshers)
+        if: steps.changes.outputs.refreshers_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -60,6 +108,7 @@ jobs:
           docker push ${REFRESHERS_IMAGE}:${SHA_TAG}
 
       - name: Build and push Docker image (automations)
+        if: steps.changes.outputs.automations_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -99,10 +148,14 @@ jobs:
           script: |
             docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
             REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-            docker pull ghcr.io/${REPO_LOWER}/api:latest
-            docker pull ghcr.io/${REPO_LOWER}/broker:latest
-            docker pull ghcr.io/${REPO_LOWER}/listeners:latest
-            docker pull ghcr.io/${REPO_LOWER}/refreshers:latest
+            
+            # Only pull images that were built in this workflow run
+            ${{ steps.changes.outputs.api_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/api:latest' || 'echo "Skipping API pull - no changes"' }}
+            ${{ steps.changes.outputs.broker_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/broker:latest' || 'echo "Skipping broker pull - no changes"' }}
+            ${{ steps.changes.outputs.listeners_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/listeners:latest' || 'echo "Skipping listeners pull - no changes"' }}
+            ${{ steps.changes.outputs.refreshers_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/refreshers:latest' || 'echo "Skipping refreshers pull - no changes"' }}
+            ${{ steps.changes.outputs.automations_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/automations:latest' || 'echo "Skipping automations pull - no changes"' }}
+            
             docker image prune -a -f --filter "until=24h" || true
             docker compose -f /home/deploy/corretto/docker-compose.yml down || true
             docker compose -f /home/deploy/corretto/docker-compose.yml up -d
