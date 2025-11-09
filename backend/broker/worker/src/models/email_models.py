@@ -98,6 +98,7 @@ class EmailThread:
     ai_summary: Optional[str] = None
     extended_summary: Optional[str] = None  # Campo per summary esteso
     category: Optional[str] = None
+    subcategory: Optional[str] = None  # Campo per subcategory (default null)
     processing_status: ProcessingStatus = ProcessingStatus.PENDING
     
     # Provider-specific thread IDs (for cross-reference)
