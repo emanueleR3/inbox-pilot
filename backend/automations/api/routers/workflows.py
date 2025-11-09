@@ -79,6 +79,12 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
         )
 
 
+@router.post("/test")
+async def test_endpoint(data: dict):
+    """Test endpoint per verificare che arrivi il payload"""
+    print(f"🧪 [TEST] Received test data: {data}")
+    return {"status": "test_ok", "received": data}
+
 @router.get("/health")
 async def workflows_health():
     """Health check endpoint for workflows module"""

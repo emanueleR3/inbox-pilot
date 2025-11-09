@@ -187,6 +187,7 @@ class EmailProcessor:
         try:
             print(f"📤 [PROCESSOR] Sending to automation API: {self.automation_api_url}")
             print(f"🧵 Thread ID: {automation_payload.get('thread_id')}")
+            print(f"📦 [PAYLOAD] {automation_payload}")  # Log del payload completo
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
