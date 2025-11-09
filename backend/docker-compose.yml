@@ -94,7 +94,8 @@ services:
       - .env
     ports:
       - "8010:8010"
-    #networks:
+    networks:
+      - broker_net
 
 volumes:
   rabbitmq_data:
