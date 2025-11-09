@@ -101,6 +101,7 @@ class QuizChain:
         Returns:
             CompanyInfo object with extracted information in MarkDown format
         """
+        self.llm.temperature = 0.3
 
         answers = quiz.answers
         questions = quiz.questions
@@ -130,7 +131,7 @@ class QuizChain:
     
     def run_interactive_quiz(self) -> Quiz:
         """
-        Run an interactive quiz session in the console.
+        Run an interactive quiz session in the console. [TEST ONLY]
         
         Returns:
             Completed Quiz object with all questions and answers
