@@ -5,13 +5,15 @@ This module builds and configures the LangGraph workflow for email processing.
 The workflow handles email classification, information extraction, and storage.
 """
 
-from langgraph.graph import StateGraph
+from langgraph.graph import StateGraph, END
 
 from .state import create_initial_state
 from .config import NodeNames
 from .nodes import (
     new_mail_node,
     language_detector_node,
+    ai_filter_node,
+    guardrail_node,
     ai_filter_guardrail_node,
     classifier_node,
     router_node,
@@ -24,25 +26,40 @@ def create_email_classification_graph():
     Returns:
         Configured StateGraph instance ready to process emails
     """
-    # Initialize state
-    initial_state = create_initial_state()
-    
-    # Create graph
-    graph = StateGraph(initial_state)
+    # Create graph with state schema (type definition)
+    from .state import EmailState
+    graph = StateGraph(EmailState)
     
     # Add core workflow nodes
     graph.add_node(NodeNames.NEW_MAIL, new_mail_node)
     graph.add_node(NodeNames.LANGUAGE_DETECTOR, language_detector_node)
-    graph.add_node(NodeNames.AI_FILTER_GUARDRAIL, ai_filter_guardrail_node)
+    graph.add_node(NodeNames.AI_FILTER, ai_filter_node)
+    graph.add_node(NodeNames.GUARDRAIL, guardrail_node)
     graph.add_node(NodeNames.CLASSIFIER, classifier_node)
     graph.add_node(NodeNames.ROUTER, router_node)
-    
     
     # Configure workflow edges
     graph.set_entry_point(NodeNames.NEW_MAIL)
     graph.add_edge(NodeNames.NEW_MAIL, NodeNames.LANGUAGE_DETECTOR)
-    graph.add_edge(NodeNames.LANGUAGE_DETECTOR, NodeNames.AI_FILTER_GUARDRAIL)
-    graph.add_edge(NodeNames.AI_FILTER_GUARDRAIL, NodeNames.CLASSIFIER)
+    graph.add_edge(NodeNames.LANGUAGE_DETECTOR, NodeNames.AI_FILTER)
+    graph.add_edge(NodeNames.AI_FILTER, NodeNames.GUARDRAIL)
+    
+    # Conditional edge from guardrail: continue if safe, end if dangerous
+    def should_continue_after_guardrail(state):
+        """Check if workflow should continue after guardrail."""
+        if "dangerous_email" in state:
+            return END
+        return NodeNames.CLASSIFIER
+    
+    graph.add_conditional_edges(
+        NodeNames.GUARDRAIL,
+        should_continue_after_guardrail,
+        {
+            NodeNames.CLASSIFIER: NodeNames.CLASSIFIER,
+            END: END
+        }
+    )
+    
     graph.add_edge(NodeNames.CLASSIFIER, NodeNames.ROUTER)
     
     return graph
@@ -52,11 +69,66 @@ def create_email_classification_graph():
 graph = create_email_classification_graph()
 
 
-def run_workflow():
+def run_workflow(email_data: dict = None):
     """
     Executes the email classification workflow.
+    
+    Args:
+        email_data: Dictionary containing email information from broker
+                   Expected keys: thread_id, message_id, body, attachment_ids, etc.
+    
+    Returns:
+        Dict with workflow execution result
     """
-    graph.run()
+    try:
+        # Create initial state with email data if provided
+        if email_data:
+            initial_state = {
+                "email_body": email_data.get("body"),
+                "attachments": email_data.get("attachment_ids", []),
+                "language": None,  # Will be detected by language_detector_node
+                "category": email_data.get("category"),
+                "subcategory": email_data.get("subcategory"),
+                "extracted_info": {
+                    "thread_id": email_data.get("thread_id"),
+                    "message_id": email_data.get("message_id"),
+                    "reply_to_id": email_data.get("reply_to_id"),
+                    "from": email_data.get("from"),
+                    "to": email_data.get("to"),
+                    "cc": email_data.get("cc"),
+                    "subject": email_data.get("subject"),
+                    "box_email": email_data.get("box_email"),
+                    "provider": email_data.get("provider"),
+                    "has_attachments": email_data.get("has_attachments", False),
+                    "extended_summary": email_data.get("extended_summary"),
+                    "no_reply": email_data.get("no_reply", False)
+                },
+                "notification": None
+            }
+        else:
+            initial_state = create_initial_state()
+        
+        print(f"🎯 [WORKFLOW] Starting with initial state:")
+        print(f"   📧 Body: {initial_state.get('email_body', 'None')[:100]}...")
+        print(f"   📎 Attachments: {len(initial_state.get('attachments', []))}")
+        print(f"   🏷️ Category: {initial_state.get('category')}")
+        print(f"   🧵 Thread ID: {initial_state.get('extracted_info', {}).get('thread_id')}")
+        
+        # Compile and execute the workflow
+        compiled_graph = graph.compile()
+        result = compiled_graph.invoke(initial_state)
+        
+        # Check if dangerous email was detected
+        if "dangerous_email" in result:
+            print(f"🚨 [WORKFLOW] DANGEROUS EMAIL DETECTED!")
+            return result["dangerous_email"]
+        
+        print(f"🏁 [WORKFLOW] Completed with result: {result}")
+        return result
+        
+    except Exception as e:
+        print(f"❌ [WORKFLOW] Error executing workflow: {e}")
+        return {"error": str(e), "status": "failed"}
 
 
 if __name__ == "__main__":

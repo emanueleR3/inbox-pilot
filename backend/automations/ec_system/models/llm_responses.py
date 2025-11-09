@@ -1,0 +1,61 @@
+"""
+Pydantic models for LLM responses and structured outputs.
+"""
+
+from pydantic import BaseModel, Field
+from typing import Literal, Optional
+
+
+class LanguageDetectionResponse(BaseModel):
+    """Response model for language detection."""
+    language: Literal["ITA", "ENG"] = Field(
+        ..., 
+        description="Lingua del testo: ITA per Italiano, ENG per Inglese"
+    )
+
+
+class CategoryClassificationResponse(BaseModel):
+    """Response model for email category classification."""
+    category: str = Field(..., description="Detected email category")
+    subcategory: str = Field(None, description="Detected email subcategory")
+    confidence: float = Field(..., description="Confidence score 0.0-1.0")
+
+
+class EmailFilterResponse(BaseModel):
+    """Response model for email body filtering."""
+    filtered_body: str = Field(
+        ..., 
+        description="Corpo email filtrato da elementi strutturali e HTML residuo"
+    )
+
+
+class GuardrailResponse(BaseModel):
+    """Response model for email security guardrail."""
+    permitted: bool = Field(
+        ..., 
+        description="Se true, l'email può essere processata in sicurezza"
+    )
+    message_error: Optional[str] = Field(
+        None, 
+        description="Motivazione per cui l'email non può essere processata"
+    )
+    attempted_scam: bool = Field(
+        ..., 
+        description="Se true, l'email è stata identificata come potenziale truffa"
+    )
+
+
+class DangerousEmailDetected(BaseModel):
+    """Response model when dangerous email is detected."""
+    message_id: str = Field(..., description="ID del messaggio email")
+    thread_id: str = Field(..., description="ID del thread")
+    status: Literal["dangerous_email"] = Field(
+        default="dangerous_email",
+        description="Stato del risultato"
+    )
+    message: str = Field(..., description="Messaggio di errore")
+    attempted_scam: bool = Field(..., description="Se è stato rilevato un tentativo di scam")
+    result: dict = Field(
+        default={"extended_summary": None},
+        description="Risultato vuoto per email pericolose"
+    )

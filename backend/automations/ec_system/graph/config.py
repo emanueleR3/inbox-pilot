@@ -28,7 +28,9 @@ class NodeNames:
     """Node name constants for the workflow graph."""
     NEW_MAIL = "new_mail"
     LANGUAGE_DETECTOR = "language_detector"
-    AI_FILTER_GUARDRAIL = "ai_filter_guardrail"
+    AI_FILTER = "ai_filter"
+    GUARDRAIL = "guardrail"
+    AI_FILTER_GUARDRAIL = "ai_filter_guardrail"  # Deprecated, kept for compatibility
     CLASSIFIER = "classifier"
     ROUTER = "router"
     EXTRACT_PROMOTION = "extract_promotion"
