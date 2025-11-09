@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv
 import os
-from routers import agents_router, chatbot_router, quiz_router
+from routers import agents_router, chatbot_router, quiz_router, workflows_router
 
 load_dotenv()
 
@@ -20,6 +20,7 @@ app = FastAPI(title="Automations API", version="1.0.0")
 app.include_router(agents_router, prefix="/agents")
 app.include_router(chatbot_router, prefix="/chatbot")
 app.include_router(quiz_router, prefix="/quiz")
+app.include_router(workflows_router, prefix="/workflows")
 
 app.add_middleware(
     CORSMiddleware,
