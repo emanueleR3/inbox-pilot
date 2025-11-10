@@ -45,6 +45,45 @@ class GuardrailResponse(BaseModel):
     )
 
 
+class EmailClassificationResponse(BaseModel):
+    """Response model for email classification."""
+    category: Literal[
+        "PROMOTION", 
+        "SOCIAL_NOTIFICATION", 
+        "INFO_PROVIDED", 
+        "INFO_REQUESTED", 
+        "CALENDAR_EVENT", 
+        "TRANSACTIONAL", 
+        "OTHER"
+    ] = Field(..., description="Categoria della email")
+    confidence_score: float = Field(
+        ..., 
+        ge=0.0, 
+        le=1.0, 
+        description="Punteggio di confidenza da 0.0 a 1.0 con precisione alla prima cifra decimale"
+    )
+    mail_summary: str = Field(
+        ..., 
+        description="Riassunto della email corrente"
+    )
+    extended_summary: str = Field(
+        ..., 
+        description="Riassunto esteso e dettagliato dell'intera conversazione includendo questa email"
+    )
+
+
+class LowConfidenceClassification(BaseModel):
+    """Response model when classification confidence is too low."""
+    message_id: str = Field(..., description="ID del messaggio email")
+    thread_id: str = Field(..., description="ID del thread")
+    status: Literal["low_confidence_classification"] = Field(
+        default="low_confidence_classification",
+        description="Stato del risultato"
+    )
+    message: str = Field(..., description="Messaggio di spiegazione")
+    result: dict = Field(..., description="Risultato con classificazione a bassa confidence")
+
+
 class DangerousEmailDetected(BaseModel):
     """Response model when dangerous email is detected."""
     message_id: str = Field(..., description="ID del messaggio email")

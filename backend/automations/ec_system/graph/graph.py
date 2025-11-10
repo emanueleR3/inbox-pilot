@@ -63,7 +63,21 @@ def create_email_classification_graph():
         }
     )
     
-    graph.add_edge(NodeNames.CLASSIFIER, NodeNames.ROUTER)
+    # Conditional edge from classifier: continue if confidence OK, end if low confidence
+    def should_continue_after_classifier(state):
+        """Check if workflow should continue after classifier."""
+        if "low_confidence_classification" in state:
+            return END
+        return NodeNames.ROUTER
+    
+    graph.add_conditional_edges(
+        NodeNames.CLASSIFIER,
+        should_continue_after_classifier,
+        {
+            NodeNames.ROUTER: NodeNames.ROUTER,
+            END: END
+        }
+    )
     
     return graph
 
@@ -126,6 +140,11 @@ def run_workflow(email_data: dict = None):
         if "dangerous_email" in result:
             print(f"🚨 [WORKFLOW] DANGEROUS EMAIL DETECTED!")
             return result["dangerous_email"]
+        
+        # Check if low confidence classification was detected
+        if "low_confidence_classification" in result:
+            print(f"⚠️ [WORKFLOW] LOW CONFIDENCE CLASSIFICATION DETECTED!")
+            return result["low_confidence_classification"]
         
         print(f"🏁 [WORKFLOW] Completed with result: {result}")
         return result

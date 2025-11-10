@@ -236,6 +236,95 @@ async def test_database_connection() -> bool:
         return False
 
 
+async def insert_notification(email: str, notification_type: str, message_id: str, text: str = None) -> bool:
+    """
+    Inserisce una nuova notifica nella tabella notifications.
+    
+    Args:
+        email (str): Email dell'utente (box_email)
+        notification_type (str): Tipo di notifica (es. MAIL_NOT_PERMITTED)
+        message_id (str): ID del messaggio email
+        text (str, optional): Testo aggiuntivo della notifica
+        
+    Returns:
+        bool: True se l'inserimento è avvenuto con successo, False altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Prepara i dati da inserire
+        notification_data = {
+            "email": email,
+            "type": notification_type,
+            "message_id": message_id
+        }
+        
+        # Aggiungi il testo se fornito
+        if text:
+            notification_data["text"] = text
+        
+        # Inserisci la notifica nel database
+        response = supabase.table("notifications").insert(notification_data).execute()
+        
+        if not response.data:
+            print(f"❌ [DB_CLIENT] Failed to insert notification for {email}")
+            return False
+        
+        inserted_notification = response.data[0]
+        notification_id = inserted_notification.get("notification_id")
+
+        return True
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error inserting notification for {email}: {str(e)}")
+        return False
+
+
+def insert_notification_sync(email: str, notification_type: str, message_id: str, text: str = None) -> bool:
+    """
+    Versione sincrona per inserire una notifica.
+    Utilizzata dai nodi del workflow che non supportano async.
+    
+    Args:
+        email (str): Email dell'utente (box_email)
+        notification_type (str): Tipo di notifica (es. MAIL_NOT_PERMITTED)  
+        message_id (str): ID del messaggio email
+        text (str, optional): Testo aggiuntivo della notifica
+        
+    Returns:
+        bool: True se l'inserimento è avvenuto con successo, False altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Prepara i dati da inserire
+        notification_data = {
+            "email": email,
+            "type": notification_type,
+            "message_id": message_id
+        }
+        
+        # Aggiungi il testo se fornito
+        if text:
+            notification_data["text"] = text
+        
+        # Inserisci la notifica nel database
+        response = supabase.table("notifications").insert(notification_data).execute()
+        
+        if not response.data:
+            print(f"❌ [DB_CLIENT] Failed to insert notification for {email}")
+            return False
+        
+        inserted_notification = response.data[0]
+        notification_id = inserted_notification.get("notification_id")
+
+        return True
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error inserting notification (sync) for {email}: {str(e)}")
+        return False
+
+
 if __name__ == "__main__":
     # Test del modulo
     import asyncio

@@ -136,3 +136,66 @@ CRITERIA: If the email asks for strictly personal, private information or access
 
 Evaluate if the email is safe to process.
 """
+
+# EMAIL CLASSIFICATION PROMPTS
+EMAIL_CLASSIFICATION_PROMPT_ITA = """
+Sei un esperto classificatore di email che deve categorizzare le email in arrivo.
+
+Analizza attentamente la seguente email e classificala nella categoria più appropriata.
+
+OGGETTO: {subject}
+CORPO EMAIL FILTRATO: {filtered_body}
+
+CATEGORIE DISPONIBILI:
+1. PROMOTION: Email promozionali, offerte commerciali, sconti, marketing, newsletter pubblicitarie
+2. SOCIAL_NOTIFICATION: Notifiche da social media, LinkedIn, Facebook, Instagram, Twitter
+3. INFO_PROVIDED: Email che forniscono informazioni utili, aggiornamenti, report, documenti
+4. INFO_REQUESTED: Email che richiedono informazioni, documenti, chiarimenti, risposte
+5. CALENDAR_EVENT: Inviti a eventi, meeting, appuntamenti, riunioni, convegni
+6. TRANSACTIONAL: Mail automatiche riguardo a ricevute, fatture, conferme d'ordine, transazioni finanziarie
+7. OTHER: Tutto ciò che non rientra nelle categorie precedenti
+
+RIASSUNTO CONVERSAZIONE ESISTENTE (per context, NON usare per classificazione):
+{extended_summary}
+
+ISTRUZIONI:
+- Classifica UNICAMENTE basandoti sul corpo email filtrato e sull'oggetto
+- NON usare il riassunto della conversazione (l'extended_summary) per la classificazione
+- Assegna un punteggio di confidenza nella classificazione da 0.0 a 1.0 (precisione prima cifra decimale)
+- Scrivi un riassunto conciso della email corrente (max 100 parole)
+- Aggiorna l'extended_summary aggiungendo un riassunto esaustivo e dettagliato di questa email al contesto esistente
+
+Se l'extended_summary è vuoto (prima email del thread), crea un riassunto dettagliato di questa email.
+Se l'extended_summary esiste, aggiungi il riassunto dettagliato di questa email mantenendo intatto il contesto della conversazione.
+"""
+
+EMAIL_CLASSIFICATION_PROMPT_ENG = """
+You are an expert email classifier who must categorize incoming emails.
+
+Carefully analyze the following email and classify it into the most appropriate category.
+
+SUBJECT: {subject}
+FILTERED EMAIL BODY: {filtered_body}
+
+AVAILABLE CATEGORIES:
+1. PROMOTION: Promotional emails, commercial offers, discounts, marketing, advertising newsletters
+2. SOCIAL_NOTIFICATION: Notifications from social media, LinkedIn, Facebook, Instagram, Twitter
+3. INFO_PROVIDED: Emails providing useful information, updates, reports, documents
+4. INFO_REQUESTED: Emails requesting information, documents, clarifications, responses
+5. CALENDAR_EVENT: Event invitations, meetings, appointments, conferences
+6. TRANSACTIONAL: Automatic mails about receipts, invoices, order confirmations, financial transactions
+7. OTHER: Everything that doesn't fit in the previous categories
+
+EXISTING CONVERSATION SUMMARY (for context, DO NOT use for classification):
+{extended_summary}
+
+INSTRUCTIONS:
+- Classify ONLY based on the filtered email body and subject
+- DO NOT use the existing conversation history (extended_summary) for classification
+- Assign a confidence score in classification from 0.0 to 1.0 (precision to first decimal place)
+- Write a concise summary of the current email (max 100 words)
+- Update the extended_summary by adding this email's exaustive and detailed summary to the existing context
+
+If extended_summary is empty (first email in thread), create a exaustive and detailed summary of this email.
+If extended_summary exists, add this email's exaustive and detailed summary while maintaining conversation context.
+"""

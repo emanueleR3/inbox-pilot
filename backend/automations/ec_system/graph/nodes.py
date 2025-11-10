@@ -5,14 +5,14 @@ Core workflow nodes for email processing.
 from langgraph.graph import END
 from .config import NodeNames
 from ..llm.client import llm_client
-from ..models.llm_responses import DangerousEmailDetected
+from ..models.llm_responses import DangerousEmailDetected, LowConfidenceClassification
 
-# Import db_client for user configuration
+# Import db_client for user configuration and notifications
 import sys
 from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
-from db_client import get_user_configuration_sync, get_default_configuration
+from db_client import get_user_configuration_sync, get_default_configuration, insert_notification_sync
 """ from .utils import (
     get_email_body,
     get_attachments,
@@ -212,6 +212,22 @@ def guardrail_node(state):
             extracted_info = state.get("extracted_info", {})
             thread_id = extracted_info.get("thread_id", "unknown")
             message_id = extracted_info.get("message_id", "unknown")
+            box_email = extracted_info.get("box_email", "unknown")
+            
+            # Insert notification in database
+            try:
+                notification_success = insert_notification_sync(
+                    email=box_email,
+                    notification_type="MAIL_NOT_PERMITTED",
+                    message_id=message_id,
+                    text=None  # No text as requested
+                )
+                
+                if not notification_success:
+                    print(f"❌ [GUARDRAIL] Failed to insert notification for {box_email}")
+                    
+            except Exception as e:
+                print(f"❌ [GUARDRAIL] Error inserting notification: {e}")
             
             # Return dangerous email response
             dangerous_response = DangerousEmailDetected(
@@ -244,17 +260,98 @@ def ai_filter_guardrail_node(state):
 
 def classifier_node(state):
     """
-    Classifies the email into categories.
+    Classifies the email into categories using LLM with confidence checking.
     
     Args:
         state: Current workflow state
         
     Returns:
-        Next node name: "router" or END
+        Updated state with classification or LowConfidenceClassification if confidence too low
     """
-    #state["category"] = classify_category(state["email_body"], state["language"])
-
-    return NodeNames.ROUTER
+    try:
+        print(f"🏷️ [CLASSIFIER] Starting email classification...")
+        
+        # Get required data from state
+        filtered_body = state.get("email_body", "")
+        language = state.get("language", "ITA")
+        extracted_info = state.get("extracted_info", {})
+        user_config = state.get("user_config", {})
+        
+        # Get email metadata
+        subject = extracted_info.get("subject", "")
+        extended_summary = extracted_info.get("extended_summary", "")
+        thread_id = extracted_info.get("thread_id", "unknown")
+        message_id = extracted_info.get("message_id", "unknown")
+        
+        # Get confidence threshold from user config
+        confidence_threshold = user_config.get("confidence_classification_threshold", 0.75)
+        user_email = user_config.get("email", "unknown")
+        
+        print(f"🎯 [CLASSIFIER] Classification parameters:")
+        print(f"   📧 User: {user_email}")
+        print(f"   📋 Subject: {subject[:50]}...")
+        print(f"   📄 Body length: {len(filtered_body)}")
+        print(f"   🔒 Language: {language}")
+        print(f"   📊 Confidence threshold: {confidence_threshold}")
+        print(f"   📝 Existing summary: {'Yes' if extended_summary else 'No'}")
+        
+        if not filtered_body or not filtered_body.strip():
+            print(f"⚠️ [CLASSIFIER] No filtered body found")
+            return state
+        
+        # Perform email classification using LLM
+        classification_response = llm_client.classify_email(
+            filtered_body, subject, language, extended_summary
+        )
+        
+        # Check confidence against threshold
+        if classification_response.confidence_score >= confidence_threshold:
+            print(f"✅ [CLASSIFIER] Classification passed (confidence: {classification_response.confidence_score} >= {confidence_threshold})")
+            
+            # Update state with successful classification
+            state["category"] = classification_response.category
+            state["confidence_score"] = classification_response.confidence_score
+            state["mail_summary"] = classification_response.mail_summary
+            
+            # Update extended_summary in extracted_info
+            if "extracted_info" not in state:
+                state["extracted_info"] = {}
+            state["extracted_info"]["extended_summary"] = classification_response.extended_summary
+            
+            print(f"🏷️ [CLASSIFIER] Email classified successfully:")
+            print(f"   📂 Category: {classification_response.category}")
+            print(f"   📊 Confidence: {classification_response.confidence_score}")
+            print(f"   📝 Summary: {classification_response.mail_summary[:100]}...")
+            
+            return state
+            
+        else:
+            print(f"⚠️ [CLASSIFIER] LOW CONFIDENCE DETECTED!")
+            print(f"   📊 Confidence: {classification_response.confidence_score} < {confidence_threshold}")
+            print(f"   🚫 Stopping workflow - human review required")
+            
+            # Create low confidence classification response
+            low_confidence_response = LowConfidenceClassification(
+                message_id=message_id,
+                thread_id=thread_id,
+                message=f"Email classification confidence ({classification_response.confidence_score}) is below threshold ({confidence_threshold}). Human review required.",
+                result={
+                    "extended_summary": classification_response.extended_summary,
+                    "category": classification_response.category,
+                    "human_response": True
+                }
+            )
+            
+            # Update state to indicate low confidence classification
+            state["low_confidence_classification"] = low_confidence_response.dict()
+            return state
+        
+    except Exception as e:
+        print(f"❌ [CLASSIFIER] Error in email classification: {e}")
+        # Continue with default classification on error
+        state["category"] = "OTHER"
+        state["confidence_score"] = 0.0
+        return state
 
 
 def router_node(state):
