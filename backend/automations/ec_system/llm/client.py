@@ -15,7 +15,9 @@ from ..models.llm_responses import (
     LanguageDetectionResponse, 
     EmailFilterResponse, 
     GuardrailResponse,
-    EmailClassificationResponse
+    EmailClassificationResponse,
+    EmailSummaryResponse,
+    EmailCategoryResponse
 )
 from ..prompts.templates import (
     LANGUAGE_DETECTION_PROMPT,
@@ -24,7 +26,11 @@ from ..prompts.templates import (
     EMAIL_GUARDRAIL_PROMPT_ITA,
     EMAIL_GUARDRAIL_PROMPT_ENG,
     EMAIL_CLASSIFICATION_PROMPT_ITA,
-    EMAIL_CLASSIFICATION_PROMPT_ENG
+    EMAIL_CLASSIFICATION_PROMPT_ENG,
+    EMAIL_SUMMARIZATION_PROMPT_ITA,
+    EMAIL_SUMMARIZATION_PROMPT_ENG,
+    EMAIL_CATEGORY_PROMPT_ITA,
+    EMAIL_CATEGORY_PROMPT_ENG
 )
 
 T = TypeVar('T')
@@ -319,9 +325,123 @@ class LLMClient:
                 attempted_scam=False
             )
     
+    def summarize_email(self, filtered_body: str, subject: str, language: str, extended_summary: str = "") -> EmailSummaryResponse:
+        """
+        Generate summaries for email (mail_summary and extended_summary).
+        
+        Args:
+            filtered_body: The filtered email body to analyze
+            subject: Email subject line
+            language: Language of the email ("ITA" or "ENG")
+            extended_summary: Existing conversation summary (can be empty)
+            
+        Returns:
+            EmailSummaryResponse with mail_summary and extended_summary
+        """
+        try:
+            # Choose prompt based on language
+            if language == "ENG":
+                prompt_template = EMAIL_SUMMARIZATION_PROMPT_ENG
+            else:
+                prompt_template = EMAIL_SUMMARIZATION_PROMPT_ITA
+            
+            # Create output parser
+            parser = PydanticOutputParser(pydantic_object=EmailSummaryResponse)
+            
+            # Default message based on language
+            if language == "ENG":
+                default_summary = "No previous summary - this is the first email in the thread."
+            else:
+                default_summary = "Nessun riassunto precedente - questa è la prima email del thread."
+            
+            # Format prompt
+            prompt_text = prompt_template.format(
+                subject=subject,
+                filtered_body=filtered_body,
+                extended_summary=extended_summary or default_summary
+            )
+            
+            # Add format instructions
+            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            
+            # Create message
+            message = HumanMessage(content=prompt_with_format)
+            
+            # Get response from LLM
+            response = self.llm([message])
+            
+            # Parse response
+            parsed_response = parser.parse(response.content)
+            
+            print(f"📝 [LLM] Email summarized ({language}): mail_summary={len(parsed_response.mail_summary)} chars, extended_summary={len(parsed_response.extended_summary)} chars")
+            return parsed_response
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in email summarization: {e}")
+            # Return default summaries on error
+            return EmailSummaryResponse(
+                mail_summary="Summary generation failed - unable to summarize email content",
+                extended_summary=extended_summary or "Summary generation failed for this email thread."
+            )
+    
+    def classify_email_category(self, filtered_body: str, subject: str, language: str) -> EmailCategoryResponse:
+        """
+        Classify email into categories with confidence score (no summaries).
+        
+        Args:
+            filtered_body: The filtered email body to analyze
+            subject: Email subject line
+            language: Language of the email ("ITA" or "ENG")
+            
+        Returns:
+            EmailCategoryResponse with category and confidence_score
+        """
+        try:
+            # Choose prompt based on language
+            if language == "ENG":
+                prompt_template = EMAIL_CATEGORY_PROMPT_ENG
+            else:
+                prompt_template = EMAIL_CATEGORY_PROMPT_ITA
+            
+            # Create output parser
+            parser = PydanticOutputParser(pydantic_object=EmailCategoryResponse)
+            
+            # Format prompt
+            prompt_text = prompt_template.format(
+                subject=subject,
+                filtered_body=filtered_body
+            )
+            
+            # Add format instructions
+            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            
+            # Create message
+            message = HumanMessage(content=prompt_with_format)
+            
+            # Get response from LLM
+            response = self.llm([message])
+            
+            # Parse response
+            parsed_response = parser.parse(response.content)
+            
+            # Round confidence score to first decimal place
+            parsed_response.confidence_score = round(parsed_response.confidence_score, 1)
+            
+            print(f"🏷️ [LLM] Email category classified ({language}): category={parsed_response.category}, confidence={parsed_response.confidence_score}")
+            return parsed_response
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in email category classification: {e}")
+            # Return default classification on error
+            return EmailCategoryResponse(
+                category="OTHER",
+                confidence_score=0.0
+            )
+
     def classify_email(self, filtered_body: str, subject: str, language: str, extended_summary: str = "") -> EmailClassificationResponse:
         """
-        Classify email into categories with confidence score and summaries.
+        DEPRECATED: Classify email into categories with confidence score and summaries.
+        Use summarize_email() and classify_email_category() separately for better precision.
         
         Args:
             filtered_body: The filtered email body to analyze

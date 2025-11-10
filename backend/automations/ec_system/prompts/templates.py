@@ -137,7 +137,109 @@ CRITERIA: If the email asks for strictly personal, private information or access
 Evaluate if the email is safe to process.
 """
 
-# EMAIL CLASSIFICATION PROMPTS
+# EMAIL SUMMARIZATION PROMPTS
+EMAIL_SUMMARIZATION_PROMPT_ITA = """
+Sei un esperto nel riassumere e sintetizzare contenuti email in modo preciso e dettagliato.
+
+Analizza attentamente la seguente email e genera due tipi di riassunto.
+
+OGGETTO: {subject}
+CORPO EMAIL FILTRATO: {filtered_body}
+RIASSUNTO CONVERSAZIONE ESISTENTE: {extended_summary}
+
+ISTRUZIONI:
+1. MAIL_SUMMARY: Scrivi un riassunto conciso della email corrente (max 100 parole)
+   - Cattura i punti chiave e il contenuto principale
+   - Mantieni il tono e l'intento dell'email originale
+   - Include informazioni pratiche importanti (date, orari, nomi)
+
+2. EXTENDED_SUMMARY: Aggiorna il riassunto della conversazione
+   - Se extended_summary è vuoto: crea un riassunto dettagliato ed esaustivo di questa email
+   - Se extended_summary esiste: aggiungi un riassunto dettagliato ed esaustivo di questa email mantenendo tutto il contesto precedente
+   - Mantieni cronologia completa della conversazione
+   - Include progressione logica degli scambi email
+
+Genera riassunti accurati e informativi che preservino tutte le informazioni rilevanti.
+"""
+
+EMAIL_SUMMARIZATION_PROMPT_ENG = """
+You are an expert in summarizing and synthesizing email content in a precise and detailed manner.
+
+Carefully analyze the following email and generate two types of summary.
+
+SUBJECT: {subject}
+FILTERED EMAIL BODY: {filtered_body}
+EXISTING CONVERSATION SUMMARY: {extended_summary}
+
+INSTRUCTIONS:
+1. MAIL_SUMMARY: Write a concise summary of the current email (max 100 words)
+   - Capture key points and main content
+   - Maintain tone and intent of the original email
+   - Include important practical information (dates, times, names)
+
+2. EXTENDED_SUMMARY: Update the conversation summary
+   - If extended_summary is empty: create a detailed and exaustive summary of this email
+   - If extended_summary exists: add this email's detailed and exaustive summary while maintaining all previous context
+   - Maintain complete conversation history
+   - Include logical progression of email exchanges
+
+Generate accurate and informative summaries that preserve all relevant information.
+"""
+
+# EMAIL CATEGORY CLASSIFICATION PROMPTS
+EMAIL_CATEGORY_PROMPT_ITA = """
+Sei un esperto classificatore di email che deve categorizzare le email in arrivo UNICAMENTE basandoti sul contenuto della singola email.
+
+Analizza attentamente la seguente email e classificala nella categoria più appropriata.
+
+OGGETTO: {subject}
+CORPO EMAIL FILTRATO: {filtered_body}
+
+CATEGORIE DISPONIBILI:
+1. PROMOTION: Email promozionali, offerte commerciali, sconti, marketing, newsletter pubblicitarie
+2. SOCIAL_NOTIFICATION: Notifiche da social media, LinkedIn, Facebook, Instagram, Twitter
+3. INFO_PROVIDED: Email che forniscono informazioni utili, aggiornamenti, report, documenti
+4. INFO_REQUESTED: Email che richiedono informazioni, documenti, chiarimenti, risposte
+5. CALENDAR_EVENT: Inviti a eventi, meeting, appuntamenti, riunioni, convegni
+6. TRANSACTIONAL: Mail automatiche riguardo a ricevute, fatture, conferme d'ordine, transazioni finanziarie
+7. OTHER: Tutto ciò che non rientra nelle categorie precedenti
+
+ISTRUZIONI FONDAMENTALI:
+- Classifica ESCLUSIVAMENTE basandoti sul corpo email filtrato e sull'oggetto
+- Assegna un punteggio di confidenza nella classificazione da 0.0 a 1.0 (precisione prima cifra decimale)
+- Concentrati sulla natura principale dell'email
+- Se hai dubbi, usa la categoria OTHER con confidenza appropriata
+
+Analizza solo questa singola email per la classificazione.
+"""
+
+EMAIL_CATEGORY_PROMPT_ENG = """
+You are an expert email classifier who must categorize incoming emails ONLY based on the content of the single email.
+
+Carefully analyze the following email and classify it into the most appropriate category.
+
+SUBJECT: {subject}
+FILTERED EMAIL BODY: {filtered_body}
+
+AVAILABLE CATEGORIES:
+1. PROMOTION: Promotional emails, commercial offers, discounts, marketing, advertising newsletters
+2. SOCIAL_NOTIFICATION: Notifications from social media, LinkedIn, Facebook, Instagram, Twitter
+3. INFO_PROVIDED: Emails providing useful information, updates, reports, documents
+4. INFO_REQUESTED: Emails requesting information, documents, clarifications, responses
+5. CALENDAR_EVENT: Event invitations, meetings, appointments, conferences
+6. TRANSACTIONAL: Automatic mails about receipts, invoices, order confirmations, financial transactions
+7. OTHER: Everything that doesn't fit in the previous categories
+
+FUNDAMENTAL INSTRUCTIONS:
+- Classify EXCLUSIVELY based on the filtered email body and subject
+- Assign a confidence score in classification from 0.0 to 1.0 (precision to first decimal place)
+- Focus on the primary nature of the email
+- If in doubt, use OTHER category with appropriate confidence
+
+Analyze only this single email for classification.
+"""
+
+# DEPRECATED - COMBINED EMAIL CLASSIFICATION PROMPTS (kept for backward compatibility)
 EMAIL_CLASSIFICATION_PROMPT_ITA = """
 Sei un esperto classificatore di email che deve categorizzare le email in arrivo.
 

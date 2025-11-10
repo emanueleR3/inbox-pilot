@@ -16,6 +16,7 @@ from .nodes import (
     ai_filter_node,
     guardrail_node,
     ai_filter_guardrail_node,
+    summarizer_node,
     classifier_node,
     router_node,
 )
@@ -37,6 +38,7 @@ def create_email_classification_graph():
     graph.add_node(NodeNames.LANGUAGE_DETECTOR, language_detector_node)
     graph.add_node(NodeNames.AI_FILTER, ai_filter_node)
     graph.add_node(NodeNames.GUARDRAIL, guardrail_node)
+    graph.add_node(NodeNames.SUMMARIZER, summarizer_node)
     graph.add_node(NodeNames.CLASSIFIER, classifier_node)
     graph.add_node(NodeNames.ROUTER, router_node)
     
@@ -52,16 +54,19 @@ def create_email_classification_graph():
         """Check if workflow should continue after guardrail."""
         if "dangerous_email" in state:
             return END
-        return NodeNames.CLASSIFIER
+        return NodeNames.SUMMARIZER
     
     graph.add_conditional_edges(
         NodeNames.GUARDRAIL,
         should_continue_after_guardrail,
         {
-            NodeNames.CLASSIFIER: NodeNames.CLASSIFIER,
+            NodeNames.SUMMARIZER: NodeNames.SUMMARIZER,
             END: END
         }
     )
+    
+    # Edge from summarizer to classifier
+    graph.add_edge(NodeNames.SUMMARIZER, NodeNames.CLASSIFIER)
     
     # Conditional edge from classifier: continue if confidence OK, end if low confidence
     def should_continue_after_classifier(state):
@@ -78,6 +83,9 @@ def create_email_classification_graph():
             END: END
         }
     )
+    
+    # Router ends the workflow (extraction nodes not implemented yet)
+    graph.add_edge(NodeNames.ROUTER, END)
     
     return graph
 

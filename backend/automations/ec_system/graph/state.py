@@ -15,6 +15,10 @@ class EmailState(TypedDict):
     extracted_info: Optional[Dict]
     notification: Optional[str]
     user_config: Optional[Dict]  # User configuration with thresholds
+    # NEW: Separated workflow fields
+    mail_summary: Optional[str]  # Summary of current email
+    extended_summary: Optional[str]  # Extended conversation summary
+    confidence_score: Optional[float]  # Classification confidence
 
 
 def create_initial_state() -> EmailState:
@@ -27,5 +31,8 @@ def create_initial_state() -> EmailState:
         "subcategory": None,
         "extracted_info": None,
         "notification": None,
-        "user_config": None
+        "user_config": None,
+        "mail_summary": None,
+        "extended_summary": None,
+        "confidence_score": None
     }

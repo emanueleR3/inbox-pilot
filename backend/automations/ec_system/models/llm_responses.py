@@ -45,8 +45,39 @@ class GuardrailResponse(BaseModel):
     )
 
 
+class EmailSummaryResponse(BaseModel):
+    """Response model for email summarization."""
+    mail_summary: str = Field(
+        ..., 
+        description="Riassunto della email corrente"
+    )
+    extended_summary: str = Field(
+        ..., 
+        description="Riassunto esteso e dettagliato dell'intera conversazione includendo questa email"
+    )
+
+
+class EmailCategoryResponse(BaseModel):
+    """Response model for email category classification only."""
+    category: Literal[
+        "PROMOTION", 
+        "SOCIAL_NOTIFICATION", 
+        "INFO_PROVIDED", 
+        "INFO_REQUESTED", 
+        "CALENDAR_EVENT", 
+        "TRANSACTIONAL", 
+        "OTHER"
+    ] = Field(..., description="Categoria della email")
+    confidence_score: float = Field(
+        ..., 
+        ge=0.0, 
+        le=1.0, 
+        description="Punteggio di confidenza da 0.0 a 1.0 con precisione alla prima cifra decimale"
+    )
+
+
 class EmailClassificationResponse(BaseModel):
-    """Response model for email classification."""
+    """Response model for email classification (DEPRECATED - use EmailSummaryResponse + EmailCategoryResponse)."""
     category: Literal[
         "PROMOTION", 
         "SOCIAL_NOTIFICATION", 

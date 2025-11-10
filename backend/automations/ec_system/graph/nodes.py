@@ -32,7 +32,7 @@ def new_mail_node(state):
         state: Current workflow state
         
     Returns:
-        Next node name: "config_loader"
+        Updated state
     """
     print(f"📧 [NEW_MAIL] Starting email processing workflow")
     print(f"   📨 Email body length: {len(state.get('email_body', ''))}")
@@ -45,7 +45,7 @@ def new_mail_node(state):
     print(f"   🧵 Thread ID: {thread_id}")
     print(f"   📤 From: {from_email}")
     
-    return NodeNames.CONFIG_LOADER
+    return state
 
 
 def config_loader_node(state):
@@ -258,9 +258,68 @@ def ai_filter_guardrail_node(state):
     return NodeNames.CLASSIFIER
 
 
+def summarizer_node(state):
+    """
+    Generate summaries for the email (mail_summary and extended_summary).
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with summaries
+    """
+    try:
+        print(f"📝 [SUMMARIZER] Starting email summarization...")
+        
+        # Get required data from state
+        filtered_body = state.get("email_body", "")
+        language = state.get("language", "ITA")
+        extracted_info = state.get("extracted_info", {})
+        
+        # Get email metadata
+        subject = extracted_info.get("subject", "")
+        extended_summary = extracted_info.get("extended_summary", "")
+        thread_id = extracted_info.get("thread_id", "unknown")
+        
+        print(f"📋 [SUMMARIZER] Summarization parameters:")
+        print(f"   📋 Subject: {subject[:50]}...")
+        print(f"   📄 Body length: {len(filtered_body)}")
+        print(f"   🔒 Language: {language}")
+        print(f"   📝 Existing summary: {'Yes' if extended_summary else 'No'}")
+        print(f"   🧵 Thread ID: {thread_id}")
+        
+        if not filtered_body or not filtered_body.strip():
+            print(f"⚠️ [SUMMARIZER] Empty email body, skipping summarization")
+            return state
+        
+        # Generate email summaries using LLM
+        summary_response = llm_client.summarize_email(
+            filtered_body, subject, language, extended_summary
+        )
+        
+        # Update state with summaries
+        state["mail_summary"] = summary_response.mail_summary
+        state["extended_summary"] = summary_response.extended_summary
+        
+        print(f"✅ [SUMMARIZER] Email summarized successfully")
+        print(f"   📝 Mail summary: {len(summary_response.mail_summary)} chars")
+        print(f"   📄 Extended summary: {len(summary_response.extended_summary)} chars")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [SUMMARIZER] Error in email summarization: {e}")
+        # Continue with default summaries on error
+        state["mail_summary"] = "Summary generation failed"
+        if "extended_summary" not in state:
+            state["extended_summary"] = "Extended summary generation failed"
+        return state
+
+
 def classifier_node(state):
     """
     Classifies the email into categories using LLM with confidence checking.
+    IMPORTANT: Uses only email body and subject - NOT summaries.
     
     Args:
         state: Current workflow state
@@ -269,7 +328,7 @@ def classifier_node(state):
         Updated state with classification or LowConfidenceClassification if confidence too low
     """
     try:
-        print(f"🏷️ [CLASSIFIER] Starting email classification...")
+        print(f"🏷️ [CLASSIFIER] Starting email category classification...")
         
         # Get required data from state
         filtered_body = state.get("email_body", "")
@@ -279,7 +338,6 @@ def classifier_node(state):
         
         # Get email metadata
         subject = extracted_info.get("subject", "")
-        extended_summary = extracted_info.get("extended_summary", "")
         thread_id = extracted_info.get("thread_id", "unknown")
         message_id = extracted_info.get("message_id", "unknown")
         
@@ -293,58 +351,53 @@ def classifier_node(state):
         print(f"   📄 Body length: {len(filtered_body)}")
         print(f"   🔒 Language: {language}")
         print(f"   📊 Confidence threshold: {confidence_threshold}")
-        print(f"   📝 Existing summary: {'Yes' if extended_summary else 'No'}")
+        print(f"   ⚠️ NOTE: Classification uses ONLY body and subject (no summaries)")
         
         if not filtered_body or not filtered_body.strip():
-            print(f"⚠️ [CLASSIFIER] No filtered body found")
+            print(f"⚠️ [CLASSIFIER] Empty email body, using default classification")
+            state["category"] = "OTHER"
+            state["confidence_score"] = 0.0
             return state
         
-        # Perform email classification using LLM
-        classification_response = llm_client.classify_email(
-            filtered_body, subject, language, extended_summary
+        # Perform email category classification using LLM (NO SUMMARIES)
+        classification_response = llm_client.classify_email_category(
+            filtered_body, subject, language
         )
         
         # Check confidence against threshold
         if classification_response.confidence_score >= confidence_threshold:
-            print(f"✅ [CLASSIFIER] Classification passed (confidence: {classification_response.confidence_score} >= {confidence_threshold})")
-            
-            # Update state with successful classification
+            # High confidence - continue to router
             state["category"] = classification_response.category
             state["confidence_score"] = classification_response.confidence_score
-            state["mail_summary"] = classification_response.mail_summary
             
-            # Update extended_summary in extracted_info
-            if "extracted_info" not in state:
-                state["extracted_info"] = {}
-            state["extracted_info"]["extended_summary"] = classification_response.extended_summary
-            
-            print(f"🏷️ [CLASSIFIER] Email classified successfully:")
-            print(f"   📂 Category: {classification_response.category}")
+            print(f"✅ [CLASSIFIER] High confidence classification")
+            print(f"   🏷️ Category: {classification_response.category}")
             print(f"   📊 Confidence: {classification_response.confidence_score}")
-            print(f"   📝 Summary: {classification_response.mail_summary[:100]}...")
+            print(f"   🎯 Threshold: {confidence_threshold} (PASSED)")
+            print(f"   ✅ Workflow continues to ROUTER")
             
             return state
             
         else:
-            print(f"⚠️ [CLASSIFIER] LOW CONFIDENCE DETECTED!")
-            print(f"   📊 Confidence: {classification_response.confidence_score} < {confidence_threshold}")
-            print(f"   🚫 Stopping workflow - human review required")
+            # Low confidence - terminate workflow
+            print(f"⚠️ [CLASSIFIER] Low confidence classification detected")
+            print(f"   🏷️ Category: {classification_response.category}")
+            print(f"   📊 Confidence: {classification_response.confidence_score}")
+            print(f"   🎯 Threshold: {confidence_threshold} (FAILED)")
+            print(f"   � Workflow terminated - human review required")
             
-            # Create low confidence classification response
-            low_confidence_response = LowConfidenceClassification(
+            # Return low confidence classification for workflow termination
+            return LowConfidenceClassification(
                 message_id=message_id,
                 thread_id=thread_id,
-                message=f"Email classification confidence ({classification_response.confidence_score}) is below threshold ({confidence_threshold}). Human review required.",
+                message=f"Classification confidence {classification_response.confidence_score} below threshold {confidence_threshold}",
                 result={
-                    "extended_summary": classification_response.extended_summary,
                     "category": classification_response.category,
-                    "human_response": True
+                    "confidence_score": classification_response.confidence_score,
+                    "mail_summary": state.get("mail_summary", ""),
+                    "extended_summary": state.get("extended_summary", "")
                 }
             )
-            
-            # Update state to indicate low confidence classification
-            state["low_confidence_classification"] = low_confidence_response.dict()
-            return state
         
     except Exception as e:
         print(f"❌ [CLASSIFIER] Error in email classification: {e}")
@@ -362,19 +415,23 @@ def router_node(state):
         state: Current workflow state
         
     Returns:
-        Next node name based on category
+        Updated state (routing handled by conditional edges in graph)
     """
-    category = state["category"]
+    category = state.get("category", "OTHER")
     
-    category_routing = {
-        "PROMOTION": "extract_promotion",
-        "LOCAL_NOTIFICATION": "extract_local_notification",
-        "WEB_PROVIDERS": "extract_web_providers",
-        "CALENDAR_EVENTS": "extract_calendar_events",
-        "TRANSACTION": "extract_transaction"
-    }
+    print(f"🔀 [ROUTER] Routing email based on category: {category}")
+    print(f"   🏷️ Category: {category}")
+    print(f"   📊 Confidence: {state.get('confidence_score', 'Not set')}")
+    print(f"   📝 Mail Summary: {state.get('mail_summary', 'Not set')[:50]}...")
     
-    return category_routing.get(category, "extract_other") 
+    # DEBUG: Print all state keys to see what's available
+    print(f"   🔍 [DEBUG] State keys: {list(state.keys())}")
+    
+    # For now, just return the state - routing logic will be in conditional edges
+    # This is a placeholder until specific extraction nodes are implemented
+    print(f"   ⚠️ [ROUTER] Extraction nodes not yet implemented - ending workflow")
+    
+    return state 
 
 
 def save_and_exit_node(state):
