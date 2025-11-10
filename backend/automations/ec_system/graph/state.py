@@ -19,6 +19,7 @@ class EmailState(TypedDict):
     mail_summary: Optional[str]  # Summary of current email
     extended_summary: Optional[str]  # Extended conversation summary
     confidence_score: Optional[float]  # Classification confidence
+    attachment_contents: Optional[List[Dict]]  # Extracted attachment contents
 
 
 def create_initial_state() -> EmailState:
@@ -34,5 +35,6 @@ def create_initial_state() -> EmailState:
         "user_config": None,
         "mail_summary": None,
         "extended_summary": None,
-        "confidence_score": None
+        "confidence_score": None,
+        "attachment_contents": None
     }

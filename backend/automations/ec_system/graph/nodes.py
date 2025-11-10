@@ -12,7 +12,10 @@ import sys
 from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
-from db_client import get_user_configuration_sync, get_default_configuration, insert_notification_sync
+from db_client import get_user_configuration_sync, get_default_configuration, insert_notification_sync, get_email_attachments_sync
+
+# Import attachment extractor service
+from ..services.attachment_extractor import attachment_extractor
 """ from .utils import (
     get_email_body,
     get_attachments,
@@ -404,6 +407,122 @@ def classifier_node(state):
         # Continue with default classification on error
         state["category"] = "OTHER"
         state["confidence_score"] = 0.0
+        return state
+
+
+def attachment_extractor_node(state):
+    """
+    Extract content from email attachments if present.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with attachment contents or unchanged if no attachments
+    """
+    try:
+        print(f"📎 [ATTACHMENT_EXTRACTOR] Starting attachment content extraction...")
+        
+        # Get attachments from state
+        attachments = state.get("attachments", [])
+        extracted_info = state.get("extracted_info", {})
+        
+        print(f"📎 [ATTACHMENT_EXTRACTOR] Found {len(attachments)} attachment IDs")
+        
+        # Check if there are attachments to process
+        if not attachments or len(attachments) == 0:
+            print(f"📎 [ATTACHMENT_EXTRACTOR] No attachments to process, continuing to router")
+            state["attachment_contents"] = []
+            return state
+        
+        # Get thread_id and message_id for database queries
+        thread_id = extracted_info.get("thread_id")
+        message_id = extracted_info.get("message_id")
+        
+        print(f"📎 [ATTACHMENT_EXTRACTOR] Processing attachments for thread: {thread_id}, message: {message_id}")
+        
+        if not thread_id or not message_id:
+            print(f"❌ [ATTACHMENT_EXTRACTOR] Missing thread_id or message_id")
+            state["attachment_contents"] = []
+            return state
+        
+        # Query database for attachment file paths using db_client
+        attachment_files = []
+        
+        try:
+            # Get attachment files from database using db_client
+            attachment_files = get_email_attachments_sync(message_id)
+                
+        except Exception as e:
+            print(f"❌ [ATTACHMENT_EXTRACTOR] Database query error: {e}")
+            state["attachment_contents"] = []
+            return state
+        
+        # Extract content from attachment files
+        if attachment_files:
+            extracted_contents = attachment_extractor.extract_attachments_content(attachment_files)
+            state["attachment_contents"] = extracted_contents
+            
+            print(f"✅ [ATTACHMENT_EXTRACTOR] Successfully extracted content from {len(extracted_contents)} attachments")
+            
+            # CONSOLE OUTPUT: Detailed summary of all extracted contents
+            print(f"")
+            print(f"🗂️ [ATTACHMENT_SUMMARY] COMPLETE EXTRACTION RESULTS:")
+            print(f"=" * 80)
+            
+            if extracted_contents:
+                for idx, content in enumerate(extracted_contents, 1):
+                    file_name = content.get('nome_file', 'unknown')
+                    file_content = content.get('contenuto', '')
+                    content_length = len(str(file_content))
+                    
+                    print(f"📁 ATTACHMENT {idx}: {file_name}")
+                    print(f"   📊 Content Length: {content_length} characters")
+                    print(f"   📝 Content Summary:")
+                    print(f"   " + "-" * 50)
+                    
+                    # Show content preview
+                    content_preview = str(file_content)[:800]  # Show more for console
+                    for line_num, line in enumerate(content_preview.split('\n'), 1):
+                        if line_num <= 20:  # Show first 20 lines
+                            print(f"   {line_num:2d}| {line}")
+                        else:
+                            break
+                    
+                    if len(str(file_content)) > 800 or len(content_preview.split('\n')) > 20:
+                        total_lines = len(str(file_content).split('\n'))
+                        print(f"   ... [showing first 20 lines of {total_lines} total lines]")
+                    
+                    print(f"   " + "-" * 50)
+                    print()
+                
+                # JSON-formatted output for easy parsing
+                print(f"📋 [JSON_OUTPUT] Extracted Contents:")
+                print(f"{'-' * 40}")
+                import json
+                try:
+                    json_output = json.dumps(extracted_contents, indent=2, ensure_ascii=False)
+                    print(json_output)
+                except Exception as e:
+                    print(f"❌ JSON serialization error: {e}")
+                    print(f"Raw contents: {extracted_contents}")
+                print(f"{'-' * 40}")
+            else:
+                print(f"⚠️ No content was extracted from any attachments")
+            
+            print(f"=" * 80)
+            print()
+            
+        else:
+            print(f"⚠️ [ATTACHMENT_EXTRACTOR] No attachment files found to process")
+            state["attachment_contents"] = []
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [ATTACHMENT_EXTRACTOR] Error in attachment extraction: {e}")
+        # Continue with empty attachment contents on error
+        state["attachment_contents"] = []
         return state
 
 

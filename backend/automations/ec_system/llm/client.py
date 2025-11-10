@@ -7,8 +7,8 @@ import secrets
 import string
 import re
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage
-from langchain.output_parsers import PydanticOutputParser
+from langchain_core.messages import HumanMessage
+from langchain_core.output_parsers import PydanticOutputParser
 from typing import TypeVar, Type
 
 from ..models.llm_responses import (

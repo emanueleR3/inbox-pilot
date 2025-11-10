@@ -34,6 +34,7 @@ class NodeNames:
     AI_FILTER_GUARDRAIL = "ai_filter_guardrail"  # Deprecated, kept for compatibility
     SUMMARIZER = "summarizer"
     CLASSIFIER = "classifier"
+    ATTACHMENT_EXTRACTOR = "attachment_extractor"
     ROUTER = "router"
     EXTRACT_PROMOTION = "extract_promotion"
     EXTRACT_LOCAL_NOTIFICATION = "extract_local_notification"

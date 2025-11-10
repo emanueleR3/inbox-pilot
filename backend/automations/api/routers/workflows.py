@@ -58,12 +58,12 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
     """
     try:
         print(f"📧 [WORKFLOW] Received email workflow request")
-        print(f"🧵 Thread ID: {payload.thread_id}")
-        print(f"📨 From: {payload.from_}")
-        print(f"📬 Box: {payload.box_email}")
-        print(f"📎 Attachments: {len(payload.attachment_ids)}")
-        print(f"🏷️ Category: {payload.category}")
-        print(f"🏷️ Subcategory: {payload.subcategory}")
+        #print(f"🧵 Thread ID: {payload.thread_id}")
+        #print(f"📨 From: {payload.from_}")
+        #print(f"📬 Box: {payload.box_email}")
+        #print(f"📎 Attachments: {len(payload.attachment_ids)}")
+        #print(f"🏷️ Category: {payload.category}")
+        #print(f"🏷️ Subcategory: {payload.subcategory}")
         
         # Convert payload to dict for workflow
         email_data = {

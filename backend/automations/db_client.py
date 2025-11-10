@@ -325,6 +325,48 @@ def insert_notification_sync(email: str, notification_type: str, message_id: str
         return False
 
 
+def get_email_attachments_sync(message_id: str) -> list:
+    """
+    Recupera i file attachment associati a un message_id.
+    Versione sincrona per i nodi del workflow.
+    
+    Args:
+        message_id (str): ID del messaggio email
+        
+    Returns:
+        list: Lista di attachment con file_name, file_path, mime_type, size_bytes
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        print(f"📎 [DB_CLIENT] Retrieving attachments for message_id: {message_id}")
+        
+        # Query per ottenere i file attachment
+        response = supabase.table("email_attachments").select(
+            "file_name, file_path, mime_type, size_bytes"
+        ).eq("message_id", message_id).execute()
+        
+        if not response.data:
+            print(f"⚠️ [DB_CLIENT] No attachments found for message_id: {message_id}")
+            return []
+        
+        attachment_files = []
+        for attachment_record in response.data:
+            attachment_files.append({
+                "file_name": attachment_record["file_name"],
+                "file_path": attachment_record["file_path"],
+                "mime_type": attachment_record.get("mime_type", ""),
+                "size_bytes": attachment_record.get("size_bytes", 0)
+            })
+        
+        print(f"✅ [DB_CLIENT] Retrieved {len(attachment_files)} attachments")
+        return attachment_files
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving attachments for message_id {message_id}: {str(e)}")
+        return []
+
+
 if __name__ == "__main__":
     # Test del modulo
     import asyncio

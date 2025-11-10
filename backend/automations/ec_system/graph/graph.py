@@ -18,6 +18,7 @@ from .nodes import (
     ai_filter_guardrail_node,
     summarizer_node,
     classifier_node,
+    attachment_extractor_node,
     router_node,
 )
 
@@ -40,6 +41,7 @@ def create_email_classification_graph():
     graph.add_node(NodeNames.GUARDRAIL, guardrail_node)
     graph.add_node(NodeNames.SUMMARIZER, summarizer_node)
     graph.add_node(NodeNames.CLASSIFIER, classifier_node)
+    graph.add_node(NodeNames.ATTACHMENT_EXTRACTOR, attachment_extractor_node)
     graph.add_node(NodeNames.ROUTER, router_node)
     
     # Configure workflow edges
@@ -68,21 +70,31 @@ def create_email_classification_graph():
     # Edge from summarizer to classifier
     graph.add_edge(NodeNames.SUMMARIZER, NodeNames.CLASSIFIER)
     
-    # Conditional edge from classifier: continue if confidence OK, end if low confidence
+    # Conditional edge from classifier: check confidence and attachments
     def should_continue_after_classifier(state):
-        """Check if workflow should continue after classifier."""
+        """Check if workflow should continue after classifier and route based on attachments."""
         if "low_confidence_classification" in state:
             return END
-        return NodeNames.ROUTER
+        
+        # Check if there are attachments to process
+        attachments = state.get("attachments", [])
+        if attachments and len(attachments) > 0:
+            return NodeNames.ATTACHMENT_EXTRACTOR
+        else:
+            return NodeNames.ROUTER
     
     graph.add_conditional_edges(
         NodeNames.CLASSIFIER,
         should_continue_after_classifier,
         {
+            NodeNames.ATTACHMENT_EXTRACTOR: NodeNames.ATTACHMENT_EXTRACTOR,
             NodeNames.ROUTER: NodeNames.ROUTER,
             END: END
         }
     )
+    
+    # Edge from attachment extractor to router
+    graph.add_edge(NodeNames.ATTACHMENT_EXTRACTOR, NodeNames.ROUTER)
     
     # Router ends the workflow (extraction nodes not implemented yet)
     graph.add_edge(NodeNames.ROUTER, END)

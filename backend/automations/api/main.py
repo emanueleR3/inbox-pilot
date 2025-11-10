@@ -13,7 +13,7 @@ import uvicorn
 from dotenv import load_dotenv
 import os
 import json
-from routers import agents_router, chatbot_router, quiz_router, workflows_router
+from routers import chatbot_router, quiz_router, workflows_router
 
 load_dotenv()
 
@@ -38,7 +38,6 @@ async def log_requests(request: Request, call_next):
     print(f"✅ [RESPONSE] Status: {response.status_code}")
     return response
 
-app.include_router(agents_router, prefix="/agents")
 app.include_router(chatbot_router, prefix="/chatbot")
 app.include_router(quiz_router, prefix="/internal-quiz")
 app.include_router(workflows_router, prefix="/workflows")
