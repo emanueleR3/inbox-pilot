@@ -5,6 +5,11 @@ This module builds and configures the LangGraph workflow for email processing.
 The workflow handles email classification, information extraction, and storage.
 """
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  
+
 from langgraph.graph import StateGraph, END
 
 from .state import create_initial_state
@@ -21,6 +26,8 @@ from .nodes import (
     attachment_extractor_node,
     router_node,
 )
+
+AUTOMATION_ENABLED = os.getenv("AUTOMATION_ENABLED", "true").lower() == "true"
 
 def create_email_classification_graph():
     """
@@ -117,6 +124,12 @@ def run_workflow(email_data: dict = None):
     Returns:
         Dict with workflow execution result
     """
+
+    if not AUTOMATION_ENABLED:
+        print("⚠️ [WORKFLOW] Automation is disabled. Exiting workflow execution.")
+        return {"status": "automation_disabled"}
+    
+
     try:
         # Create initial state with email data if provided
         if email_data:
