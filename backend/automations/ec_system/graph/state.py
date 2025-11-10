@@ -14,6 +14,7 @@ class EmailState(TypedDict):
     subcategory: Optional[str]
     extracted_info: Optional[Dict]
     notification: Optional[str]
+    user_config: Optional[Dict]  # User configuration with thresholds
 
 
 def create_initial_state() -> EmailState:
@@ -25,5 +26,6 @@ def create_initial_state() -> EmailState:
         "category": None,
         "subcategory": None,
         "extracted_info": None,
-        "notification": None
+        "notification": None,
+        "user_config": None
     }

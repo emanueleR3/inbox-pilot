@@ -6,6 +6,13 @@ from langgraph.graph import END
 from .config import NodeNames
 from ..llm.client import llm_client
 from ..models.llm_responses import DangerousEmailDetected
+
+# Import db_client for user configuration
+import sys
+from pathlib import Path
+project_root = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(project_root))
+from db_client import get_user_configuration_sync, get_default_configuration
 """ from .utils import (
     get_email_body,
     get_attachments,
@@ -25,11 +32,70 @@ def new_mail_node(state):
         state: Current workflow state
         
     Returns:
-        Next node name: "language_detector"
+        Next node name: "config_loader"
     """
-    #state["email_body"] = get_email_body()
-    #state["attachments"] = get_attachments()
-    return NodeNames.LANGUAGE_DETECTOR
+    print(f"📧 [NEW_MAIL] Starting email processing workflow")
+    print(f"   📨 Email body length: {len(state.get('email_body', ''))}")
+    print(f"   📎 Attachments: {len(state.get('attachments', []))}")
+    
+    extracted_info = state.get('extracted_info', {})
+    thread_id = extracted_info.get('thread_id', 'unknown')
+    from_email = extracted_info.get('from', 'unknown')
+    
+    print(f"   🧵 Thread ID: {thread_id}")
+    print(f"   📤 From: {from_email}")
+    
+    return NodeNames.CONFIG_LOADER
+
+
+def config_loader_node(state):
+    """
+    Loads user configuration from database based on box_email.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with user configuration
+    """
+    try:
+        print(f"⚙️ [CONFIG_LOADER] Loading user configuration...")
+        
+        # Get box_email from extracted_info
+        extracted_info = state.get("extracted_info", {})
+        box_email = extracted_info.get("box_email")
+        
+        if not box_email:
+            print(f"⚠️ [CONFIG_LOADER] No box_email found in extracted_info, using default config")
+            user_config = get_default_configuration()
+        else:
+            print(f"🔍 [CONFIG_LOADER] Loading config for box_email: {box_email}")
+            
+            # Load user configuration from database
+            user_config = get_user_configuration_sync(box_email)
+            
+            if not user_config:
+                print(f"⚠️ [CONFIG_LOADER] No config found for {box_email}, using default")
+                user_config = get_default_configuration()
+        
+        # Add user configuration to state
+        state["user_config"] = user_config.to_dict()
+        
+        print(f"✅ [CONFIG_LOADER] Configuration loaded successfully")
+        print(f"   📧 User: {user_config.email}")
+        print(f"   ✅ Activated: {user_config.activated}")
+        print(f"   📊 Thresholds loaded: response={user_config.confidence_response_threshold}, "
+              f"review={user_config.confidence_review_mail}, "
+              f"priority={user_config.priority_threshold}")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [CONFIG_LOADER] Error loading user configuration: {e}")
+        # Use default configuration on error
+        default_config = get_default_configuration()
+        state["user_config"] = default_config.to_dict()
+        return state
 
 
 def language_detector_node(state):

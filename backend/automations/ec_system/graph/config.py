@@ -27,6 +27,7 @@ class EmailCategories:
 class NodeNames:
     """Node name constants for the workflow graph."""
     NEW_MAIL = "new_mail"
+    CONFIG_LOADER = "config_loader"
     LANGUAGE_DETECTOR = "language_detector"
     AI_FILTER = "ai_filter"
     GUARDRAIL = "guardrail"

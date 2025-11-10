@@ -11,6 +11,7 @@ from .state import create_initial_state
 from .config import NodeNames
 from .nodes import (
     new_mail_node,
+    config_loader_node,
     language_detector_node,
     ai_filter_node,
     guardrail_node,
@@ -32,6 +33,7 @@ def create_email_classification_graph():
     
     # Add core workflow nodes
     graph.add_node(NodeNames.NEW_MAIL, new_mail_node)
+    graph.add_node(NodeNames.CONFIG_LOADER, config_loader_node)
     graph.add_node(NodeNames.LANGUAGE_DETECTOR, language_detector_node)
     graph.add_node(NodeNames.AI_FILTER, ai_filter_node)
     graph.add_node(NodeNames.GUARDRAIL, guardrail_node)
@@ -40,7 +42,8 @@ def create_email_classification_graph():
     
     # Configure workflow edges
     graph.set_entry_point(NodeNames.NEW_MAIL)
-    graph.add_edge(NodeNames.NEW_MAIL, NodeNames.LANGUAGE_DETECTOR)
+    graph.add_edge(NodeNames.NEW_MAIL, NodeNames.CONFIG_LOADER)
+    graph.add_edge(NodeNames.CONFIG_LOADER, NodeNames.LANGUAGE_DETECTOR)
     graph.add_edge(NodeNames.LANGUAGE_DETECTOR, NodeNames.AI_FILTER)
     graph.add_edge(NodeNames.AI_FILTER, NodeNames.GUARDRAIL)
     
@@ -103,7 +106,8 @@ def run_workflow(email_data: dict = None):
                     "extended_summary": email_data.get("extended_summary"),
                     "no_reply": email_data.get("no_reply", False)
                 },
-                "notification": None
+                "notification": None,
+                "user_config": None
             }
         else:
             initial_state = create_initial_state()
