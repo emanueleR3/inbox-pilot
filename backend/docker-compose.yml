@@ -91,7 +91,7 @@ services:
     container_name: automations
     restart: unless-stopped
     volumes:
-      - ./data/attachments:/app/attachments
+      - ./data/attachments:/automations/attachments
     env_file:
       - .env
     ports:

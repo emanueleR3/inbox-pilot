@@ -14,7 +14,8 @@ services:
     ports:
       - "8001:8001"  # Microsoft webhook
     volumes:
-      - ./data/corretto/attachments:/app/attachments
+      #- ./data/corretto/attachments:/app/attachments
+      - ./data/attachments:/app/attachments
       - ./service-account-key.json:/app/credentials/service-account-key.json:ro  # Mount Google credentials
     networks:
       - broker_net
