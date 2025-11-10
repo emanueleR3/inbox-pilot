@@ -90,6 +90,8 @@ services:
     image: ghcr.io/correttoai/backend/automations:latest
     container_name: automations
     restart: unless-stopped
+    volumes:
+      - ./data/attachments:/app/attachments
     env_file:
       - .env
     ports:
