@@ -79,7 +79,7 @@ class LLMClient:
             message = HumanMessage(content=prompt_with_format)
             
             # Get response from LLM
-            response = self.llm([message])
+            response = self.llm.invoke([message])
             
             # Parse response
             parsed_response = parser.parse(response.content)
@@ -123,7 +123,7 @@ class LLMClient:
             message = HumanMessage(content=prompt_with_format)
             
             # Get response from LLM
-            response = self.llm([message])
+            response = self.llm.invoke([message])
             
             # Parse response
             parsed_response = parser.parse(response.content)
@@ -167,7 +167,7 @@ class LLMClient:
             message = HumanMessage(content=prompt_with_format)
             
             # Get response from LLM
-            response = self.llm([message])
+            response = self.llm.invoke([message])
             
             # Parse response
             parsed_response = parser.parse(response.content)
@@ -299,7 +299,7 @@ class LLMClient:
             message = HumanMessage(content=prompt_with_format)
             
             # Get response from LLM
-            response = self.llm([message])
+            response = self.llm.invoke([message])
             
             # Security validation: ensure salt wasn't leaked
             if self.enable_salt_protection and not self._validate_response_security(response.content, salt):
@@ -368,7 +368,7 @@ class LLMClient:
             message = HumanMessage(content=prompt_with_format)
             
             # Get response from LLM
-            response = self.llm([message])
+            response = self.llm.invoke([message])
             
             # Parse response
             parsed_response = parser.parse(response.content)
@@ -419,7 +419,7 @@ class LLMClient:
             message = HumanMessage(content=prompt_with_format)
             
             # Get response from LLM
-            response = self.llm([message])
+            response = self.llm.invoke([message])
             
             # Parse response
             parsed_response = parser.parse(response.content)
@@ -482,7 +482,7 @@ class LLMClient:
             message = HumanMessage(content=prompt_with_format)
             
             # Get response from LLM
-            response = self.llm([message])
+            response = self.llm.invoke([message])
             
             # Parse response
             parsed_response = parser.parse(response.content)
@@ -525,7 +525,7 @@ class LLMClient:
             message = HumanMessage(content=prompt_with_format)
             
             # Get response from LLM
-            response = self.llm([message])
+            response = self.llm.invoke([message])
             
             # Parse response
             parsed_response = parser.parse(response.content)
