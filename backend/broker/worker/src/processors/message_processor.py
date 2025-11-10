@@ -264,7 +264,7 @@ class EmailProcessor:
             "subject": email_data.get("subject"),
             "subcategory": subcategory,
             "category": category,
-            "body": email_data.get("body", ""),  # Use cleaned body
+            "body": email_data.get("body_text", email_data.get("body", "")),  # Use cleaned body first, fallback to original
             "provider": email_data.get("provider"),
             "attachment_ids": attachment_ids,
             "has_attachments": has_attachments,
