@@ -352,14 +352,19 @@ def get_email_attachments_sync(message_id: str) -> list:
         
         attachment_files = []
         for attachment_record in response.data:
+            # Convert file path from /app/attachments to /automations/attachments
+            original_path = attachment_record["file_path"]
+            converted_path = original_path.replace("/app/attachments", "/automations/attachments")
+            
             attachment_files.append({
                 "file_name": attachment_record["file_name"],
-                "file_path": attachment_record["file_path"],
+                "file_path": converted_path,
                 "mime_type": attachment_record.get("mime_type", ""),
                 "size_bytes": attachment_record.get("size_bytes", 0)
             })
+    
         
-        print(f"✅ [DB_CLIENT] Retrieved {len(attachment_files)} attachments")
+        print(f"✅ [DB_CLIENT] Retrieved {len(attachment_files)} attachments with converted paths")
         return attachment_files
         
     except Exception as e:
