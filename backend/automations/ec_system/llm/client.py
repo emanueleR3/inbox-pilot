@@ -384,7 +384,7 @@ class LLMClient:
                 extended_summary=extended_summary or "Summary generation failed for this email thread."
             )
     
-    def classify_email_category(self, filtered_body: str, subject: str, language: str) -> EmailCategoryResponse:
+    def classify_email_category(self, filtered_body: str, subject: str, language: str, has_attachments: bool = False) -> EmailCategoryResponse:
         """
         Classify email into categories with confidence score (no summaries).
         
@@ -392,9 +392,10 @@ class LLMClient:
             filtered_body: The filtered email body to analyze
             subject: Email subject line
             language: Language of the email ("ITA" or "ENG")
+            has_attachments: Whether the email has attachments
             
         Returns:
-            EmailCategoryResponse with category and confidence_score
+            EmailCategoryResponse with category, confidence_score, and must_see_attachments
         """
         try:
             # Choose prompt based on language
@@ -409,7 +410,8 @@ class LLMClient:
             # Format prompt
             prompt_text = prompt_template.format(
                 subject=subject,
-                filtered_body=filtered_body
+                filtered_body=filtered_body,
+                has_attachments=has_attachments
             )
             
             # Add format instructions
@@ -427,7 +429,7 @@ class LLMClient:
             # Round confidence score to first decimal place
             parsed_response.confidence_score = round(parsed_response.confidence_score, 1)
             
-            print(f"🏷️ [LLM] Email category classified ({language}): category={parsed_response.category}, confidence={parsed_response.confidence_score}")
+            print(f"🏷️ [LLM] Email category classified ({language}): category={parsed_response.category}, confidence={parsed_response.confidence_score}, must_see_attachments={parsed_response.must_see_attachments}")
             return parsed_response
             
         except Exception as e:
@@ -435,7 +437,8 @@ class LLMClient:
             # Return default classification on error
             return EmailCategoryResponse(
                 category="OTHER",
-                confidence_score=0.0
+                confidence_score=0.0,
+                must_see_attachments=False
             )
 
     def classify_email(self, filtered_body: str, subject: str, language: str, extended_summary: str = "") -> EmailClassificationResponse:

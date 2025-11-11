@@ -220,6 +220,7 @@ Analizza attentamente la seguente email e classificala nella categoria più appr
 
 OGGETTO: {subject}
 CORPO EMAIL FILTRATO: {filtered_body}
+PRESENZA ALLEGATI: {has_attachments}
 
 CATEGORIE DISPONIBILI:
 1. PROMOTION: Email promozionali, offerte commerciali, sconti, marketing, newsletter pubblicitarie
@@ -230,11 +231,29 @@ CATEGORIE DISPONIBILI:
 6. TRANSACTIONAL: Mail automatiche riguardo a ricevute, fatture, conferme d'ordine, transazioni finanziarie
 7. OTHER: Tutto ciò che non rientra nelle categorie precedenti
 
+VALUTAZIONE ALLEGATI (must_see_attachments):
+SE PRESENZA ALLEGATI = True, valuta se gli allegati sono FONDAMENTALI per rispondere alla email:
+
+ESEMPI must_see_attachments = False:
+- "Ti invio in allegato la fattura" (allegato informativo, non serve per rispondere)
+- "In allegato il documento firmato" (condivisione, non richiede azione sugli allegati)
+- Nella email non si fa mai riferimento ad allegati (ovviamente False)
+- "Grazie per l'incontro, allego i verbali" (condivisione informativa)
+
+ESEMPI must_see_attachments = True:
+- "Puoi controllare i dati nel file Excel e dirmi se sono corretti?" (serve vedere l'allegato per rispondere)
+- "Cosa ne pensi della proposta nel documento allegato?" (serve leggere l'allegato per rispondere)
+- "Ci sono errori nel report allegato?" (serve analizzare l'allegato per rispondere)
+- "Puoi revisionare il contratto e farmi sapere le tue osservazioni?" (serve leggere per rispondere)
+
+SE PRESENZA ALLEGATI = False, imposta sempre must_see_attachments = False.
+
 ISTRUZIONI FONDAMENTALI:
 - Classifica ESCLUSIVAMENTE basandoti sul corpo email filtrato e sull'oggetto
 - Assegna un punteggio di confidenza nella classificazione da 0.0 a 1.0 (precisione prima cifra decimale)
 - Concentrati sulla natura principale dell'email
 - Se hai dubbi, usa la categoria OTHER con confidenza appropriata
+- Valuta con attenzione se gli allegati sono indispensabili per formulare una risposta
 
 Analizza solo questa singola email per la classificazione.
 """
@@ -246,6 +265,7 @@ Carefully analyze the following email and classify it into the most appropriate 
 
 SUBJECT: {subject}
 FILTERED EMAIL BODY: {filtered_body}
+HAS ATTACHMENTS: {has_attachments}
 
 AVAILABLE CATEGORIES:
 1. PROMOTION: Promotional emails, commercial offers, discounts, marketing, advertising newsletters
@@ -256,11 +276,29 @@ AVAILABLE CATEGORIES:
 6. TRANSACTIONAL: Automatic mails about receipts, invoices, order confirmations, financial transactions
 7. OTHER: Everything that doesn't fit in the previous categories
 
+ATTACHMENT EVALUATION (must_see_attachments):
+IF HAS ATTACHMENTS = True, evaluate if attachments are ESSENTIAL to respond to the email:
+
+EXAMPLES must_see_attachments = False:
+- "I'm sending you the invoice as attachment" (informative attachment, not needed to respond)
+- "Attached is the signed document" (sharing, doesn't require action on attachments)
+- Email never mentions attachments (obviously False)
+- "Thanks for the meeting, attaching the minutes" (informative sharing)
+
+EXAMPLES must_see_attachments = True:
+- "Can you check the data in the Excel file and tell me if it's correct?" (need to see attachment to respond)
+- "What do you think about the proposal in the attached document?" (need to read attachment to respond)
+- "Are there errors in the attached report?" (need to analyze attachment to respond)
+- "Can you review the contract and let me know your observations?" (need to read to respond)
+
+IF HAS ATTACHMENTS = False, always set must_see_attachments = False.
+
 FUNDAMENTAL INSTRUCTIONS:
 - Classify EXCLUSIVELY based on the filtered email body and subject
 - Assign a confidence score in classification from 0.0 to 1.0 (precision to first decimal place)
 - Focus on the primary nature of the email
 - If in doubt, use OTHER category with appropriate confidence
+- Carefully evaluate if attachments are indispensable to formulate a response
 
 Analyze only this single email for classification.
 """

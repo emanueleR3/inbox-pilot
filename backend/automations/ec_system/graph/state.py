@@ -20,6 +20,8 @@ class EmailState(TypedDict):
     extended_summary: Optional[str]  # Extended conversation summary
     confidence_score: Optional[float]  # Classification confidence
     attachment_contents: Optional[List[Dict]]  # Extracted attachment contents
+    attachments_too_large: Optional[bool]  # Flag for attachments exceeding size limit
+    must_see_attachments: Optional[bool]  # Flag indicating if attachments are essential for understanding/responding
 
 
 def create_initial_state() -> EmailState:
@@ -36,5 +38,7 @@ def create_initial_state() -> EmailState:
         "mail_summary": None,
         "extended_summary": None,
         "confidence_score": None,
-        "attachment_contents": None
+        "attachment_contents": None,
+        "attachments_too_large": False,
+        "must_see_attachments": False
     }

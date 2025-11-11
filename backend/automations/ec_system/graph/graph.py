@@ -77,18 +77,22 @@ def create_email_classification_graph():
     # Edge from summarizer to classifier
     graph.add_edge(NodeNames.SUMMARIZER, NodeNames.CLASSIFIER)
     
-    # Conditional edge from classifier: check confidence and attachments
+    # Conditional edge from classifier: check confidence and whether attachments are required
     def should_continue_after_classifier(state):
-        """Check if workflow should continue after classifier and route based on attachments."""
+        """Check if workflow should continue after classifier and route based on the
+        `must_see_attachments` flag set by the classifier. If the classifier marked
+        attachments as essential for understanding/responding, go to the extractor.
+        Otherwise continue to the router.
+        """
         if "low_confidence_classification" in state:
             return END
-        
-        # Check if there are attachments to process
-        attachments = state.get("attachments", [])
-        if attachments and len(attachments) > 0:
+
+        # Route to attachment extractor only when classifier determined attachments
+        # are necessary for correct handling of the message.
+        if state.get("must_see_attachments", False):
             return NodeNames.ATTACHMENT_EXTRACTOR
-        else:
-            return NodeNames.ROUTER
+
+        return NodeNames.ROUTER
     
     graph.add_conditional_edges(
         NodeNames.CLASSIFIER,
@@ -154,7 +158,8 @@ def run_workflow(email_data: dict = None):
                     "no_reply": email_data.get("no_reply", False)
                 },
                 "notification": None,
-                "user_config": None
+                "user_config": None,
+                "attachments_too_large": False
             }
         else:
             initial_state = create_initial_state()

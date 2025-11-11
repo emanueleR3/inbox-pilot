@@ -74,6 +74,10 @@ class EmailCategoryResponse(BaseModel):
         le=1.0, 
         description="Punteggio di confidenza da 0.0 a 1.0 con precisione alla prima cifra decimale"
     )
+    must_see_attachments: bool = Field(
+        ...,
+        description="True se gli allegati sono fondamentali per comprendere o rispondere alla email, False altrimenti"
+    )
 
 
 class EmailClassificationResponse(BaseModel):
@@ -100,6 +104,10 @@ class EmailClassificationResponse(BaseModel):
     extended_summary: str = Field(
         ..., 
         description="Riassunto esteso e dettagliato dell'intera conversazione includendo questa email"
+    )
+    must_see_attachments: bool = Field(
+        default=False,
+        description="True se gli allegati sono fondamentali per comprendere o rispondere alla email, False altrimenti"
     )
 
 

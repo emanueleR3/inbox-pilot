@@ -2,6 +2,7 @@
 Core workflow nodes for email processing.
 """
 
+import os
 from langgraph.graph import END
 from .config import NodeNames
 from ..llm.client import llm_client
@@ -343,6 +344,7 @@ def classifier_node(state):
         subject = extracted_info.get("subject", "")
         thread_id = extracted_info.get("thread_id", "unknown")
         message_id = extracted_info.get("message_id", "unknown")
+        has_attachments = extracted_info.get("has_attachments", False)
         
         # Get confidence threshold from user config
         confidence_threshold = user_config.get("confidence_classification_threshold", 0.75)
@@ -353,6 +355,7 @@ def classifier_node(state):
         print(f"   📋 Subject: {subject[:50]}...")
         print(f"   📄 Body length: {len(filtered_body)}")
         print(f"   🔒 Language: {language}")
+        print(f"   📎 Has attachments: {has_attachments}")
         print(f"   📊 Confidence threshold: {confidence_threshold}")
         print(f"   ⚠️ NOTE: Classification uses ONLY body and subject (no summaries)")
         
@@ -360,11 +363,12 @@ def classifier_node(state):
             print(f"⚠️ [CLASSIFIER] Empty email body, using default classification")
             state["category"] = "OTHER"
             state["confidence_score"] = 0.0
+            state["must_see_attachments"] = False
             return state
         
         # Perform email category classification using LLM (NO SUMMARIES)
         classification_response = llm_client.classify_email_category(
-            filtered_body, subject, language
+            filtered_body, subject, language, has_attachments
         )
         
         # Check confidence against threshold
@@ -372,10 +376,12 @@ def classifier_node(state):
             # High confidence - continue to router
             state["category"] = classification_response.category
             state["confidence_score"] = classification_response.confidence_score
+            state["must_see_attachments"] = classification_response.must_see_attachments
             
             print(f"✅ [CLASSIFIER] High confidence classification")
             print(f"   🏷️ Category: {classification_response.category}")
             print(f"   📊 Confidence: {classification_response.confidence_score}")
+            print(f"   📎 Must see attachments: {classification_response.must_see_attachments}")
             print(f"   🎯 Threshold: {confidence_threshold} (PASSED)")
             print(f"   ✅ Workflow continues to ROUTER")
             
@@ -457,6 +463,43 @@ def attachment_extractor_node(state):
             print(f"❌ [ATTACHMENT_EXTRACTOR] Database query error: {e}")
             state["attachment_contents"] = []
             return state
+        
+        # Check file sizes before processing
+        if attachment_files:
+            # Get size limit from environment (in KB, default 2048 KB = 2MB)
+            max_size_kb = int(os.getenv("MAX_ATTACHMENT_SIZE_KB", "2048"))
+            max_size_bytes = max_size_kb * 1024  # Convert to bytes
+            
+            print(f"📎 [ATTACHMENT_EXTRACTOR] Checking file sizes (limit: {max_size_kb} KB)")
+            
+            files_too_large = []
+            processable_files = []
+            
+            for attachment_file in attachment_files:
+                file_name = attachment_file.get("file_name", "unknown")
+                file_size = attachment_file.get("size_bytes", 0)
+                file_size_kb = file_size / 1024
+                
+                if file_size > max_size_bytes:
+                    files_too_large.append({
+                        "file_name": file_name,
+                        "size_kb": round(file_size_kb, 2)
+                    })
+                    print(f"⚠️ [ATTACHMENT_EXTRACTOR] File too large: {file_name} ({file_size_kb:.2f} KB > {max_size_kb} KB)")
+                else:
+                    processable_files.append(attachment_file)
+                    print(f"✅ [ATTACHMENT_EXTRACTOR] File size OK: {file_name} ({file_size_kb:.2f} KB)")
+            
+            # Update state if any files are too large
+            if files_too_large:
+                state["attachments_too_large"] = True
+                print(f"🚨 [ATTACHMENT_EXTRACTOR] {len(files_too_large)} files exceed size limit, skipping extraction")
+                print(f"📋 [ATTACHMENT_EXTRACTOR] Large files: {[f['file_name'] for f in files_too_large]}")
+                state["attachment_contents"] = []
+                return state
+            else:
+                state["attachments_too_large"] = False
+                attachment_files = processable_files
         
         # Extract content from attachment files
         if attachment_files:
