@@ -24,6 +24,7 @@ from .nodes import (
     summarizer_node,
     classifier_node,
     attachment_extractor_node,
+    attachment_summarizer_node,
     router_node,
 )
 
@@ -49,6 +50,7 @@ def create_email_classification_graph():
     graph.add_node(NodeNames.SUMMARIZER, summarizer_node)
     graph.add_node(NodeNames.CLASSIFIER, classifier_node)
     graph.add_node(NodeNames.ATTACHMENT_EXTRACTOR, attachment_extractor_node)
+    graph.add_node(NodeNames.ATTACHMENT_SUMMARIZER, attachment_summarizer_node)
     graph.add_node(NodeNames.ROUTER, router_node)
     
     # Configure workflow edges
@@ -104,8 +106,11 @@ def create_email_classification_graph():
         }
     )
     
-    # Edge from attachment extractor to router
-    graph.add_edge(NodeNames.ATTACHMENT_EXTRACTOR, NodeNames.ROUTER)
+    # Edge from attachment extractor to attachment summarizer
+    graph.add_edge(NodeNames.ATTACHMENT_EXTRACTOR, NodeNames.ATTACHMENT_SUMMARIZER)
+    
+    # Edge from attachment summarizer to router
+    graph.add_edge(NodeNames.ATTACHMENT_SUMMARIZER, NodeNames.ROUTER)
     
     # Router ends the workflow (extraction nodes not implemented yet)
     graph.add_edge(NodeNames.ROUTER, END)

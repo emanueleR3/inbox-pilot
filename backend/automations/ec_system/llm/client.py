@@ -17,7 +17,8 @@ from ..models.llm_responses import (
     GuardrailResponse,
     EmailClassificationResponse,
     EmailSummaryResponse,
-    EmailCategoryResponse
+    EmailCategoryResponse,
+    AttachmentSummaryResponse
 )
 from ..prompts.templates import (
     LANGUAGE_DETECTION_PROMPT,
@@ -30,7 +31,9 @@ from ..prompts.templates import (
     EMAIL_SUMMARIZATION_PROMPT_ITA,
     EMAIL_SUMMARIZATION_PROMPT_ENG,
     EMAIL_CATEGORY_PROMPT_ITA,
-    EMAIL_CATEGORY_PROMPT_ENG
+    EMAIL_CATEGORY_PROMPT_ENG,
+    ATTACHMENT_SUMMARY_PROMPT_ITA,
+    ATTACHMENT_SUMMARY_PROMPT_ENG
 )
 
 T = TypeVar('T')
@@ -538,6 +541,58 @@ class LLMClient:
         except Exception as e:
             print(f"❌ [LLM] Error in structured completion: {e}")
             raise
+
+    def summarize_attachments(self, attachment_contents: list, language: str) -> AttachmentSummaryResponse:
+        """
+        Generate a discursive summary of attachment contents.
+        
+        Args:
+            attachment_contents: List of attachment content dictionaries
+            language: Language of the email ("ITA" or "ENG")
+            
+        Returns:
+            AttachmentSummaryResponse with discursive summary
+        """
+        try:
+            # Choose prompt based on language
+            if language == "ENG":
+                prompt_template = ATTACHMENT_SUMMARY_PROMPT_ENG
+            else:
+                prompt_template = ATTACHMENT_SUMMARY_PROMPT_ITA
+            
+            # Create output parser
+            parser = PydanticOutputParser(pydantic_object=AttachmentSummaryResponse)
+            
+            # Convert attachment contents to string for prompt
+            import json
+            attachment_contents_str = json.dumps(attachment_contents, indent=2, ensure_ascii=False)
+            
+            # Format prompt
+            prompt_text = prompt_template.format(
+                attachment_contents=attachment_contents_str
+            )
+            
+            # Add format instructions
+            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            
+            # Create message
+            message = HumanMessage(content=prompt_with_format)
+            
+            # Get response from LLM
+            response = self.llm.invoke([message])
+            
+            # Parse response
+            parsed_response = parser.parse(response.content)
+            
+            print(f"📋 [LLM] Attachments summarized ({language}): {len(parsed_response.summary_attachments)} chars")
+            return parsed_response
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in attachment summarization: {e}")
+            # Return default summary on error
+            return AttachmentSummaryResponse(
+                summary_attachments="Errore nella generazione del riassunto degli allegati. Impossibile processare il contenuto."
+            )
 
 
 # Global LLM client instance

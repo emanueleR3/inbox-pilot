@@ -596,6 +596,59 @@ def router_node(state):
     return state 
 
 
+def attachment_summarizer_node(state):
+    """
+    Generate a discursive summary of all attachment contents.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with attachment summary
+    """
+    try:
+        print(f"📋 [ATTACHMENT_SUMMARIZER] Starting attachment content summarization...")
+        
+        # Get required data from state
+        attachment_contents = state.get("attachment_contents", [])
+        language = state.get("language", "ITA")
+        
+        if not attachment_contents or len(attachment_contents) == 0:
+            print(f"⚠️ [ATTACHMENT_SUMMARIZER] No attachment contents to summarize")
+            state["summary_attachments"] = None
+            return state
+        
+        print(f"📎 [ATTACHMENT_SUMMARIZER] Summarizing {len(attachment_contents)} attachment(s)")
+        print(f"🔒 [ATTACHMENT_SUMMARIZER] Language: {language}")
+        
+        # Generate attachment summary using LLM
+        summary_response = llm_client.summarize_attachments(
+            attachment_contents, language
+        )
+        
+        # Update state with summary
+        state["summary_attachments"] = summary_response.summary_attachments
+        
+        print(f"✅ [ATTACHMENT_SUMMARIZER] Attachment summary generated successfully")
+        print(f"📝 [ATTACHMENT_SUMMARIZER] Summary length: {len(summary_response.summary_attachments)} chars")
+        
+        # CONSOLE OUTPUT: Print the summary for debugging
+        print(f"")
+        print(f"📋 [ATTACHMENT_SUMMARY] GENERATED SUMMARY:")
+        print(f"=" * 80)
+        print(summary_response.summary_attachments)
+        print(f"=" * 80)
+        print()
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [ATTACHMENT_SUMMARIZER] Error in attachment summarization: {e}")
+        # Continue with no summary on error
+        state["summary_attachments"] = None
+        return state
+
+
 def save_and_exit_node(state):
     """
     Final node: saves everything to DB and notifies user.

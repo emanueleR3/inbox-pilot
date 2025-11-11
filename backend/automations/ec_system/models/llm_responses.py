@@ -137,3 +137,11 @@ class DangerousEmailDetected(BaseModel):
         default={"extended_summary": None},
         description="Risultato vuoto per email pericolose"
     )
+
+
+class AttachmentSummaryResponse(BaseModel):
+    """Response model for attachment content summarization."""
+    summary_attachments: str = Field(
+        ..., 
+        description="Riassunto discorsivo del contenuto di tutti gli allegati"
+    )

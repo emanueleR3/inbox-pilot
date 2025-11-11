@@ -365,3 +365,50 @@ INSTRUCTIONS:
 If extended_summary is empty (first email in thread), create a exaustive and detailed summary of this email.
 If extended_summary exists, add this email's exaustive and detailed summary while maintaining conversation context.
 """
+
+# ATTACHMENT SUMMARY PROMPTS
+ATTACHMENT_SUMMARY_PROMPT_ITA = """
+Sei un esperto nel riassumere contenuti di documenti allegati in modo discorsivo e comprensibile.
+
+Analizza attentamente il contenuto estratto da tutti gli allegati e crea un riassunto discorsivo completo.
+
+CONTENUTO ALLEGATI:
+{attachment_contents}
+
+ISTRUZIONI DETTAGLIATE:
+- Crea un riassunto discorsivo e scorrevole che descriva il contenuto complessivo degli allegati
+- Per documenti testuali: riassumi i punti chiave, gli argomenti principali, le conclusioni
+- Per fogli di calcolo/CSV/Excel: descrivi qualitativamente cosa rappresentano i dati, le tendenze, i valori significativi
+- Per presentazioni: riassumi i punti salienti e il messaggio principale
+- Per PDF: cattura il contenuto principale e le informazioni rilevanti
+- Per il testo estratto dalle immagini (OCR), probabilmente non è strutturato: devi cercare di risalire al testo originale in modo strutturato.
+
+OBIETTIVO:
+Fornire un riassunto che permetta di comprendere l'essenza degli allegati senza doverli aprire, utile per rispondere alle email in modo informato.
+
+FORMATO:
+Scrivi un testo discorsivo fluido e professionale, evitando elenchi puntati. Integra le informazioni di tutti gli allegati in un racconto coerente.
+"""
+
+ATTACHMENT_SUMMARY_PROMPT_ENG = """
+You are an expert in summarizing attached document content in a discursive and comprehensible manner.
+
+Carefully analyze the extracted content from all attachments and create a complete discursive summary.
+
+ATTACHMENT CONTENTS:
+{attachment_contents}
+
+DETAILED INSTRUCTIONS:
+- Create a discursive and flowing summary that describes the overall content of the attachments
+- For textual documents: summarize key points, main topics, conclusions
+- For spreadsheets/CSV/Excel: qualitatively describe what the data represents, trends, significant values
+- For presentations: summarize key points and main message
+- For PDFs: capture main content and relevant information
+- For text extracted from images (OCR), it is likely unstructured: you need to try to reconstruct the original text in a structured way.
+
+OBJECTIVE:
+Provide a summary that allows understanding the essence of attachments without having to open them, useful for responding to emails in an informed way.
+
+FORMAT:
+Write a fluid and professional discursive text, avoiding bullet points. Integrate information from all attachments into a coherent narrative.
+"""
