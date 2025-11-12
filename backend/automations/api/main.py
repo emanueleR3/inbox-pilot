@@ -6,18 +6,38 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import uvicorn
 from dotenv import load_dotenv
 import os
-from routers import agents_router, chatbot_router, quiz_router, workflows_router
+import json
+from routers import chatbot_router, quiz_router, workflows_router
 
 load_dotenv()
 
 app = FastAPI(title="Automations API", version="1.0.0")
 
-app.include_router(agents_router, prefix="/agents")
+# Middleware per loggare le richieste
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"🔍 [REQUEST] {request.method} {request.url}")
+    print(f"🔍 [HEADERS] {dict(request.headers)}")
+    
+    # Se è una POST, logga anche il body
+    if request.method == "POST":
+        try:
+            body = await request.body()
+            if body:
+                print(f"🔍 [BODY] {body.decode()[:500]}...")  # Solo primi 500 caratteri
+        except Exception as e:
+            print(f"⚠️ [REQUEST] Could not read body: {e}")
+    
+    response = await call_next(request)
+    print(f"✅ [RESPONSE] Status: {response.status_code}")
+    return response
+
 app.include_router(chatbot_router, prefix="/chatbot")
 app.include_router(quiz_router, prefix="/internal-quiz")
 app.include_router(workflows_router, prefix="/workflows")

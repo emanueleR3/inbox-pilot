@@ -1,6 +1,14 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
+import sys
+from pathlib import Path
+
+# Add project root to path
+project_root = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from ec_system.graph.graph import run_workflow
 
 router = APIRouter(tags=["workflows"])
 
@@ -50,25 +58,43 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
     """
     try:
         print(f"📧 [WORKFLOW] Received email workflow request")
-        print(f"🧵 Thread ID: {payload.thread_id}")
-        print(f"📨 From: {payload.from_}")
-        print(f"📬 Box: {payload.box_email}")
-        print(f"📎 Attachments: {len(payload.attachment_ids)}")
-        print(f"🏷️ Category: {payload.category}")
-        print(f"🏷️ Subcategory: {payload.subcategory}")
+        #print(f"🧵 Thread ID: {payload.thread_id}")
+        #print(f"📨 From: {payload.from_}")
+        #print(f"📬 Box: {payload.box_email}")
+        #print(f"📎 Attachments: {len(payload.attachment_ids)}")
+        #print(f"🏷️ Category: {payload.category}")
+        #print(f"🏷️ Subcategory: {payload.subcategory}")
         
-        # TODO: Implement workflow orchestration
-        # 1. Classify category/subcategory if not set
-        # 2. Generate/update thread summary
-        # 3. Determine appropriate action based on category
-        # 4. Generate AI response if needed
-        # 5. Dispatch to appropriate agent/workflow
+        # Convert payload to dict for workflow
+        email_data = {
+            "thread_id": payload.thread_id,
+            "message_id": payload.message_id,
+            "reply_to_id": payload.reply_to_id,
+            "box_email": payload.box_email,
+            "from": payload.from_,
+            "to": payload.to,
+            "cc": payload.cc,
+            "subject": payload.subject,
+            "subcategory": payload.subcategory,
+            "category": payload.category,
+            "body": payload.body,
+            "provider": payload.provider,
+            "attachment_ids": payload.attachment_ids,
+            "has_attachments": payload.has_attachments,
+            "extended_summary": payload.extended_summary,
+            "no_reply": payload.no_reply
+        }
+        
+        # Execute the email classification workflow
+        print(f"🚀 [WORKFLOW] Starting email classification workflow...")
+        workflow_result = run_workflow(email_data)
+        print(f"✅ [WORKFLOW] Workflow completed: {workflow_result}")
         
         return WorkflowResponse(
-            status="received",
+            status="processed",
             thread_id=payload.thread_id,
-            action_taken="queued",
-            message="Email workflow processing queued successfully"
+            action_taken="workflow_executed",
+            message="Email workflow processed successfully"
         )
         
     except Exception as e:
@@ -78,6 +104,12 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
             detail=f"Failed to process email workflow: {str(e)}"
         )
 
+
+@router.post("/test")
+async def test_endpoint(data: dict):
+    """Test endpoint per verificare che arrivi il payload"""
+    print(f"🧪 [TEST] Received test data: {data}")
+    return {"status": "test_ok", "received": data}
 
 @router.get("/health")
 async def workflows_health():
