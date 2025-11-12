@@ -23,6 +23,8 @@ class EmailState(TypedDict):
     attachments_too_large: Optional[bool]  # Flag for attachments exceeding size limit
     must_see_attachments: Optional[bool]  # Flag indicating if attachments are essential for understanding/responding
     summary_attachments: Optional[str]  # Discursive summary of all attachment contents
+    priority_score: Optional[float]  # Category-specific priority score (0.0-1.0)
+    subcategory: Optional[str]  # Category-specific subcategory classification
 
 
 def create_initial_state() -> EmailState:
@@ -42,5 +44,6 @@ def create_initial_state() -> EmailState:
         "attachment_contents": None,
         "attachments_too_large": False,
         "must_see_attachments": False,
-        "summary_attachments": None
+        "summary_attachments": None,
+        "priority_score": None
     }

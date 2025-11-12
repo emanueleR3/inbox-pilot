@@ -412,3 +412,427 @@ Provide a summary that allows understanding the essence of attachments without h
 FORMAT:
 Write a fluid and professional discursive text, avoiding bullet points. Integrate information from all attachments into a coherent narrative.
 """
+
+# EVALUATOR PROMPTS FOR EACH CATEGORY
+# PROMOTION PROMPTS
+EVALUATOR_PROMOTION_PROMPT_ITA = """
+Sei un esperto nell'analizzare email promozionali per determinare priorità e sottocategoria.
+
+CATEGORIA: PROMOTION
+OGGETTO: {subject}
+CORPO EMAIL: {filtered_body}
+RIASSUNTO EMAIL: {mail_summary}
+RIASSUNTO ALLEGATI: {summary_attachments}
+
+ANALISI DEL TONO EMOTIVO - Identifica prima il tono dell'email:
+- URGENTE: Parole come "ultimo giorno", "scade oggi", "limitato", "affrettati", punteggiatura enfatica (!!)
+- PRESSANTE: Linguaggio che crea pressione o FOMO, "solo per te", "offerta esclusiva"  
+- ARRABBIATO/FRUSTRATO: Espressioni di insoddisfazione, reclami, tono accusatorio
+- PREOCCUPATO: Linguaggio che esprime ansia, preoccupazione, richieste urgenti di risposta
+- NEUTRALE: Tono informativo professionale standard
+- GENERICO: Linguaggio automatico/template senza personalizzazione
+
+SOTTOCATEGORIE DISPONIBILI:
+- OFFER_PROMOTION: Offerte speciali, sconti, promozioni con scadenza
+- NEWSLETTER: Newsletter periodiche, aggiornamenti generali
+- EVENT_INVITE: Inviti a eventi promozionali, webinar, fiere
+- PRODUCT_UPDATE: Aggiornamenti su prodotti, nuove funzionalità
+- REQUEST_QUOTE: Richieste di preventivo o quotazioni
+
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
+- 0.8-1.0: Tono urgente/pressante, scadenze immediate, linguaggio che esprime urgenza o preoccupazione
+- 0.5-0.7: Tono professionale importante, offerte con scadenza a breve, comunicazioni che richiedono attenzione
+- 0.2-0.4: Tono neutrale, newsletter standard, comunicazioni informative senza urgenza
+- 0.0-0.1: Tono spam/generico, contenuti chiaramente irrilevanti o automatici
+
+Analizza il contenuto e determina priorità e sottocategoria più appropriate.
+"""
+
+EVALUATOR_PROMOTION_PROMPT_ENG = """
+You are an expert in analyzing promotional emails to determine priority and subcategory.
+
+CATEGORY: PROMOTION
+SUBJECT: {subject}
+EMAIL BODY: {filtered_body}
+EMAIL SUMMARY: {mail_summary}
+ATTACHMENTS SUMMARY: {summary_attachments}
+
+EMOTIONAL TONE ANALYSIS - First identify the email tone:
+- URGENT: Words like "last day", "expires today", "limited", "hurry", emphatic punctuation (!!)
+- PRESSING: Language creating pressure or FOMO, "just for you", "exclusive offer"
+- ANGRY/FRUSTRATED: Expressions of dissatisfaction, complaints, accusatory tone
+- CONCERNED: Language expressing anxiety, worry, urgent response requests
+- NEUTRAL: Standard professional informational tone
+- GENERIC: Automatic/template language without personalization
+
+AVAILABLE SUBCATEGORIES:
+- OFFER_PROMOTION: Special offers, discounts, promotions with deadline
+- NEWSLETTER: Periodic newsletters, general updates
+- EVENT_INVITE: Invitations to promotional events, webinars, fairs
+- PRODUCT_UPDATE: Product updates, new features
+- REQUEST_QUOTE: Quote or quotation requests
+
+PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
+- 0.8-1.0: Urgent/pressing tone, immediate deadlines, language expressing urgency or concern
+- 0.5-0.7: Important professional tone, offers with short deadlines, communications requiring attention
+- 0.2-0.4: Neutral tone, standard newsletters, informational communications without urgency
+- 0.0-0.1: Spam/generic tone, clearly irrelevant or automated content
+
+Analyze the content and determine the most appropriate priority and subcategory.
+"""
+
+# SOCIAL_NOTIFICATION PROMPTS
+EVALUATOR_SOCIAL_NOTIFICATION_PROMPT_ITA = """
+Sei un esperto nell'analizzare notifiche social per determinare priorità e sottocategoria.
+
+CATEGORIA: SOCIAL_NOTIFICATION
+RIASSUNTO EMAIL: {mail_summary}
+RIASSUNTO ALLEGATI: {summary_attachments}
+
+SOTTOCATEGORIE DISPONIBILI:
+- EVENT_INVITE: Inviti a eventi social, meetup
+- PRODUCT_UPDATE: Aggiornamenti su prodotti social
+- NEW_MESSAGE: Nuovi messaggi, conversazioni
+- CONNECTION_REQUEST: Richieste di connessione, amicizia
+- SYSTEM_ALERT: Avvisi di sistema importanti
+- SYSTEM_NOTIFICATION: Notifiche di sistema generiche
+
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
+- 0.8-1.0: Tono allarmato/urgente, system alert critici, linguaggio che richiede azione immediata
+- 0.5-0.7: Tono di richiesta importante, messaggi da contatti rilevanti, notifiche che richiedono attenzione
+- 0.2-0.4: Tono neutrale/informativo, notifiche standard senza particolare urgenza
+- 0.0-0.1: Tono automatico/generico, notifiche spam o completamente irrilevanti
+
+Analizza il contenuto e determina priorità e sottocategoria più appropriate.
+"""
+
+EVALUATOR_SOCIAL_NOTIFICATION_PROMPT_ENG = """
+You are an expert in analyzing social notifications to determine priority and subcategory.
+
+CATEGORY: SOCIAL_NOTIFICATION
+EMAIL SUMMARY: {mail_summary}
+ATTACHMENTS SUMMARY: {summary_attachments}
+
+AVAILABLE SUBCATEGORIES:
+- EVENT_INVITE: Social event invitations, meetups
+- PRODUCT_UPDATE: Social product updates
+- NEW_MESSAGE: New messages, conversations
+- CONNECTION_REQUEST: Connection requests, friend requests
+- SYSTEM_ALERT: Important system alerts
+- SYSTEM_NOTIFICATION: Generic system notifications
+
+PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
+- 0.8-1.0: Alarmed/urgent tone, critical system alerts, language requiring immediate action
+- 0.5-0.7: Important request tone, messages from relevant contacts, notifications requiring attention
+- 0.2-0.4: Neutral/informational tone, standard notifications without particular urgency
+- 0.0-0.1: Automatic/generic tone, spam notifications or completely irrelevant content
+
+Analyze the content and determine the most appropriate priority and subcategory.
+"""
+
+# INFO_PROVIDED PROMPTS
+EVALUATOR_INFO_PROVIDED_PROMPT_ITA = """
+Sei un esperto nell'analizzare email informative per determinare priorità e sottocategoria.
+
+CATEGORIA: INFO_PROVIDED
+RIASSUNTO EMAIL: {mail_summary}
+RIASSUNTO ALLEGATI: {summary_attachments}
+
+SOTTOCATEGORIE DISPONIBILI:
+- EVENT_INVITE: Inviti a eventi informativi
+- PRODUCT_UPDATE: Aggiornamenti informativi su prodotti
+- SENT_DOCUMENTS: Documenti inviati (contratti, report)
+- PROVIDE_UPDATE: Aggiornamenti su progetti, status
+- CONFIRM_APPOINTMENT: Conferme di appuntamenti
+- FORWARD_INFO: Informazioni inoltrate
+- RESPONSE_TO_REQUEST: Risposte a richieste precedenti
+- REQUEST_DOCUMENT: Richieste di documenti
+- EVENT_FOLLOWUP: Follow-up post evento
+- INVOICE_OR_RECEIPT: Fatture o ricevute
+- STATUS_NOTIFICATION: Notifiche di stato
+- TICKET_UPDATE: Aggiornamenti ticket
+- GENERAL_GREETING: Saluti generici, comunicazioni cordiali
+
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
+- 0.8-1.0: Tono serio/formale per documenti critici, informazioni urgenti che richiedono conferma immediata
+- 0.5-0.7: Tono professionale importante, aggiornamenti su progetti critici, documenti che richiedono attenzione
+- 0.2-0.4: Tono neutrale/informativo, informazioni standard senza particolare urgenza
+- 0.0-0.1: Tono automatico/generico, informazioni di cortesia o completamente irrilevanti
+
+Analizza il contenuto e determina priorità e sottocategoria più appropriate.
+"""
+
+EVALUATOR_INFO_PROVIDED_PROMPT_ENG = """
+You are an expert in analyzing informational emails to determine priority and subcategory.
+
+CATEGORY: INFO_PROVIDED
+EMAIL SUMMARY: {mail_summary}
+ATTACHMENTS SUMMARY: {summary_attachments}
+
+AVAILABLE SUBCATEGORIES:
+- EVENT_INVITE: Informational event invitations
+- PRODUCT_UPDATE: Informational product updates
+- SENT_DOCUMENTS: Sent documents (contracts, reports)
+- PROVIDE_UPDATE: Project or status updates
+- CONFIRM_APPOINTMENT: Appointment confirmations
+- FORWARD_INFO: Forwarded information
+- RESPONSE_TO_REQUEST: Responses to previous requests
+- REQUEST_DOCUMENT: Document requests
+- EVENT_FOLLOWUP: Post-event follow-up
+- INVOICE_OR_RECEIPT: Invoices or receipts
+- STATUS_NOTIFICATION: Status notifications
+- TICKET_UPDATE: Ticket updates
+- GENERAL_GREETING: Generic greetings, cordial communications
+
+PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
+- 0.8-1.0: Serious/formal tone for critical documents, urgent information requiring immediate confirmation
+- 0.5-0.7: Important professional tone, critical project updates, documents requiring attention
+- 0.2-0.4: Neutral/informational tone, standard information without particular urgency
+- 0.0-0.1: Automatic/generic tone, courtesy information or completely irrelevant content
+
+Analyze the content and determine the most appropriate priority and subcategory.
+"""
+
+# INFO_REQUESTED PROMPTS
+EVALUATOR_INFO_REQUESTED_PROMPT_ITA = """
+Sei un esperto nell'analizzare richieste di informazioni per determinare priorità e sottocategoria.
+
+CATEGORIA: INFO_REQUESTED
+OGGETTO: {subject}
+CORPO EMAIL: {filtered_body}
+RIASSUNTO EMAIL: {mail_summary}
+RIASSUNTO ALLEGATI: {summary_attachments}
+
+ANALISI DEL TONO EMOTIVO - Identifica prima il tono dell'email:
+- ARRABBIATO/FRUSTRATO: Espressioni di rabbia, "non ho ancora ricevuto", "è inaccettabile", tono accusatorio, maiuscole eccessive
+- URGENTE/PRESSANTE: "Ho bisogno urgentemente", "entro oggi", "è critico", scadenze ravvicinate con enfasi
+- PREOCCUPATO/ANSIOSO: "Sono preoccupato", "mi serve sapere", linguaggio che esprime ansia o stress
+- INSISTENTE: Ripetizione della richiesta, "come già richiesto", "ti ricordo che", tono professionale ma fermo
+- CORDIALE: Tono educato e paziente, "quando puoi", "se possibile"
+- NEUTRALE: Richiesta professionale standard
+- AUTOMATICO: Template/bot senza personalizzazione
+
+SOTTOCATEGORIE DISPONIBILI:
+- CONNECTION_REQUEST: Richieste di connessione, collaborazione
+- RESPONSE_TO_REQUEST: Richieste di risposta a precedenti comunicazioni
+- REQUEST_DOCUMENT: Richieste di documenti specifici
+- REQUEST_QUOTE: Richieste di preventivi, quotazioni
+- REQUEST_APPOINTMENT: Richieste di appuntamenti
+- REQUEST_APPOINTMENT_CHANGE: Richieste di modifica appuntamenti
+- REQUEST_STATUS_UPDATE: Richieste di aggiornamenti stato
+- ASK_FOR_HELP: Richieste di aiuto, supporto
+- GENERAL_INQUIRY: Domande generiche, informazioni
+- PAYMENT_ISSUE: Problemi di pagamento, fatturazione
+
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
+- 0.8-1.0: Tono arrabbiato/frustrato, richieste urgenti con scadenze ravvicinate, linguaggio che esprime preoccupazione o insoddisfazione
+- 0.5-0.7: Tono professionale ma insistente, richieste importanti che richiedono attenzione, questioni che necessitano risposta ponderata
+- 0.2-0.4: Tono neutrale/cordiale, richieste standard senza particolare urgenza
+- 0.0-0.1: Tono automatico/generico, richieste spam o completamente irrilevanti
+
+Analizza il contenuto e determina priorità e sottocategoria più appropriate.
+"""
+
+EVALUATOR_INFO_REQUESTED_PROMPT_ENG = """
+You are an expert in analyzing information requests to determine priority and subcategory.
+
+CATEGORY: INFO_REQUESTED
+SUBJECT: {subject}
+EMAIL BODY: {filtered_body}
+EMAIL SUMMARY: {mail_summary}
+ATTACHMENTS SUMMARY: {summary_attachments}
+
+EMOTIONAL TONE ANALYSIS - First identify the email tone:
+- ANGRY/FRUSTRATED: Expressions of anger, "I still haven't received", "this is unacceptable", accusatory tone, excessive caps
+- URGENT/PRESSING: "I urgently need", "by today", "it's critical", close deadlines with emphasis
+- CONCERNED/ANXIOUS: "I'm worried", "I need to know", language expressing anxiety or stress
+- INSISTENT: Request repetition, "as already requested", "I remind you that", professional but firm tone
+- CORDIAL: Polite and patient tone, "when you can", "if possible"
+- NEUTRAL: Standard professional request
+- AUTOMATIC: Template/bot without personalization
+
+AVAILABLE SUBCATEGORIES:
+- CONNECTION_REQUEST: Connection requests, collaboration requests
+- RESPONSE_TO_REQUEST: Requests for response to previous communications
+- REQUEST_DOCUMENT: Requests for specific documents
+- REQUEST_QUOTE: Quote or quotation requests
+- REQUEST_APPOINTMENT: Appointment requests
+- REQUEST_APPOINTMENT_CHANGE: Appointment change requests
+- REQUEST_STATUS_UPDATE: Status update requests
+- ASK_FOR_HELP: Help or support requests
+- GENERAL_INQUIRY: Generic questions, information requests
+- PAYMENT_ISSUE: Payment or billing issues
+
+PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
+- 0.8-1.0: Angry/frustrated tone, urgent requests with close deadlines, language expressing concern or dissatisfaction
+- 0.5-0.7: Professional but insistent tone, important requests requiring attention, issues needing thoughtful response
+- 0.2-0.4: Neutral/cordial tone, standard requests without particular urgency
+- 0.0-0.1: Automatic/generic tone, spam requests or completely irrelevant content
+
+Analyze the content and determine the most appropriate priority and subcategory.
+"""
+
+# CALENDAR_EVENT PROMPTS
+EVALUATOR_CALENDAR_EVENT_PROMPT_ITA = """
+Sei un esperto nell'analizzare email di eventi calendario per determinare priorità e sottocategoria.
+
+CATEGORIA: CALENDAR_EVENT
+RIASSUNTO EMAIL: {mail_summary}
+RIASSUNTO ALLEGATI: {summary_attachments}
+
+SOTTOCATEGORIE DISPONIBILI:
+- EVENT_INVITE: Inviti a eventi, meeting, conferenze
+- CONFIRM_APPOINTMENT: Conferme di appuntamenti esistenti
+- REQUEST_APPOINTMENT: Richieste di nuovi appuntamenti
+- REQUEST_APPOINTMENT_CHANGE: Richieste di modifica appuntamenti
+- CANCEL_APPOINTMENT: Cancellazioni di appuntamenti
+- EVENT_FOLLOWUP: Follow-up post evento o meeting
+
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
+- 0.8-1.0: Tono urgente per cancellazioni/modifiche dell'ultimo momento, linguaggio che esprime preoccupazione o stress
+- 0.5-0.7: Tono professionale importante per eventi/meeting critici, richieste che necessitano risposta rapida
+- 0.2-0.4: Tono neutrale/cordiale per appuntamenti standard, inviti senza particolare urgenza
+- 0.0-0.1: Tono automatico/generico, inviti spam o completamente irrilevanti
+
+Analizza il contenuto e determina priorità e sottocategoria più appropriate.
+"""
+
+EVALUATOR_CALENDAR_EVENT_PROMPT_ENG = """
+You are an expert in analyzing calendar event emails to determine priority and subcategory.
+
+CATEGORY: CALENDAR_EVENT
+EMAIL SUMMARY: {mail_summary}
+ATTACHMENTS SUMMARY: {summary_attachments}
+
+AVAILABLE SUBCATEGORIES:
+- EVENT_INVITE: Event, meeting, conference invitations
+- CONFIRM_APPOINTMENT: Existing appointment confirmations
+- REQUEST_APPOINTMENT: New appointment requests
+- REQUEST_APPOINTMENT_CHANGE: Appointment change requests
+- CANCEL_APPOINTMENT: Appointment cancellations
+- EVENT_FOLLOWUP: Post-event or meeting follow-up
+
+PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
+- 0.8-1.0: Urgent tone for last-minute cancellations/changes, language expressing concern or stress
+- 0.5-0.7: Important professional tone for critical events/meetings, requests needing quick response
+- 0.2-0.4: Neutral/cordial tone for standard appointments, invitations without particular urgency
+- 0.0-0.1: Automatic/generic tone, spam invitations or completely irrelevant content
+
+Analyze the content and determine the most appropriate priority and subcategory.
+"""
+
+# TRANSACTIONAL PROMPTS
+EVALUATOR_TRANSACTIONAL_PROMPT_ITA = """
+Sei un esperto nell'analizzare email transazionali per determinare priorità e sottocategoria.
+
+CATEGORIA: TRANSACTIONAL
+OGGETTO: {subject}
+CORPO EMAIL: {filtered_body}
+RIASSUNTO EMAIL: {mail_summary}
+RIASSUNTO ALLEGATI: {summary_attachments}
+
+ANALISI DEL TONO EMOTIVO - Identifica prima il tono dell'email:
+- CRITICO/ALLARMATO: "Azione richiesta immediata", "account sospeso", "problema di sicurezza", alert di sistema
+- ARRABBIATO/FRUSTRATO: Problemi con pagamenti, fatturazione, "non funziona", "errore del sistema"
+- URGENTE: Scadenze di pagamento, "entro 24 ore", "verifica necessaria"
+- SERIO/FORMALE: Documentazione importante, verifiche account, transazioni rilevanti
+- NEUTRALE: Conferme routine, notifiche standard di sistema
+- AUTOMATICO: Template di sistema senza personalizzazione
+
+SOTTOCATEGORIE DISPONIBILI:
+- SYSTEM_ALERT: Avvisi di sistema critici
+- SENT_DOCUMENTS: Documenti transazionali inviati
+- PROVIDE_UPDATE: Aggiornamenti transazionali
+- REQUEST_STATUS_UPDATE: Richieste aggiornamenti stato transazione
+- ASK_FOR_HELP: Richieste aiuto per transazioni
+- ORDER_CONFIRMATION: Conferme ordine
+- INVOICE_OR_RECEIPT: Fatture o ricevute
+- PAYMENT_ISSUE: Problemi di pagamento
+- ACCOUNT_VERIFICATION: Verifiche account
+- STATUS_NOTIFICATION: Notifiche stato transazioni
+- SYSTEM_NOTIFICATION: Notifiche sistema generiche
+- TICKET_UPDATE: Aggiornamenti ticket supporto
+
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
+- 0.8-1.0: Tono critico/allarmato per problemi di pagamento o sicurezza, system alert che richiedono azione immediata
+- 0.5-0.7: Tono serio/formale per transazioni importanti, verifiche che richiedono attenzione tempestiva
+- 0.2-0.4: Tono neutrale/professionale per notifiche standard, aggiornamenti di routine
+- 0.0-0.1: Tono automatico/generico, notifiche di sistema irrilevanti
+
+Analizza il contenuto e determina priorità e sottocategoria più appropriate.
+"""
+
+EVALUATOR_TRANSACTIONAL_PROMPT_ENG = """
+You are an expert in analyzing transactional emails to determine priority and subcategory.
+
+CATEGORY: TRANSACTIONAL
+EMAIL SUMMARY: {mail_summary}
+ATTACHMENTS SUMMARY: {summary_attachments}
+
+AVAILABLE SUBCATEGORIES:
+- SYSTEM_ALERT: Critical system alerts
+- SENT_DOCUMENTS: Sent transactional documents
+- PROVIDE_UPDATE: Transactional updates
+- REQUEST_STATUS_UPDATE: Transaction status update requests
+- ASK_FOR_HELP: Transaction help requests
+- ORDER_CONFIRMATION: Order confirmations
+- INVOICE_OR_RECEIPT: Invoices or receipts
+- PAYMENT_ISSUE: Payment issues
+- ACCOUNT_VERIFICATION: Account verifications
+- STATUS_NOTIFICATION: Transaction status notifications
+- SYSTEM_NOTIFICATION: Generic system notifications
+- TICKET_UPDATE: Support ticket updates
+
+PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
+- 0.8-1.0: Critical/alarmed tone for payment or security issues, system alerts requiring immediate action
+- 0.5-0.7: Serious/formal tone for important transactions, verifications requiring timely attention
+- 0.2-0.4: Neutral/professional tone for standard notifications, routine updates
+- 0.0-0.1: Automatic/generic tone, irrelevant system notifications
+
+Analyze the content and determine the most appropriate priority and subcategory.
+"""
+
+# OTHER PROMPTS
+EVALUATOR_OTHER_PROMPT_ITA = """
+Sei un esperto nell'analizzare email generiche per determinare priorità e sottocategoria.
+
+CATEGORIA: OTHER
+RIASSUNTO EMAIL: {mail_summary}
+RIASSUNTO ALLEGATI: {summary_attachments}
+
+SOTTOCATEGORIE DISPONIBILI:
+- GENERAL_GREETING: Saluti generici, comunicazioni cordiali
+- INTERNAL_NOTE: Note interne, promemoria
+- SPAM_OR_UNKNOWN: Spam o contenuti sconosciuti
+- UNRELATED_CONTENT: Contenuti non correlati al business
+
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
+- 0.8-1.0: Tono urgente/preoccupato per note interne critiche, comunicazioni che richiedono attenzione immediata
+- 0.5-0.7: Tono cordiale ma importante da persone rilevanti, comunicazioni che meritano considerazione
+- 0.2-0.4: Tono neutrale/generico, comunicazioni standard senza particolare urgenza
+- 0.0-0.1: Tono automatico/spam, contenuti completamente irrilevanti o dannosi
+
+Analizza il contenuto e determina priorità e sottocategoria più appropriate.
+"""
+
+EVALUATOR_OTHER_PROMPT_ENG = """
+You are an expert in analyzing generic emails to determine priority and subcategory.
+
+CATEGORY: OTHER
+EMAIL SUMMARY: {mail_summary}
+ATTACHMENTS SUMMARY: {summary_attachments}
+
+AVAILABLE SUBCATEGORIES:
+- GENERAL_GREETING: Generic greetings, cordial communications
+- INTERNAL_NOTE: Internal notes, reminders
+- SPAM_OR_UNKNOWN: Spam or unknown content
+- UNRELATED_CONTENT: Content unrelated to business
+
+PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
+- 0.8-1.0: Urgent/concerned tone for critical internal notes, communications requiring immediate attention
+- 0.5-0.7: Cordial but important tone from relevant people, communications deserving consideration
+- 0.2-0.4: Neutral/generic tone, standard communications without particular urgency
+- 0.0-0.1: Automatic/spam tone, completely irrelevant or harmful content
+
+Analyze the content and determine the most appropriate priority and subcategory.
+"""

@@ -649,6 +649,74 @@ def attachment_summarizer_node(state):
         return state
 
 
+def evaluator_node(state):
+    """
+    Evaluate email with category-specific priority scoring and subcategory classification.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with priority_score and subcategory
+    """
+    try:
+        print(f"📊 [EVALUATOR] Starting category-specific email evaluation...")
+        
+        # Get required data from state
+        category = state.get("category", "OTHER")
+        language = state.get("language", "ITA")
+        
+        # Get email data
+        extracted_info = state.get("extracted_info", {})
+        subject = extracted_info.get("subject", "")
+        filtered_body = state.get("email_body", "")
+        mail_summary = state.get("mail_summary", "")
+        summary_attachments = state.get("summary_attachments", "")
+        
+        print(f"🎯 [EVALUATOR] Evaluation parameters:")
+        print(f"   🏷️ Category: {category}")
+        print(f"   🔒 Language: {language}")
+        print(f"   📋 Subject: {subject[:50]}...")
+        print(f"   📄 Body length: {len(filtered_body)} chars")
+        print(f"   📝 Mail summary: {len(mail_summary)} chars")
+        print(f"   📎 Attachment summary: {len(summary_attachments) if summary_attachments else 0} chars")
+        
+        # Validate required fields
+        if not category or not filtered_body or not mail_summary:
+            print(f"⚠️ [EVALUATOR] Missing required fields, using default evaluation")
+            state["priority_score"] = 0.5
+            state["subcategory"] = "GENERICO"
+            return state
+        
+        # Evaluate email using category-specific LLM evaluation
+        evaluation_response = llm_client.evaluate_email(
+            category=category,
+            subject=subject,
+            filtered_body=filtered_body,
+            mail_summary=mail_summary,
+            summary_attachments=summary_attachments or "",
+            language=language
+        )
+        
+        # Update state with evaluation results
+        state["priority_score"] = evaluation_response.priority_score
+        state["subcategory"] = evaluation_response.subcategory
+        
+        print(f"✅ [EVALUATOR] Email evaluation completed successfully")
+        print(f"   📊 Priority Score: {evaluation_response.priority_score}")
+        print(f"   🏷️ Subcategory: {evaluation_response.subcategory}")
+        print(f"   🎯 Category: {category}")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [EVALUATOR] Error in email evaluation: {e}")
+        # Continue with default evaluation on error
+        state["priority_score"] = 0.5
+        state["subcategory"] = "GENERICO"
+        return state
+
+
 def save_and_exit_node(state):
     """
     Final node: saves everything to DB and notifies user.

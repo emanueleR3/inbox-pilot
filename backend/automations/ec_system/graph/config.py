@@ -36,6 +36,7 @@ class NodeNames:
     CLASSIFIER = "classifier"
     ATTACHMENT_EXTRACTOR = "attachment_extractor"
     ATTACHMENT_SUMMARIZER = "attachment_summarizer"
+    EVALUATOR = "evaluator"
     ROUTER = "router"
     EXTRACT_PROMOTION = "extract_promotion"
     EXTRACT_LOCAL_NOTIFICATION = "extract_local_notification"

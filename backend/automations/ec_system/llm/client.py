@@ -18,7 +18,14 @@ from ..models.llm_responses import (
     EmailClassificationResponse,
     EmailSummaryResponse,
     EmailCategoryResponse,
-    AttachmentSummaryResponse
+    AttachmentSummaryResponse,
+    PromotionEvaluatorResponse,
+    SocialNotificationEvaluatorResponse,
+    InfoProvidedEvaluatorResponse,
+    InfoRequestedEvaluatorResponse,
+    CalendarEventEvaluatorResponse,
+    TransactionalEvaluatorResponse,
+    OtherEvaluatorResponse
 )
 from ..prompts.templates import (
     LANGUAGE_DETECTION_PROMPT,
@@ -33,7 +40,21 @@ from ..prompts.templates import (
     EMAIL_CATEGORY_PROMPT_ITA,
     EMAIL_CATEGORY_PROMPT_ENG,
     ATTACHMENT_SUMMARY_PROMPT_ITA,
-    ATTACHMENT_SUMMARY_PROMPT_ENG
+    ATTACHMENT_SUMMARY_PROMPT_ENG,
+    EVALUATOR_PROMOTION_PROMPT_ITA,
+    EVALUATOR_PROMOTION_PROMPT_ENG,
+    EVALUATOR_SOCIAL_NOTIFICATION_PROMPT_ITA,
+    EVALUATOR_SOCIAL_NOTIFICATION_PROMPT_ENG,
+    EVALUATOR_INFO_PROVIDED_PROMPT_ITA,
+    EVALUATOR_INFO_PROVIDED_PROMPT_ENG,
+    EVALUATOR_INFO_REQUESTED_PROMPT_ITA,
+    EVALUATOR_INFO_REQUESTED_PROMPT_ENG,
+    EVALUATOR_CALENDAR_EVENT_PROMPT_ITA,
+    EVALUATOR_CALENDAR_EVENT_PROMPT_ENG,
+    EVALUATOR_TRANSACTIONAL_PROMPT_ITA,
+    EVALUATOR_TRANSACTIONAL_PROMPT_ENG,
+    EVALUATOR_OTHER_PROMPT_ITA,
+    EVALUATOR_OTHER_PROMPT_ENG
 )
 
 T = TypeVar('T')
@@ -541,6 +562,128 @@ class LLMClient:
         except Exception as e:
             print(f"❌ [LLM] Error in structured completion: {e}")
             raise
+
+    def evaluate_email(self, category: str, subject: str, filtered_body: str, mail_summary: str, 
+                      summary_attachments: str, language: str):
+        """
+        Evaluate email with category-specific priority scoring and subcategory classification.
+        
+        Args:
+            category: Email category (PROMOTION, SOCIAL_NOTIFICATION, etc.)
+            subject: Email subject line
+            filtered_body: The filtered email body
+            mail_summary: Summary of the email content
+            summary_attachments: Summary of attachment contents
+            language: Language of the email ("ITA" or "ENG")
+            
+        Returns:
+            Category-specific evaluator response with priority_score and subcategory
+        """
+        try:
+            # Mapping from category to prompt templates and response models
+            category_mapping = {
+                "PROMOTION": {
+                    "prompt_ita": EVALUATOR_PROMOTION_PROMPT_ITA,
+                    "prompt_eng": EVALUATOR_PROMOTION_PROMPT_ENG,
+                    "response_model": PromotionEvaluatorResponse
+                },
+                "SOCIAL_NOTIFICATION": {
+                    "prompt_ita": EVALUATOR_SOCIAL_NOTIFICATION_PROMPT_ITA,
+                    "prompt_eng": EVALUATOR_SOCIAL_NOTIFICATION_PROMPT_ENG,
+                    "response_model": SocialNotificationEvaluatorResponse
+                },
+                "INFO_PROVIDED": {
+                    "prompt_ita": EVALUATOR_INFO_PROVIDED_PROMPT_ITA,
+                    "prompt_eng": EVALUATOR_INFO_PROVIDED_PROMPT_ENG,
+                    "response_model": InfoProvidedEvaluatorResponse
+                },
+                "INFO_REQUESTED": {
+                    "prompt_ita": EVALUATOR_INFO_REQUESTED_PROMPT_ITA,
+                    "prompt_eng": EVALUATOR_INFO_REQUESTED_PROMPT_ENG,
+                    "response_model": InfoRequestedEvaluatorResponse
+                },
+                "CALENDAR_EVENT": {
+                    "prompt_ita": EVALUATOR_CALENDAR_EVENT_PROMPT_ITA,
+                    "prompt_eng": EVALUATOR_CALENDAR_EVENT_PROMPT_ENG,
+                    "response_model": CalendarEventEvaluatorResponse
+                },
+                "TRANSACTIONAL": {
+                    "prompt_ita": EVALUATOR_TRANSACTIONAL_PROMPT_ITA,
+                    "prompt_eng": EVALUATOR_TRANSACTIONAL_PROMPT_ENG,
+                    "response_model": TransactionalEvaluatorResponse
+                },
+                "OTHER": {
+                    "prompt_ita": EVALUATOR_OTHER_PROMPT_ITA,
+                    "prompt_eng": EVALUATOR_OTHER_PROMPT_ENG,
+                    "response_model": OtherEvaluatorResponse
+                }
+            }
+            
+            # Get category configuration
+            if category not in category_mapping:
+                print(f"⚠️ [LLM] Unknown category '{category}', using OTHER")
+                category = "OTHER"
+            
+            category_config = category_mapping[category]
+            
+            # Choose prompt based on language
+            if language == "ENG":
+                prompt_template = category_config["prompt_eng"]
+            else:
+                prompt_template = category_config["prompt_ita"]
+            
+            response_model = category_config["response_model"]
+            
+            # Create output parser
+            parser = PydanticOutputParser(pydantic_object=response_model)
+            
+            # Handle empty attachment summary
+            if not summary_attachments or summary_attachments.strip() == "":
+                if language == "ENG":
+                    summary_attachments = "No attachments in this email."
+                else:
+                    summary_attachments = "Nessun allegato in questa email."
+            
+            # Format prompt
+            prompt_text = prompt_template.format(
+                subject=subject,
+                filtered_body=filtered_body,
+                mail_summary=mail_summary,
+                summary_attachments=summary_attachments
+            )
+            
+            # Add format instructions
+            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            
+            # Create message
+            message = HumanMessage(content=prompt_with_format)
+            
+            # Get response from LLM
+            response = self.llm.invoke([message])
+            
+            # Parse response
+            parsed_response = parser.parse(response.content)
+            
+            # Round priority score to 2 decimal places
+            parsed_response.priority_score = round(parsed_response.priority_score, 2)
+            
+            print(f"📊 [LLM] Email evaluated ({language}): category={category}, priority={parsed_response.priority_score}, subcategory={parsed_response.subcategory}")
+            return parsed_response
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in email evaluation: {e}")
+            # Return default evaluation based on category
+            default_response_mapping = {
+                "PROMOTION": PromotionEvaluatorResponse(priority_score=0.3, subcategory="OFFERTA_GENERALE"),
+                "SOCIAL_NOTIFICATION": SocialNotificationEvaluatorResponse(priority_score=0.2, subcategory="POST_GENERICO"),
+                "INFO_PROVIDED": InfoProvidedEvaluatorResponse(priority_score=0.5, subcategory="INFORMAZIONE_GENERALE"),
+                "INFO_REQUESTED": InfoRequestedEvaluatorResponse(priority_score=0.7, subcategory="RICHIESTA_GENERALE"),
+                "CALENDAR_EVENT": CalendarEventEvaluatorResponse(priority_score=0.8, subcategory="MEETING_GENERICO"),
+                "TRANSACTIONAL": TransactionalEvaluatorResponse(priority_score=0.9, subcategory="CONFERMA_GENERICA"),
+                "OTHER": OtherEvaluatorResponse(priority_score=0.4, subcategory="GENERICO")
+            }
+            
+            return default_response_mapping.get(category, OtherEvaluatorResponse(priority_score=0.4, subcategory="GENERICO"))
 
     def summarize_attachments(self, attachment_contents: list, language: str) -> AttachmentSummaryResponse:
         """
