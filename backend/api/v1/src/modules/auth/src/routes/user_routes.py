@@ -432,7 +432,7 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
     return {"message": "Account cancellato"}
 
 @router.get(
-    "/get_subscription/{subscription_id}",
+    "/get-subscription/{subscription_id}",
     summary="Recupera i dati di una sottoscrizione",
     description="Restituisce tutti i dettagli della sottoscrizione identificata dall'ID specificato.",
     responses={
