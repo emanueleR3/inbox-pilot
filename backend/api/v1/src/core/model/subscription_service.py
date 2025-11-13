@@ -3,6 +3,8 @@ from google.oauth2.credentials import Credentials
 from datetime import datetime
 from typing import Optional, List, Dict
 
+from typing import Optional, List, Dict
+
 class SubscriptionServiceCrate(BaseModel):
     subscription_id: str
     email: str
@@ -55,7 +57,6 @@ class SubscriptionServiceRead(BaseModel):
     microsoft_expiration_datetime_inbound: Optional[datetime] = None
     microsoft_expiration_datetime_outbound: Optional[datetime] = None
     oauth_user_id: Optional[str] = None
-
 
 class SubscriptionServiceConfigCrate(BaseModel):
     confidence_response_threshold: float | None 

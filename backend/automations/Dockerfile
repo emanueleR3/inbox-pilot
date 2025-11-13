@@ -3,6 +3,10 @@ FROM python:3.11-slim
 # System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    tesseract-ocr \
+    tesseract-ocr-ita \
+    libtesseract-dev \
+    libleptonica-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /automations

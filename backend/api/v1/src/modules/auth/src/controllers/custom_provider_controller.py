@@ -5,7 +5,7 @@ from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 
 class CustomProviderController:
 
-    async def custom_provider_login(payload: dict):
+    def custom_provider_login(payload: dict):
         server_imap = payload.get("server_imap")
         server_smtp = payload.get("server_smtp")
         imap_port = payload.get("imap_port")
@@ -48,9 +48,11 @@ class CustomProviderController:
             )
 
         try:
-            SubscriptionServiceDAO().save_custom_provider_credentials(
+            res = SubscriptionServiceDAO().save_custom_provider_credentials(
                 server_imap, server_smtp, imap_port, smtp_port, email, password, subscription_id
             )
+
+            return res
             
         except HTTPException:
             raise

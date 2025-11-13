@@ -159,6 +159,36 @@ class UserDAO:
 
         return response
 
+    def create_new_sub(self, user: dict, subscription_data: dict) -> UserReadSubs:
+        # Estrai i campi dal dict utente
+        user_id = user.get("id")
+        user_email = user.get("email")
+        user_subscriptions = user.get("subscriptions", [])
+        user_jwt = user.get("jwt")
+        user_sub_selected = user.get("sub_selected")
+
+        # Crea una nuova subscription
+        subscription = SubscriptionDAO().create_subscription(subscription_data)
+
+        # Collega l’utente alla subscription
+        self.link_user_subscription(user_id, subscription.subscription_id)
+
+        # Aggiungi la nuova subscription all’elenco
+        user_subscriptions.append(subscription)
+
+        # Recupera l’indice dell’ultima subscription
+        last_index = len(user_subscriptions) - 1
+
+        # Ritorna il nuovo oggetto UserReadSubs
+        return UserReadSubs(
+            id=user_id,
+            email=user_email,
+            subscriptions=user_subscriptions,
+            jwt=user_jwt,
+            sub_selected=last_index  # 🔥 deve essere un int, non un oggetto
+        )
+
+
 
     def get_user_by_email(self, email: str):
         # 1) Try Redis cache first

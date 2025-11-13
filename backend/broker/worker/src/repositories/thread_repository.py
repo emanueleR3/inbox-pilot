@@ -27,10 +27,12 @@ class ThreadRepository:
         sender_email: str = None,
         cc_emails: List[str] = None,
         summary: str = None,
+        extended_summary: str = None,
         last_message_id: str = None,
         last_message_at: datetime = None,
         has_attachments: bool = False,
         category: str = None,
+        subcategory: str = None,
         human_response: bool = None,
         last_sender_email: str = None,
         box_email: str = None
@@ -47,10 +49,12 @@ class ThreadRepository:
             sender_email: Email of the thread initiator
             cc_emails: Array of CC email addresses
             summary: Thread summary
+            extended_summary: Extended thread summary (più dettagliato)
             last_message_id: ID of the last message
             last_message_at: Timestamp of last message
             has_attachments: Boolean flag indicating if thread has attachments
             category: Thread category
+            subcategory: Thread subcategory (default null)
             human_response: Whether human response is needed
             last_sender_email: Email of last sender
             box_email: Email of the mailbox being monitored
@@ -73,10 +77,12 @@ class ThreadRepository:
                 "sender_email": sender_email,
                 "cc_emails": cc_emails if cc_emails is not None else [],
                 "summary": summary,  # Can be None now
+                "extended_summary": extended_summary,  # Can be None (default)
                 "last_message_id": last_message_id,
                 "last_message_at": last_message_at.isoformat() if last_message_at else None,
                 "has_attachments": has_attachments,
                 "category": category if category is not None else "",  # Default to empty string if not provided
+                "subcategory": subcategory,  # Can be None (default null in DB)
                 "human_response": human_response if human_response is not None else False,
                 "last_sender_email": last_sender_email,
                 "box_email": box_email
@@ -512,6 +518,7 @@ class ThreadRepository:
                 last_message_at=message_timestamp,
                 has_attachments=False,  # Will be updated if attachments are processed
                 category="CROSS_MAILBOX_REPLY",
+                subcategory=None,  # Default null for cross-mailbox threads
                 human_response=False,
                 last_sender_email=sender_email,
                 box_email=box_email
@@ -783,4 +790,59 @@ class ThreadRepository:
                 
         except Exception as e:
             print(f"❌ [THREAD] Error setting thread attachment flag: {e}")
+            return False
+
+    def update_extended_summary(self, thread_id: str, extended_summary: str) -> bool:
+        """
+        Update the extended_summary field for a thread.
+        
+        Args:
+            thread_id: ID of the thread to update
+            extended_summary: Extended summary text to set
+            
+        Returns:
+            True if update successful, False otherwise
+        """
+        try:
+            response = self.supabase.table("threads").update({
+                "extended_summary": extended_summary
+            }).eq("thread_id", thread_id).execute()
+            
+            if response.data:
+                print(f"✅ [THREAD] Extended summary updated for thread {thread_id}")
+                return True
+            else:
+                print(f"❌ [THREAD] Failed to update extended summary for thread {thread_id}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error updating extended_summary: {e}")
+            return False
+    
+    def update_subcategory(self, thread_id: str, subcategory: str) -> bool:
+        """
+        Update the subcategory field for a thread.
+        
+        Args:
+            thread_id: ID of the thread to update
+            subcategory: Subcategory text to set (can be None to reset to null)
+            
+        Returns:
+            True if update successful, False otherwise
+        """
+        try:
+            response = self.supabase.table("threads").update({
+                "subcategory": subcategory
+            }).eq("thread_id", thread_id).execute()
+            
+            if response.data:
+                subcategory_text = subcategory if subcategory else "null"
+                print(f"✅ [THREAD] Subcategory updated to '{subcategory_text}' for thread {thread_id}")
+                return True
+            else:
+                print(f"❌ [THREAD] Failed to update subcategory for thread {thread_id}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error updating subcategory: {e}")
             return False

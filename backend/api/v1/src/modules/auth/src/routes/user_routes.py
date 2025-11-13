@@ -1,11 +1,4 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, status
-from src.core.dependecy import get_current_user
-from src.modules.auth.src.controllers.user_controller import UserController
-
-router = APIRouter()
-controller = UserController()
-
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Depends, Body, status
 from src.core.dependecy import get_current_user
 from src.modules.auth.src.controllers.user_controller import UserController
 
@@ -40,7 +33,7 @@ def get_user_by_email(email: str):
     status_code=status.HTTP_201_CREATED,
     summary="Crea un nuovo account utente",
     description="""
-    Crea un nuovo utente con la sua sottoscrizione associata.
+    Crea un nuovo utente con la sua sottoscrizione associata. Effettua anche il login.
     """,
     responses={
         201: {
@@ -62,7 +55,7 @@ def get_user_by_email(email: str):
                                     "active": "true",
                                     "current_period_end": "2025-12-31T23:59:59Z",
                                     "plan": "Premium",
-                                    "is_configurated": "false"
+                                    "is_configurated": "false", 
                                 }
                             ],
                             "jwt": "jwt_token",
@@ -78,14 +71,8 @@ def get_user_by_email(email: str):
                 "application/json": {
                     "examples": {
                         "missing_fields": {
-                            "value": {"detail": "Email e password sono richiesti"}
+                            "value": {"detail": "Email e password e i dati della sottoscrizione sono richiesti"}
                         },
-                        "missing_subscription": {
-                            "value": {"detail": "I dati della sottoscrizione sono richiesti"}
-                        },
-                        "weak_password": {
-                            "value": {"detail": "Password troppo debole. Usa almeno 6 caratteri"}
-                        }
                     }
                 }
             }
@@ -154,18 +141,10 @@ def create_user_with_sub(
         400: {
             "description": "Richiesta non valida",
             "content": {
-                "application/json": {
-                    "examples": {
-                        "missing_fields": {
-                            "value": {"detail": "Email e password sono richiesti"}
-                        },
-                        "missing_subscription": {
-                            "value": {"detail": "I dati della sottoscrizione sono richiesti"}
-                        },
-                        "weak_password": {
-                            "value": {"detail": "Password troppo debole. Usa almeno 6 caratteri"}
-                        }
-                    }
+                "examples": {
+                    "missing_fields": {
+                        "value": {"detail": "Email e password e dettagli della subscription sono richiesti"}
+                    },
                 }
             }
         },
@@ -193,12 +172,104 @@ def add_new_user(
         example={
             "email": "user@example.com", 
             "password": "strongpassword123",
-            "subscription": "sub_id"
+            "subscription_id": "sub_id"
+        },
+        description="Email e password per la registrazione del nuovo utente.",
+    ),
+    #current_user=Depends(get_current_user)
+):
+    result = controller.add_new_user(payload)
+    return {"message": "Registrazione completata", "result": result}
+
+@router.post(
+    "/create-new-subs",
+    status_code=status.HTTP_201_CREATED,
+    summary="Crea una nuova subscriptione",
+    description="""
+    Crea un nuovo utente con la sua sottoscrizione associata.
+    """,
+    responses={
+        201: {
+            "description": "Account creato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Registrazione completata",
+                        "result": {
+                            "user": {
+                                "session of the user"
+                            },
+                            "subscription": {
+                                "name": "TechVision Srl",
+                                "vat_number": "IT12345678901",
+                                "city": "Milano",
+                                "address": "Via Roma 42",
+                                "active": True,
+                                "current_period_end": "2025-12-31T23:59:59Z",
+                                "plan": "premium",
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "value": {"detail": "Email e password e dettagli della subscription sono richiesti"}
+                        },
+                    }
+                }
+            }
+        },
+        409: {
+            "description": "Conflitto",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Questa sottoscrizione esiste già"}
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante la creazione dell'account"}
+                }
+            }
+        }
+    }
+)
+def create_new_sub(
+    payload: dict = Body(
+        ...,
+        example={
+            "user": {
+                "id": "userid",
+                "email": "email",
+                "subscriptions": [
+                    "...."
+                ],
+                "jwt": "jwt_token",
+                "sub_selected": "0"
+            },
+            "subscription": {
+                "name": "Palestra Torino123",
+                "vat_number": "IT123456789",
+                "city": "Torino",
+                "address": "Corso Francia 100",
+                "active": True,
+                "current_period_end": "2025-12-31T23:59:59Z",
+                "plan": "Premium"
+            }
         },
         description="Email e password per la registrazione del nuovo utente.",
     )
 ):
-    result = controller.add_new_user(payload)
+    result = controller.create_new_sub(payload)
     return {"message": "Registrazione completata", "result": result}
 
 @router.get(
@@ -270,9 +341,6 @@ def get_users_by_subscription(subscription_id: str):
                         "missing_fields": {
                             "value": {"detail": "Email e password sono richiesti"}
                         },
-                        "unverified": {
-                            "value": {"detail": "Email non verificata. Controlla la tua casella email"}
-                        }
                     }
                 }
             }
@@ -281,7 +349,7 @@ def get_users_by_subscription(subscription_id: str):
             "description": "Autenticazione fallita",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Email o password non corretti"}
+                    "example": {"detail": "Credenziali non valide"}
                 }
             }
         },
@@ -289,7 +357,7 @@ def get_users_by_subscription(subscription_id: str):
             "description": "Errore interno del server",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Errore durante l'autenticazione"}
+                    "example": {"detail": "Errore interno nel servizio di autenticazione"}
                 }
             }
         }
@@ -386,7 +454,8 @@ def update_password(
             "new_password": "nuovapasswordSicura123",
         },
         description="Vecchia e nuova password dell'utente.",
-    )
+    ),
+    current_user=Depends(get_current_user)
 ):
     return controller.update_password(payload)
 
