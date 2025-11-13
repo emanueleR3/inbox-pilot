@@ -7,6 +7,7 @@ import logging
 from dotenv import load_dotenv
 from src.core.model.subscription_service import OAuthGoogleCredentials, SubscriptionServiceCrate, SubscriptionServiceConfigCrate, SubscriptionServiceRead
 from datetime import datetime, timedelta, timezone
+from typing import List
 
 load_dotenv()
 
@@ -635,3 +636,18 @@ class SubscriptionServiceDAO:
         except Exception as e:
             print(f"Errore nel recupero delle credenziali Microsoft per email {email}: {str(e)}")
             return None
+
+    def get_services_by_subscription(self, subscription_id: str, email: str) -> SubscriptionServiceRead | None:
+        resp = (
+            self.supabase
+            .table("subscription_services")
+            .select("*")
+            .eq("subscription_id", subscription_id)
+            .eq("email", email)
+            .execute()
+        )
+
+        if not resp.data:
+            return None
+
+        return SubscriptionServiceRead(**resp.data[0])

@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status
 from supabase_auth.errors import AuthApiError
 from src.core.model.user import UserRead, UserReadSub, UserReadSubs
-from src.core.model.subscription import SubscriptionRead
+from src.core.model.subscription import SubscriptionRead, SubscriptionReadWithConfig
 from src.core.redis_client import get_redis_client
 from src.core.DAO.subscription_dao import SubscriptionDAO
 from src.core.database import get_supabase_client, get_fresh_supabase_client
@@ -41,14 +41,14 @@ class UserDAO:
 
             return result
 
-    def get_subscriptions_by_user(self, user_id: str) -> list[SubscriptionRead]:            
+    def get_subscriptions_by_user(self, user_id: str) -> list[SubscriptionReadWithConfig]:
         link_response = (
             self.supabase
-                .table("users_has_subscriptions")
-                .select("subscription_id")
-                .eq("user_id", user_id)
-                .execute()
-            )
+            .table("users_has_subscriptions")
+            .select("subscription_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
 
         if not link_response.data:
             return []
@@ -66,8 +66,21 @@ class UserDAO:
         if not subs_response.data:
             return []
 
+        config_response = (
+            self.supabase
+            .table("subscription_services")
+            .select("subscription_id, config_completed")
+            .in_("subscription_id", subscription_ids)
+            .execute()
+        )
+
+        config_map = {
+            c["subscription_id"]: c.get("config_completed", False)
+            for c in (config_response.data or [])
+        }
+
         subscriptions = [
-            SubscriptionRead(
+            SubscriptionReadWithConfig(
                 subscription_id=sub["subscription_id"],
                 name=sub["name"],
                 vat_number=sub.get("vat_number"),
@@ -76,11 +89,13 @@ class UserDAO:
                 active=sub["active"],
                 current_period_end=sub["current_period_end"],
                 plan=sub.get("plan"),
+                is_configurated=config_map.get(sub["subscription_id"], False),
             )
             for sub in subs_response.data
         ]
 
         return subscriptions
+
 
     def login_with_password(self, email: str, password: str) -> UserReadSubs:
         response = self.supabase_auth.auth.sign_in_with_password({
@@ -115,20 +130,34 @@ class UserDAO:
         }).execute()
 
         return True
-
+    
     def create_user_with_sub(self, email: str, password: str, subscription_data: dict) -> UserReadSubs:
-        subscription = SubscriptionDAO().create_subscription(subscription_data)
         user = self.create_user(email, password)
 
-        self.link_user_subscription(user.id, subscription.subscription_id)
+        self.supabase_auth.rpc(
+            "create_subscription_for_user",
+            {
+                "p_user_id": user.id,
+                "p_subscription": subscription_data
+            }
+        ).execute()
 
         response = self.login_with_password(email, password)
 
         return response
-    
+   
     def add_new_user(self, email: str, password: str, subscription_id: str) -> bool:
         user = self.create_user(email, password)
-        return self.link_user_subscription(user.id, subscription_id)
+
+        response = self.supabase.rpc(
+            "add_new_user",
+            {
+                "p_user_id": user.id,
+                "p_subscription_id": subscription_id
+            }
+        ).execute()
+
+        return response
 
     def create_new_sub(self, user: dict, subscription_data: dict) -> UserReadSubs:
         # Estrai i campi dal dict utente

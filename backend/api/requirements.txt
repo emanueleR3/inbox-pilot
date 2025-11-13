@@ -53,6 +53,7 @@ flask==3.0.0
 flask-cors==4.0.0
 python-dotenv==1.0.0
 redis==5.0.7
+supabase-auth==2.20.0
 
 # Agentic AI POC - Python Automations API Requirements
 
