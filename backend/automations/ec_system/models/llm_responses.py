@@ -148,6 +148,33 @@ class AttachmentSummaryResponse(BaseModel):
     )
 
 
+class AutomationExecutedResponse(BaseModel):
+    """Response model for automated email processing completion."""
+    message_id: str = Field(..., description="ID del messaggio")
+    thread_id: str = Field(..., description="ID del thread")
+    status: Literal["automation_executed"] = Field(
+        default="automation_executed",
+        description="Stato dell'automazione eseguita"
+    )
+    message: str = Field(..., description="Messaggio descrittivo dell'azione eseguita")
+    result: dict = Field(
+        ...,
+        description="Risultato dell'elaborazione con categoria, sottocategoria e riassunti"
+    )
+
+
+class ReaderResponse(BaseModel):
+    """Response model for Reader node analysis."""
+    key_entities: dict = Field(
+        ...,
+        description="Entità chiave estratte dalla mail e allegati (date, informazioni, richieste, luoghi, ecc.)"
+    )
+    needs_response: bool = Field(
+        ...,
+        description="Se true, la mail richiede una risposta; se false, è conclusiva"
+    )
+
+
 # EVALUATOR SUBCATEGORY ENUMS
 class PromotionSubcategory(str, Enum):
     """Subcategories for PROMOTION emails."""

@@ -836,3 +836,58 @@ PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
 
 Analyze the content and determine the most appropriate priority and subcategory.
 """
+
+# READER NODE PROMPTS
+READER_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email aziendali.
+
+Analizza la seguente email e gli allegati (se presenti) ed estrai:
+
+1. **key_entities**: Un dizionario JSON con le entità chiave contenute nella mail e negli allegati:
+   - "dates": Lista di date/orari menzionati (formato: "YYYY-MM-DD HH:MM" o descrizione testuale)
+   - "locations": Lista di luoghi/indirizzi menzionati
+   - "people": Lista di nomi di persone menzionate
+   - "organizations": Lista di aziende/organizzazioni menzionate
+   - "requests": Lista di richieste esplicite presenti nella mail
+   - "actions": Lista di azioni richieste o proposte
+   - "amounts": Lista di importi monetari menzionati (con valuta)
+   - "documents": Lista di documenti/file menzionati
+   - "other_info": Altre informazioni rilevanti non categorizzabili sopra
+
+2. **needs_response**: Boolean che indica se la mail richiede una risposta:
+   - True: La mail contiene domande, richieste, proposte che necessitano risposta
+   - False: La mail è conclusiva, di saluto, followup automatico, conferma ricezione, ecc.
+
+CORPO EMAIL:
+{filtered_body}
+
+ALLEGATI:
+{summary_attachments}
+
+Rispondi in formato JSON con le chiavi "key_entities" e "needs_response"."""
+
+READER_PROMPT_ENG = """You are an expert assistant in analyzing business emails.
+
+Analyze the following email and attachments (if present) and extract:
+
+1. **key_entities**: A JSON dictionary with key entities found in the email and attachments:
+   - "dates": List of dates/times mentioned (format: "YYYY-MM-DD HH:MM" or textual description)
+   - "locations": List of places/addresses mentioned
+   - "people": List of people's names mentioned
+   - "organizations": List of companies/organizations mentioned
+   - "requests": List of explicit requests present in the email
+   - "actions": List of requested or proposed actions
+   - "amounts": List of monetary amounts mentioned (with currency)
+   - "documents": List of documents/files mentioned
+   - "other_info": Other relevant information not categorizable above
+
+2. **needs_response**: Boolean indicating if the email requires a response:
+   - True: The email contains questions, requests, proposals that need a response
+   - False: The email is conclusive, greeting, automatic followup, receipt confirmation, etc.
+
+EMAIL BODY:
+{filtered_body}
+
+ATTACHMENTS:
+{summary_attachments}
+
+Respond in JSON format with keys "key_entities" and "needs_response"."""
