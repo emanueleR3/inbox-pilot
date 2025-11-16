@@ -25,7 +25,8 @@ from ..models.llm_responses import (
     InfoRequestedEvaluatorResponse,
     CalendarEventEvaluatorResponse,
     TransactionalEvaluatorResponse,
-    OtherEvaluatorResponse
+    OtherEvaluatorResponse,
+    ReaderResponse
 )
 from ..prompts.templates import (
     LANGUAGE_DETECTION_PROMPT,
@@ -54,7 +55,9 @@ from ..prompts.templates import (
     EVALUATOR_TRANSACTIONAL_PROMPT_ITA,
     EVALUATOR_TRANSACTIONAL_PROMPT_ENG,
     EVALUATOR_OTHER_PROMPT_ITA,
-    EVALUATOR_OTHER_PROMPT_ENG
+    EVALUATOR_OTHER_PROMPT_ENG,
+    READER_PROMPT_ITA,
+    READER_PROMPT_ENG
 )
 
 T = TypeVar('T')
@@ -735,6 +738,72 @@ class LLMClient:
             # Return default summary on error
             return AttachmentSummaryResponse(
                 summary_attachments="Errore nella generazione del riassunto degli allegati. Impossibile processare il contenuto."
+            )
+    
+    def read_email(self, filtered_body: str, summary_attachments: str, language: str) -> ReaderResponse:
+        """
+        Extract key entities and determine if email needs response.
+        
+        Args:
+            filtered_body: Filtered email body
+            summary_attachments: Summary of attachments (or None)
+            language: Language of the email ("ITA" or "ENG")
+            
+        Returns:
+            ReaderResponse with key_entities dict and needs_response boolean
+        """
+        try:
+            # Choose prompt based on language
+            if language == "ENG":
+                prompt_template = READER_PROMPT_ENG
+                no_attachments_text = "No attachments in this mail"
+            else:
+                prompt_template = READER_PROMPT_ITA
+                no_attachments_text = "Non ci sono allegati"
+            
+            # Create output parser
+            parser = PydanticOutputParser(pydantic_object=ReaderResponse)
+            
+            # Use attachment summary or default text
+            attachments_text = summary_attachments if summary_attachments else no_attachments_text
+            
+            # Format prompt
+            prompt_text = prompt_template.format(
+                filtered_body=filtered_body,
+                summary_attachments=attachments_text
+            )
+            
+            # Add format instructions
+            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            
+            # Create message
+            message = HumanMessage(content=prompt_with_format)
+            
+            # Get response from LLM
+            response = self.llm.invoke([message])
+            
+            # Parse response
+            parsed_response = parser.parse(response.content)
+            
+            print(f"📖 [LLM] Email read ({language}): needs_response={parsed_response.needs_response}, entities={len(parsed_response.key_entities)} keys")
+            return parsed_response
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in email reading: {e}")
+            # Return default response on error
+            return ReaderResponse(
+                key_entities={
+                    "dates": [],
+                    "locations": [],
+                    "people": [],
+                    "organizations": [],
+                    "requests": [],
+                    "actions": [],
+                    "amounts": [],
+                    "documents": [],
+                    "other_info": []
+                },
+                needs_response=True  # Default to True to be safe
             )
 
 
