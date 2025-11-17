@@ -6,7 +6,7 @@ import os
 from langgraph.graph import END
 from .config import NodeNames
 from ..llm.client import llm_client
-from ..models.llm_responses import DangerousEmailDetected, LowConfidenceClassification
+from ..models.llm_responses import DangerousEmailDetected, LowConfidenceClassification, AutomationExecutedResponse
 
 # Import db_client for user configuration and notifications
 import sys
@@ -797,8 +797,8 @@ def handle_offer_promotion_node(state):
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
     print(f"   🤖 Automation: Archiviata automaticamente come promozione")
     
-    # Import the response model
-    from ec_system.models.llm_responses import AutomationExecutedResponse
+    
+    
     
     # Return automation executed response
     return AutomationExecutedResponse(
@@ -841,8 +841,8 @@ def handle_newsletter_node(state):
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
     print(f"   🤖 Automation: Archiviata automaticamente come newsletter")
     
-    # Import the response model
-    from ec_system.models.llm_responses import AutomationExecutedResponse
+    
+    
     
     # Return automation executed response
     return AutomationExecutedResponse(
@@ -889,7 +889,7 @@ def handle_event_invite_node(state):
         
         extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
         
-        from ec_system.models.llm_responses import AutomationExecutedResponse
+        
         
         return AutomationExecutedResponse(
             message_id=message_id,
@@ -906,8 +906,20 @@ def handle_event_invite_node(state):
         )
     else:
         # TODO: chiamare webhook notification
-        print(f"   📞 TODO: chiamare webhook notification per category {category}")
-        return state
+
+        return AutomationExecutedResponse(
+            message_id=message_id,
+            thread_id=thread_id,
+            status="automation_executed",
+            message=f"Invito evento (categoria {category}) archiviato automaticamente",
+            result={
+                "category": category,
+                "subcategory": subcategory,
+                "human_response": True,
+                "mail_summary": mail_summary,
+                "extended_summary": extended_summary
+            }
+        )
 
 
 def handle_product_update_node(state):
@@ -939,7 +951,7 @@ def handle_product_update_node(state):
         
         extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
         
-        from ec_system.models.llm_responses import AutomationExecutedResponse
+        
         
         return AutomationExecutedResponse(
             message_id=message_id,
@@ -961,10 +973,60 @@ def handle_product_update_node(state):
 def handle_request_quote_node(state):
     """Handle REQUEST_QUOTE subcategory emails."""
     print(f"💰 [REQUEST_QUOTE] Processing quote request email")
+    
+    category = state.get("category")
     extracted_info = state.get("extracted_info", {})
+    
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    # TODO: Implement specific logic for quote requests
-    return state
+    print(f"   🏷️ Category: {category}")
+    
+    # If category is transactional, automate
+    if category == "PROMOTION":
+        print(f"   🤖 Automation: Category PROMOTION - Archiviata automaticamente")
+        
+        message_id = extracted_info.get("message_id")
+        thread_id = extracted_info.get("thread_id")
+        subcategory = state.get("subcategory")
+        mail_summary = state.get("mail_summary", "")
+        summary_attachments = state.get("summary_attachments", "")
+        
+        # Create extended summary
+        extended_parts = []
+        if mail_summary:
+            extended_parts.append(f"Contenuto email: {mail_summary}")
+        if summary_attachments:
+            extended_parts.append(f"Allegati: {summary_attachments}")
+        
+        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
+        
+        return AutomationExecutedResponse(
+            message_id=message_id,
+            thread_id=thread_id,
+            status="automation_executed",
+            message="Documenti inviati (transazionale) archiviato automaticamente",
+            result={
+                "category": category,
+                "subcategory": subcategory,
+                "human_response": False,
+                "mail_summary": mail_summary,
+                "extended_summary": extended_summary
+            }
+        )
+    else:
+        # TODO ci sarebbe da controllare la configurazione "response_to_quote"
+        return AutomationExecutedResponse(
+            message_id=message_id,
+            thread_id=thread_id,
+            status="automation_executed",
+            message="Documenti inviati (transazionale) archiviato automaticamente",
+            result={
+                "category": category,
+                "subcategory": subcategory,
+                "human_response": True,
+                "mail_summary": mail_summary,
+                "extended_summary": extended_summary
+            }
+        )
 
 
 def handle_new_message_node(state):
@@ -992,8 +1054,8 @@ def handle_new_message_node(state):
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
     print(f"   🤖 Automation: Archiviata automaticamente come notifica messaggio")
     
-    # Import the response model
-    from ec_system.models.llm_responses import AutomationExecutedResponse
+    
+    
     
     # Return automation executed response
     return AutomationExecutedResponse(
@@ -1040,7 +1102,7 @@ def handle_connection_request_node(state):
         
         extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
         
-        from ec_system.models.llm_responses import AutomationExecutedResponse
+        
         
         return AutomationExecutedResponse(
             message_id=message_id,
@@ -1084,8 +1146,8 @@ def handle_system_alert_node(state):
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
     print(f"   🤖 Automation: Archiviata automaticamente come alert di sistema")
     
-    # Import the response model
-    from ec_system.models.llm_responses import AutomationExecutedResponse
+    
+    
     
     # Return automation executed response
     return AutomationExecutedResponse(
@@ -1128,8 +1190,8 @@ def handle_system_notification_node(state):
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
     print(f"   🤖 Automation: Archiviata automaticamente come notifica di sistema")
     
-    # Import the response model
-    from ec_system.models.llm_responses import AutomationExecutedResponse
+    
+    
     
     # Return automation executed response
     return AutomationExecutedResponse(
@@ -1176,7 +1238,7 @@ def handle_sent_documents_node(state):
         
         extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
         
-        from ec_system.models.llm_responses import AutomationExecutedResponse
+        
         
         return AutomationExecutedResponse(
             message_id=message_id,
@@ -1224,7 +1286,7 @@ def handle_provide_update_node(state):
         
         extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
         
-        from ec_system.models.llm_responses import AutomationExecutedResponse
+        
         
         return AutomationExecutedResponse(
             message_id=message_id,
@@ -1273,10 +1335,44 @@ def handle_response_to_request_node(state):
 def handle_request_document_node(state):
     """Handle REQUEST_DOCUMENT subcategory emails."""
     print(f"📋 [REQUEST_DOCUMENT] Processing document request")
+    
+    # TODO ci sarebbe da controllare la configurazione "send_document"
+
+    # Extract necessary information from state
     extracted_info = state.get("extracted_info", {})
+    message_id = extracted_info.get("message_id")
+    thread_id = extracted_info.get("thread_id")
+    category = state.get("category")
+    subcategory = state.get("subcategory")
+    mail_summary = state.get("mail_summary", "")
+    summary_attachments = state.get("summary_attachments", "")
+    
+    # Create extended summary combining mail summary and attachments
+    extended_parts = []
+    if mail_summary:
+        extended_parts.append(f"Contenuto email: {mail_summary}")
+    if summary_attachments:
+        extended_parts.append(f"Allegati: {summary_attachments}")
+    
+    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
+    
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    # TODO: Implement specific logic for document requests
-    return state
+    print(f"   🤖 Automation: Archiviata automaticamente come alert di sistema")
+    
+    # Return automation executed response
+    return AutomationExecutedResponse(
+        message_id=message_id,
+        thread_id=thread_id,
+        status="automation_executed",
+        message="Alert di sistema archiviato automaticamente",
+        result={
+            "category": category,
+            "subcategory": subcategory,
+            "human_response": True,
+            "mail_summary": mail_summary,
+            "extended_summary": extended_summary
+        }
+    )
 
 
 def handle_event_followup_node(state):
@@ -1317,7 +1413,7 @@ def handle_invoice_or_receipt_node(state):
         
         extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
         
-        from ec_system.models.llm_responses import AutomationExecutedResponse
+        
         
         return AutomationExecutedResponse(
             message_id=message_id,
@@ -1365,7 +1461,7 @@ def handle_status_notification_node(state):
         
         extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
         
-        from ec_system.models.llm_responses import AutomationExecutedResponse
+        
         
         return AutomationExecutedResponse(
             message_id=message_id,
@@ -1413,7 +1509,7 @@ def handle_ticket_update_node(state):
         
         extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
         
-        from ec_system.models.llm_responses import AutomationExecutedResponse
+        
         
         return AutomationExecutedResponse(
             message_id=message_id,
@@ -1488,7 +1584,7 @@ def handle_request_status_update_node(state):
         
         extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
         
-        from ec_system.models.llm_responses import AutomationExecutedResponse
+        
         
         return AutomationExecutedResponse(
             message_id=message_id,
@@ -1536,7 +1632,7 @@ def handle_ask_for_help_node(state):
         
         extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
         
-        from ec_system.models.llm_responses import AutomationExecutedResponse
+        
         
         return AutomationExecutedResponse(
             message_id=message_id,
@@ -1587,8 +1683,6 @@ def handle_payment_issue_node(state):
         extended_parts.append(f"Allegati: {summary_attachments}")
     
     extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    from ec_system.models.llm_responses import AutomationExecutedResponse
     
     # If category is transactional, automate without human response
     if category == "TRANSACTIONAL":
@@ -1660,9 +1754,6 @@ def handle_order_confirmation_node(state):
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
     print(f"   🤖 Automation: Archiviata automaticamente come conferma ordine")
     
-    # Import the response model
-    from ec_system.models.llm_responses import AutomationExecutedResponse
-    
     # Return automation executed response
     return AutomationExecutedResponse(
         message_id=message_id,
@@ -1704,8 +1795,8 @@ def handle_account_verification_node(state):
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
     print(f"   🤖 Automation: Archiviata automaticamente come verifica account")
     
-    # Import the response model
-    from ec_system.models.llm_responses import AutomationExecutedResponse
+    
+    
     
     # Return automation executed response
     return AutomationExecutedResponse(
@@ -1748,8 +1839,8 @@ def handle_internal_note_node(state):
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
     print(f"   🤖 Automation: Archiviata automaticamente come nota interna")
     
-    # Import the response model
-    from ec_system.models.llm_responses import AutomationExecutedResponse
+    
+    
     
     # Return automation executed response
     return AutomationExecutedResponse(
@@ -1792,8 +1883,8 @@ def handle_spam_or_unknown_node(state):
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
     print(f"   🤖 Automation: Archiviata automaticamente come spam/sconosciuto")
     
-    # Import the response model
-    from ec_system.models.llm_responses import AutomationExecutedResponse
+    
+    
     
     # Return automation executed response
     return AutomationExecutedResponse(
@@ -1836,8 +1927,8 @@ def handle_unrelated_content_node(state):
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
     print(f"   🤖 Automation: Archiviata automaticamente come contenuto non pertinente")
     
-    # Import the response model
-    from ec_system.models.llm_responses import AutomationExecutedResponse
+    
+    
     
     # Return automation executed response
     return AutomationExecutedResponse(

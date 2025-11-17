@@ -375,8 +375,137 @@ def create_email_classification_graph():
     for node_name in always_need_manual_nodes:
         graph.add_edge(node_name, NodeNames.READER)
     
-    # Add edge from READER to END
-    graph.add_edge(NodeNames.READER, END)
+    # Conditional logic for Reader node based on needs_response and subcategory
+    # TODO eventualmente inserire un altro nodo che faccia questa logica di controllo
+    def should_continue_after_reader(state):
+        """
+        Check if workflow should end with automation or continue based on needs_response.
+        For specific subcategories, if needs_response is False, return AutomationExecutedResponse.
+        If needs_response is True, continue (momentarily to END).
+        EVENT_FOLLOWUP has special behavior: always returns AutomationExecutedResponse with different human_response values.
+        """
+        needs_response = state.get("needs_response", True)
+        subcategory = state.get("subcategory", "")
+        
+        # Subcategories that should check needs_response for conditional automation
+        conditional_automation_subcategories = {
+            "CONFIRM_APPOINTMENT",
+            "FORWARD_INFO", 
+            "RESPONSE_TO_REQUEST",
+            "INVOICE_OR_RECEIPT",
+            "STATUS_NOTIFICATION",
+            "GENERAL_GREETING"
+        }
+        
+        # Special handling for EVENT_FOLLOWUP - always automate but with different human_response values
+        if subcategory == "EVENT_FOLLOWUP":
+            from ..models.llm_responses import AutomationExecutedResponse
+            
+            extracted_info = state.get("extracted_info", {})
+            message_id = extracted_info.get("message_id", "unknown")
+            thread_id = extracted_info.get("thread_id", "unknown")
+            category = state.get("category", "OTHER")
+            mail_summary = state.get("mail_summary", "")
+            summary_attachments = state.get("summary_attachments", "")
+            
+            # Create extended summary combining mail summary and attachments
+            extended_parts = []
+            if mail_summary:
+                extended_parts.append(f"Email: {mail_summary}")
+            if summary_attachments:
+                extended_parts.append(f"Attachments: {summary_attachments}")
+            extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
+            
+            if needs_response:
+                # TODO: chiamare notification webhook
+                automation_response = AutomationExecutedResponse(
+                    message_id=message_id,
+                    thread_id=thread_id,
+                    message=f"Email automaticamente processata - subcategory: {subcategory}, human response needed",
+                    result={
+                        "category": category,
+                        "subcategory": subcategory,
+                        "mail_summary": mail_summary,
+                        "extended_summary": extended_summary,
+                        "human_response": True,
+                        "key_entities": state.get("key_entities", {}),
+                        "needs_response": True
+                    }
+                )
+                print(f"🤖 [READER] EVENT_FOLLOWUP automated with needs_response=True - human_response=True")
+            else:
+                automation_response = AutomationExecutedResponse(
+                    message_id=message_id,
+                    thread_id=thread_id,
+                    message=f"Email automaticamente processata - subcategory: {subcategory}, no response needed",
+                    result={
+                        "category": category,
+                        "subcategory": subcategory,
+                        "mail_summary": mail_summary,
+                        "extended_summary": extended_summary,
+                        "human_response": False,
+                        "key_entities": state.get("key_entities", {}),
+                        "needs_response": False
+                    }
+                )
+                print(f"🤖 [READER] EVENT_FOLLOWUP automated with needs_response=False - human_response=False")
+            
+            # Add automation response to state to signal END
+            state["automation_executed"] = automation_response.model_dump()
+            return END
+        
+        # If subcategory is in the conditional list and doesn't need response, automate
+        if subcategory in conditional_automation_subcategories and not needs_response:
+            # Create AutomationExecutedResponse in state to signal automation completion
+            from ..models.llm_responses import AutomationExecutedResponse
+            
+            extracted_info = state.get("extracted_info", {})
+            message_id = extracted_info.get("message_id", "unknown")
+            thread_id = extracted_info.get("thread_id", "unknown")
+            category = state.get("category", "OTHER")
+            mail_summary = state.get("mail_summary", "")
+            summary_attachments = state.get("summary_attachments", "")
+            
+            # Create extended summary combining mail summary and attachments
+            extended_parts = []
+            if mail_summary:
+                extended_parts.append(f"Email: {mail_summary}")
+            if summary_attachments:
+                extended_parts.append(f"Attachments: {summary_attachments}")
+            extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
+            
+            automation_response = AutomationExecutedResponse(
+                message_id=message_id,
+                thread_id=thread_id,
+                message=f"Email automaticamente processata - subcategory: {subcategory}, no response needed",
+                result={
+                    "category": category,
+                    "subcategory": subcategory,
+                    "mail_summary": mail_summary,
+                    "extended_summary": extended_summary,
+                    "human_response": False,
+                    "key_entities": state.get("key_entities", {}),
+                    "needs_response": False
+                }
+            )
+            
+            # Add automation response to state to signal END
+            state["automation_executed"] = automation_response.model_dump()
+            print(f"🤖 [READER] Automated processing - {subcategory} with needs_response=False")
+            return END
+        
+        # For all other cases (needs_response=True or other subcategories), continue manually
+        print(f"👤 [READER] Manual processing needed - {subcategory} with needs_response={needs_response}")
+        return END  # TODO Momentarily connects to END as requested
+    
+    # Add conditional edge from READER
+    graph.add_conditional_edges(
+        NodeNames.READER,
+        should_continue_after_reader,
+        {
+            END: END # TODO momentaneamente
+        }
+    )
     
     return graph
 
