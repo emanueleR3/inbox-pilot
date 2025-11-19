@@ -13,6 +13,7 @@ import aiohttp
 import os
 
 
+
 class EmailProcessor:
     """
     Central email processor that coordinates all email processing operations.
@@ -26,10 +27,7 @@ class EmailProcessor:
         self.email_cleaner = EmailCleaner()
         self.thread_repo = ThreadRepository()
         # Automation API endpoint configuration
-        self.automation_api_url = os.getenv(
-            "AUTOMATION_API_URL", 
-            "http://localhost:8010/workflows/process-email"
-        )
+        self.automation_api_url = os.getenv("AUTOMATION_API_URL", "http://localhost:8010/") + "workflows/process-email"
     
     async def process_message(self, email_data: dict) -> Optional[dict]:
         """
