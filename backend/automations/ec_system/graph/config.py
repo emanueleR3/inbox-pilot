@@ -41,6 +41,7 @@ class NodeNames:
     ROUTER = "router"
     SUBCATEGORY_ROUTER = "subcategory_router"
     READER = "reader"
+    SCHEDULER = "scheduler"
     
     # Subcategory-specific nodes
     HANDLE_OFFER_PROMOTION = "handle_offer_promotion"

@@ -175,6 +175,58 @@ class ReaderResponse(BaseModel):
     )
 
 
+class ReaderAppointmentResponse(BaseModel):
+    """Response model for Reader node analysis of REQUEST_APPOINTMENT subcategory."""
+    key_entities: dict = Field(
+        ...,
+        description="Entità chiave estratte dalla mail e allegati (date, informazioni, richieste, luoghi, ecc.)"
+    )
+    title_of_event: str = Field(
+        ...,
+        description="Titolo dell'appuntamento nella forma '[AI] APPUNTAMENTO + sender email'"
+    )
+    date: Optional[str] = Field(
+        None,
+        description="Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss, None se non specificato"
+    )
+    duration: int = Field(
+        60,
+        description="Durata dell'appuntamento in minuti, default 60 se non specificato"
+    )
+    attendees: Optional[list] = Field(
+        None,
+        description="Lista di email degli invitati, None se non specificati"
+    )
+    place: Optional[str] = Field(
+        None,
+        description="Luogo dell'evento, None se non specificato"
+    )
+    additional_notes: Optional[str] = Field(
+        None,
+        description="Note aggiuntive sull'evento"
+    )
+
+
+class SchedulerResponse(BaseModel):
+    """Response model for Scheduler node - appointment scheduling result."""
+    scheduled: bool = Field(
+        ...,
+        description="True se l'appuntamento è stato prenotato con successo"
+    )
+    overlap: bool = Field(
+        ...,
+        description="True se c'è sovrapposizione con altri eventi"
+    )
+    event_code: Optional[str] = Field(
+        None,
+        description="Codice dell'evento prenotato, None se non prenotato"
+    )
+    proposed_slots: Optional[list] = Field(
+        None,
+        description="Array di date proposte in formato YYYY-MM-DD, None se non proposte"
+    )
+
+
 # EVALUATOR SUBCATEGORY ENUMS
 class PromotionSubcategory(str, Enum):
     """Subcategories for PROMOTION emails."""

@@ -1956,12 +1956,13 @@ def subcategory_router_node(state):
 def reader_node(state):
     """
     Extract key entities and determine if email needs response using LLM.
+    For REQUEST_APPOINTMENT subcategory, also extracts appointment-specific details.
     
     Args:
         state: Current workflow state
         
     Returns:
-        Updated state with key_entities and needs_response
+        Updated state with key_entities and needs_response (and appointment details if REQUEST_APPOINTMENT)
     """
     try:
         print(f"📖 [READER] Starting email content analysis...")
@@ -1970,11 +1971,13 @@ def reader_node(state):
         filtered_body = state.get("email_body", "")
         summary_attachments = state.get("summary_attachments")
         language = state.get("language", "ITA")
+        subcategory = state.get("subcategory", "")
         
         print(f"📋 [READER] Analysis parameters:")
         print(f"   📄 Body length: {len(filtered_body)} chars")
         print(f"   📎 Attachments summary: {'Yes' if summary_attachments else 'No'}")
         print(f"   🔒 Language: {language}")
+        print(f"   🏷️ Subcategory: {subcategory}")
         
         if not filtered_body or not filtered_body.strip():
             print(f"⚠️ [READER] Empty email body, using default analysis")
@@ -1992,25 +1995,66 @@ def reader_node(state):
             state["needs_response"] = False
             return state
         
-        # Analyze email using LLM
-        reader_response = llm_client.read_email(
-            filtered_body, 
-            summary_attachments or "", 
-            language
-        )
-        
-        # Update state with analysis results
-        state["key_entities"] = reader_response.key_entities
-        state["needs_response"] = reader_response.needs_response
-        
-        print(f"✅ [READER] Email analysis completed successfully")
-        print(f"   📊 Entities extracted: {len(reader_response.key_entities)} categories")
-        print(f"   💬 Needs response: {reader_response.needs_response}")
-        
-        # Print entity details for debugging
-        for entity_type, values in reader_response.key_entities.items():
-            if values:
-                print(f"   🏷️ {entity_type}: {len(values)} items")
+        # Check if this is a REQUEST_APPOINTMENT email
+        if subcategory == "REQUEST_APPOINTMENT":
+            print(f"📅 [READER] Detected REQUEST_APPOINTMENT - using appointment-specific analysis")
+            
+            # Get additional data for appointment analysis
+            from datetime import datetime
+            extended_summary = state.get("extended_summary", "")
+            extracted_info = state.get("extracted_info", {})
+            sender_email = extracted_info.get("from", "mail not available")
+            current_timestamp = datetime.now().isoformat()
+            
+            # Analyze appointment request using specialized LLM method
+            appointment_response = llm_client.read_appointment_request(
+                filtered_body,
+                extended_summary,
+                current_timestamp,
+                sender_email,
+                language
+            )
+            
+            # Update state with appointment details
+            state["key_entities"] = appointment_response.key_entities
+            state["appointment_title"] = appointment_response.title_of_event
+            state["appointment_date"] = appointment_response.date
+            state["appointment_duration"] = appointment_response.duration
+            state["appointment_attendees"] = appointment_response.attendees
+            state["appointment_place"] = appointment_response.place
+            state["appointment_notes"] = appointment_response.additional_notes
+            # REQUEST_APPOINTMENT always needs manual handling, so needs_response is not used
+            # but we set it to None for clarity
+            state["needs_response"] = None
+            
+            print(f"✅ [READER] Appointment analysis completed successfully")
+            print(f"   📅 Title: {appointment_response.title_of_event}")
+            print(f"   🕐 Date: {appointment_response.date}")
+            print(f"   ⏱️ Duration: {appointment_response.duration} minutes")
+            print(f"   👥 Attendees: {appointment_response.attendees}")
+            print(f"   📍 Place: {appointment_response.place}")
+            print(f"   📝 Notes: {appointment_response.additional_notes}")
+            
+        else:
+            # Standard email analysis for non-appointment emails
+            reader_response = llm_client.read_email(
+                filtered_body, 
+                summary_attachments or "", 
+                language
+            )
+            
+            # Update state with analysis results
+            state["key_entities"] = reader_response.key_entities
+            state["needs_response"] = reader_response.needs_response
+            
+            print(f"✅ [READER] Email analysis completed successfully")
+            print(f"   📊 Entities extracted: {len(reader_response.key_entities)} categories")
+            print(f"   💬 Needs response: {reader_response.needs_response}")
+            
+            # Print entity details for debugging
+            for entity_type, values in reader_response.key_entities.items():
+                if values:
+                    print(f"   🏷️ {entity_type}: {len(values)} items")
         
         return state
         
@@ -2029,6 +2073,82 @@ def reader_node(state):
             "other_info": []
         }
         state["needs_response"] = True  # Default to True to be safe
+        return state
+
+
+def scheduler_node(state):
+    """
+    Schedule appointments for REQUEST_APPOINTMENT subcategory.
+    Uses LLM with tool functions to either book appointment or propose new slots.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with scheduling results
+    """
+    try:
+        print(f"📅 [SCHEDULER] Starting appointment scheduling...")
+        
+        # Get required data from state
+        language = state.get("language", "ITA")
+        mail_summary = state.get("mail_summary", "")
+        extended_summary = state.get("extended_summary", "")
+        appointment_date = state.get("appointment_date")
+        
+        # Determine if we need to propose slots or book directly
+        propose_slots = appointment_date is None
+        
+        print(f"📋 [SCHEDULER] Scheduling parameters:")
+        print(f"   🔒 Language: {language}")
+        print(f"   🎯 Propose slots: {propose_slots}")
+        print(f"   📅 Appointment date: {appointment_date}")
+        
+        # Get current timestamp
+        from datetime import datetime
+        current_timestamp = datetime.now().isoformat()
+        
+        # Get appointment details from state (for booking)
+        appointment_info = {
+            "title_of_event": state.get("appointment_title"),
+            "date": state.get("appointment_date"),
+            "duration": state.get("appointment_duration", 60),
+            "attendees": state.get("appointment_attendees"),
+            "place": state.get("appointment_place"),
+            "additional_notes": state.get("appointment_notes")
+        }
+        
+        # Call LLM scheduler with tool functions
+        scheduler_response = llm_client.schedule_appointment(
+            current_timestamp=current_timestamp,
+            mail_summary=mail_summary,
+            extended_summary=extended_summary,
+            propose_slots=propose_slots,
+            appointment_info=appointment_info,
+            language=language
+        )
+        
+        # Update state with scheduling results
+        state["appointment_scheduled"] = scheduler_response.scheduled
+        state["appointment_overlap"] = scheduler_response.overlap
+        state["appointment_event_code"] = scheduler_response.event_code
+        state["appointment_proposed_slots"] = scheduler_response.proposed_slots
+        
+        print(f"✅ [SCHEDULER] Scheduling completed successfully")
+        print(f"   ✓ Scheduled: {scheduler_response.scheduled}")
+        print(f"   ⚠️ Overlap: {scheduler_response.overlap}")
+        print(f"   🔢 Event code: {scheduler_response.event_code}")
+        print(f"   📆 Proposed slots: {scheduler_response.proposed_slots}")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [SCHEDULER] Error in appointment scheduling: {e}")
+        # Set default values on error
+        state["appointment_scheduled"] = False
+        state["appointment_overlap"] = False
+        state["appointment_event_code"] = None
+        state["appointment_proposed_slots"] = None
         return state
 
 

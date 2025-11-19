@@ -30,6 +30,7 @@ from .nodes import (
     router_node,
     subcategory_router_node,
     reader_node,
+    scheduler_node,
     # Subcategory handler nodes
     handle_offer_promotion_node,
     handle_newsletter_node,
@@ -93,6 +94,7 @@ def create_email_classification_graph():
     graph.add_node(NodeNames.ROUTER, router_node)
     graph.add_node(NodeNames.SUBCATEGORY_ROUTER, subcategory_router_node)
     graph.add_node(NodeNames.READER, reader_node)
+    graph.add_node(NodeNames.SCHEDULER, scheduler_node)
     
     # Add subcategory handler nodes
     graph.add_node(NodeNames.HANDLE_OFFER_PROMOTION, handle_offer_promotion_node)
@@ -383,9 +385,15 @@ def create_email_classification_graph():
         For specific subcategories, if needs_response is False, return AutomationExecutedResponse.
         If needs_response is True, continue (momentarily to END).
         EVENT_FOLLOWUP has special behavior: always returns AutomationExecutedResponse with different human_response values.
+        REQUEST_APPOINTMENT routes to SCHEDULER node for appointment scheduling.
         """
         needs_response = state.get("needs_response", True)
         subcategory = state.get("subcategory", "")
+        
+        # Special routing for REQUEST_APPOINTMENT - goes to SCHEDULER
+        if subcategory == "REQUEST_APPOINTMENT":
+            print(f"📅 [READER] Routing to SCHEDULER for REQUEST_APPOINTMENT")
+            return NodeNames.SCHEDULER
         
         # Subcategories that should check needs_response for conditional automation
         conditional_automation_subcategories = {
@@ -503,9 +511,13 @@ def create_email_classification_graph():
         NodeNames.READER,
         should_continue_after_reader,
         {
+            NodeNames.SCHEDULER: NodeNames.SCHEDULER,
             END: END # TODO momentaneamente
         }
     )
+    
+    # Edge from SCHEDULER to END (after appointment scheduling completes)
+    graph.add_edge(NodeNames.SCHEDULER, END)
     
     return graph
 
