@@ -191,30 +191,45 @@ class UserDAO:
 
 
     def get_user_by_email(self, email: str):
-        # 1) Try Redis cache first
-        r = get_redis_client()
-        cache_key = f"user:by_email:{email.lower()}"
-        cached = r.hgetall(cache_key)
-        if cached and cached.get("id") and cached.get("email"):
-            return UserRead(id=cached["id"], email=cached["email"])
+        try:
+            # 1) Try Redis cache first
+            r = get_redis_client()
+            cache_key = f"user:by_email:{email.lower()}"
+            cached = r.hgetall(cache_key)
+            if cached and cached.get("id") and cached.get("email"):
+                return UserRead(id=cached["id"], email=cached["email"])
+        except Exception:
+            # If Redis fails, continue to Supabase lookup
+            pass
 
         # 2) Fallback to Supabase search
-        users = self.supabase.auth.admin.list_users()
+        try:
+            users = self.supabase.auth.admin.list_users()
 
-        if not isinstance(users, list):
-            users = users.data.get("users", []) if hasattr(users, "data") else []
+            if not isinstance(users, list):
+                users = users.data.get("users", []) if hasattr(users, "data") else []
 
-        for u in users:
-            if hasattr(u, "email") and u.email and u.email.lower() == email.lower():
-                # Cache user info with a TTL
-                try:
-                    r.hset(cache_key, mapping={"id": u.id, "email": u.email})
-                    r.expire(cache_key, 1200)  # 20 minutes
-                except Exception:
-                    pass # Cache failures shouldn't block main flow
-                return UserRead(id=u.id, email=u.email)
+            for u in users:
+                if hasattr(u, "email") and u.email and u.email.lower() == email.lower():
+                    # Cache user info with a TTL
+                    try:
+                        r = get_redis_client()
+                        cache_key = f"user:by_email:{email.lower()}"
+                        r.hset(cache_key, mapping={"id": u.id, "email": u.email})
+                        r.expire(cache_key, 1200)  # 20 minutes
+                    except Exception:
+                        pass # Cache failures shouldn't block main flow
+                    return UserRead(id=u.id, email=u.email)
 
-        raise HTTPException(status_code=404, detail=f"Utente con email {email} non trovato")
+            raise HTTPException(status_code=404, detail=f"Utente con email {email} non trovato")
+        
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Errore durante la ricerca dell'utente: {str(e)}"
+            )
     
     def login_with_magic_link(self, email: str):
         response = self.supabase.auth.sign_in_with_otp({
