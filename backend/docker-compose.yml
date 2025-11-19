@@ -90,11 +90,14 @@ services:
     image: ghcr.io/correttoai/backend/automations:latest
     container_name: automations
     restart: unless-stopped
+    volumes:
+      - ./data/attachments:/automations/attachments
     env_file:
       - .env
     ports:
       - "8010:8010"
-    #networks:
+    networks:
+      - broker_net
 
 volumes:
   rabbitmq_data:
