@@ -26,7 +26,9 @@ from ..models.llm_responses import (
     CalendarEventEvaluatorResponse,
     TransactionalEvaluatorResponse,
     OtherEvaluatorResponse,
-    ReaderResponse
+    ReaderResponse,
+    ReaderAppointmentResponse,
+    SchedulerResponse
 )
 from ..prompts.templates import (
     LANGUAGE_DETECTION_PROMPT,
@@ -57,7 +59,11 @@ from ..prompts.templates import (
     EVALUATOR_OTHER_PROMPT_ITA,
     EVALUATOR_OTHER_PROMPT_ENG,
     READER_PROMPT_ITA,
-    READER_PROMPT_ENG
+    READER_PROMPT_ENG,
+    READER_APPOINTMENT_PROMPT_ITA,
+    READER_APPOINTMENT_PROMPT_ENG,
+    SCHEDULER_PROMPT_ITA,
+    SCHEDULER_PROMPT_ENG
 )
 
 T = TypeVar('T')
@@ -805,6 +811,293 @@ class LLMClient:
                 },
                 needs_response=True  # Default to True to be safe
             )
+    
+    def read_appointment_request(self, filtered_body: str, extended_summary: str, 
+                                current_timestamp: str, sender_email: str, 
+                                language: str) -> ReaderAppointmentResponse:
+        """
+        Extract appointment details from REQUEST_APPOINTMENT emails.
+        
+        Args:
+            filtered_body: Filtered email body
+            extended_summary: Extended conversation summary
+            current_timestamp: Current timestamp for relative date calculations
+            sender_email: Email of the sender
+            language: Language of the email ("ITA" or "ENG")
+            
+        Returns:
+            ReaderAppointmentResponse with appointment details
+        """
+        try:
+            # Choose prompt based on language
+            if language == "ENG":
+                prompt_template = READER_APPOINTMENT_PROMPT_ENG
+            else:
+                prompt_template = READER_APPOINTMENT_PROMPT_ITA
+            
+            # Create output parser
+            parser = PydanticOutputParser(pydantic_object=ReaderAppointmentResponse)
+            
+            # Gestione default extended_summary in base alla lingua
+            if not extended_summary:
+                if language == "ENG":
+                    default_summary = "No previous summary."
+                else:
+                    default_summary = "Nessun riassunto precedente."
+                used_extended_summary = default_summary
+            else:
+                used_extended_summary = extended_summary
+
+            # Format prompt
+            prompt_text = prompt_template.format(
+                current_timestamp=current_timestamp,
+                filtered_body=filtered_body,
+                extended_summary=used_extended_summary,
+                sender_email=sender_email
+            )
+            
+            # Add format instructions
+            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            
+            # Create message
+            message = HumanMessage(content=prompt_with_format)
+            
+            # Get response from LLM
+            response = self.llm.invoke([message])
+            
+            # Parse response
+            parsed_response = parser.parse(response.content)
+            
+            print(f"📅 [LLM] Appointment request analyzed ({language}): date={parsed_response.date}, duration={parsed_response.duration}min, place={parsed_response.place}")
+            return parsed_response
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in appointment request reading: {e}")
+            # Return default response on error
+            return ReaderAppointmentResponse(
+                key_entities={
+                    "dates": [],
+                    "locations": [],
+                    "people": [],
+                    "organizations": [],
+                    "requests": [],
+                    "actions": [],
+                    "amounts": [],
+                    "documents": [],
+                    "other_info": []
+                },
+                title_of_event=f"[AI] APPUNTAMENTO {sender_email}",
+                date=None,
+                duration=60,
+                attendees=None,
+                place=None,
+                additional_notes=None
+            )
+    
+    def schedule_appointment(
+        self,
+        current_timestamp: str,
+        mail_summary: str,
+        extended_summary: str,
+        propose_slots: bool,
+        appointment_info: dict,
+        language: str = "ITA"
+    ) -> SchedulerResponse:
+        """
+        Schedule an appointment or propose new slots using LLM with tool functions.
+        
+        Args:
+            current_timestamp: Current timestamp in ISO format
+            mail_summary: Summary of current email
+            extended_summary: Extended conversation summary
+            propose_slots: Whether to propose new slots (True) or book directly (False)
+            appointment_info: Dictionary with appointment details (title, date, duration, etc.)
+            language: Language for prompts (ITA or ENG)
+            
+        Returns:
+            SchedulerResponse with scheduling results
+        """
+        try:
+            # Select prompt based on language
+            prompt_text = SCHEDULER_PROMPT_ITA if language == "ITA" else SCHEDULER_PROMPT_ENG
+            
+            # Define tool functions
+            tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "propose_new_slots",
+                        "description": "Propose new available appointment slots when client doesn't provide specific date and hours",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "favorite_day": {
+                                    "type": "string",
+                                    "description": "Preferred day mentioned by sender in format YYYY-MM-DD, or null if not mentioned"
+                                },
+                                "not_available_dates": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "description": "Array of previously proposed but rejected dates in format YYYY-MM-DD"
+                                }
+                            },
+                            "required": ["favorite_day", "not_available_dates"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "book_appointment",
+                        "description": "Book an appointment when all information is available",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "title_of_event": {
+                                    "type": "string",
+                                    "description": "Title of the appointment"
+                                },
+                                "date": {
+                                    "type": "string",
+                                    "description": "Date and time in format YYYY-MM-DDThh:mm:ss"
+                                },
+                                "duration": {
+                                    "type": "integer",
+                                    "description": "Duration in minutes"
+                                },
+                                "attendees": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "description": "List of attendee emails"
+                                },
+                                "place": {
+                                    "type": "string",
+                                    "description": "Location of the event"
+                                },
+                                "additional_notes": {
+                                    "type": "string",
+                                    "description": "Additional notes about the event"
+                                }
+                            },
+                            "required": ["title_of_event", "date", "duration"]
+                        }
+                    }
+                }
+            ]
+            
+            # Format prompt
+            prompt_formatted = prompt_text.format(
+                current_timestamp=current_timestamp,
+                mail_summary=mail_summary,
+                extended_summary=extended_summary or ("Nessun riassunto precedente." if language == "ITA" else "No previous summary."),
+                propose_slots=propose_slots
+            )
+            
+            # Create LLM with tool binding
+            llm_with_tools = self.llm.bind_tools(tools)
+            
+            # Get response from LLM
+            message = HumanMessage(content=prompt_formatted)
+            response = llm_with_tools.invoke([message])
+            
+            # Process tool calls
+            scheduled = False
+            overlap = False
+            event_code = None
+            proposed_slots = None
+            
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                for tool_call in response.tool_calls:
+                    if tool_call['name'] == 'propose_new_slots':
+                        # Call the propose_new_slots tool function
+                        args = tool_call['args']
+                        proposed_slots = self._propose_new_slots_tool(
+                            favorite_day=args.get('favorite_day'),
+                            not_available_dates=args.get('not_available_dates', [])
+                        )
+                    elif tool_call['name'] == 'book_appointment':
+                        # Call the book_appointment tool function
+                        args = tool_call['args']
+                        booking_result = self._book_appointment_tool(
+                            title_of_event=appointment_info.get('title_of_event'),
+                            date=appointment_info.get('date'),
+                            duration=appointment_info.get('duration', 60),
+                            attendees=appointment_info.get('attendees'),
+                            place=appointment_info.get('place'),
+                            additional_notes=appointment_info.get('additional_notes')
+                        )
+                        scheduled = booking_result.get('scheduled', False)
+                        overlap = booking_result.get('overlap', False)
+                        event_code = booking_result.get('event_code')
+            
+            print(f"📅 [LLM] Scheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}")
+            
+            return SchedulerResponse(
+                scheduled=scheduled,
+                overlap=overlap,
+                event_code=event_code,
+                proposed_slots=proposed_slots
+            )
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in appointment scheduling: {e}")
+            # Return default response on error
+            return SchedulerResponse(
+                scheduled=False,
+                overlap=False,
+                event_code=None,
+                proposed_slots=None
+            )
+    
+    def _propose_new_slots_tool(self, favorite_day: str, not_available_dates: list) -> list:
+        """
+        Tool function to propose new appointment slots.
+        
+        Args:
+            favorite_day: Preferred day in format YYYY-MM-DD or None
+            not_available_dates: Array of rejected dates in format YYYY-MM-DD
+            
+        Returns:
+            Array of proposed date strings in format YYYY-MM-DD
+        """
+        # TODO: da implementare
+        print(f"🛠️ [TOOL] propose_new_slots called: favorite_day={favorite_day}, not_available={not_available_dates}")
+        return []
+    
+    def _book_appointment_tool(
+        self,
+        title_of_event: str,
+        date: str,
+        duration: int,
+        attendees: list = None,
+        place: str = None,
+        additional_notes: str = None
+    ) -> dict:
+        """
+        Tool function to book an appointment.
+        
+        Args:
+            title_of_event: Title of the appointment
+            date: Date and time in format YYYY-MM-DDThh:mm:ss
+            duration: Duration in minutes
+            attendees: List of attendee emails
+            place: Location of the event
+            additional_notes: Additional notes
+            
+        Returns:
+            Dictionary with: scheduled (bool), overlap (bool), event_code (str)
+        """
+        # TODO: da implementare
+        print(f"🛠️ [TOOL] book_appointment called: title={title_of_event}, date={date}, duration={duration}")
+        return {
+            "scheduled": False,
+            "overlap": False,
+            "event_code": None
+        }
 
 
 # Global LLM client instance

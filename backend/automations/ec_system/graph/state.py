@@ -28,6 +28,18 @@ class EmailState(TypedDict):
     workflow_decision: Optional[str]  # Decision for workflow routing (END_HIGH_PRIORITY or ROUTE_TO_SUBCATEGORY)
     key_entities: Optional[dict]  # Key entities extracted by Reader node (dates, locations, requests, etc.)
     needs_response: Optional[bool]  # Flag indicating if email requires a response
+    # Appointment-specific fields (for REQUEST_APPOINTMENT subcategory)
+    appointment_title: Optional[str]  # Title of the appointment
+    appointment_date: Optional[str]  # Date and time of the appointment (YYYY-MM-DDThh:mm:ss)
+    appointment_duration: Optional[int]  # Duration in minutes
+    appointment_attendees: Optional[List[str]]  # List of attendee emails
+    appointment_place: Optional[str]  # Location of the appointment
+    appointment_notes: Optional[str]  # Additional notes
+    # Scheduler-specific fields (for REQUEST_APPOINTMENT scheduling result)
+    appointment_scheduled: Optional[bool]  # True if appointment was successfully booked
+    appointment_overlap: Optional[bool]  # True if there's overlap with other events
+    appointment_event_code: Optional[str]  # Event code if booked
+    appointment_proposed_slots: Optional[List[str]]  # Proposed dates if booking not possible
 
 
 def create_initial_state() -> EmailState:
@@ -52,5 +64,15 @@ def create_initial_state() -> EmailState:
         "high_priority_email": False,
         "workflow_decision": None,
         "key_entities": None,
-        "needs_response": None
+        "needs_response": None,
+        "appointment_title": None,
+        "appointment_date": None,
+        "appointment_duration": None,
+        "appointment_attendees": None,
+        "appointment_place": None,
+        "appointment_notes": None,
+        "appointment_scheduled": None,
+        "appointment_overlap": None,
+        "appointment_event_code": None,
+        "appointment_proposed_slots": None
     }
