@@ -24,7 +24,10 @@ class EmailState(TypedDict):
     must_see_attachments: Optional[bool]  # Flag indicating if attachments are essential for understanding/responding
     summary_attachments: Optional[str]  # Discursive summary of all attachment contents
     priority_score: Optional[float]  # Category-specific priority score (0.0-1.0)
-    subcategory: Optional[str]  # Category-specific subcategory classification
+    high_priority_email: Optional[bool]  # Flag indicating if email exceeded priority threshold
+    workflow_decision: Optional[str]  # Decision for workflow routing (END_HIGH_PRIORITY or ROUTE_TO_SUBCATEGORY)
+    key_entities: Optional[dict]  # Key entities extracted by Reader node (dates, locations, requests, etc.)
+    needs_response: Optional[bool]  # Flag indicating if email requires a response
 
 
 def create_initial_state() -> EmailState:
@@ -45,5 +48,9 @@ def create_initial_state() -> EmailState:
         "attachments_too_large": False,
         "must_see_attachments": False,
         "summary_attachments": None,
-        "priority_score": None
+        "priority_score": None,
+        "high_priority_email": False,
+        "workflow_decision": None,
+        "key_entities": None,
+        "needs_response": None
     }
