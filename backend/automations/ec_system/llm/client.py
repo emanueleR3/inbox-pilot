@@ -6,7 +6,7 @@ import os
 import secrets
 import string
 import re
-import datetime
+from datetime import datetime, timedelta, timezone
 import random
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
@@ -1135,13 +1135,13 @@ class LLMClient:
             return []
         
         # Determine time range for slot search
-        now = datetime.datetime.now()
+        now = datetime.now()
         start_time = now
-        end_time = now + datetime.timedelta(days=7)  # Look ahead 7 days by default
+        end_time = now + timedelta(days=7)  # Look ahead 7 days by default
         
         if favorite_day:
             try:
-                fav_date = datetime.datetime.strptime(favorite_day, "%Y-%m-%d")
+                fav_date = datetime.strptime(favorite_day, "%Y-%m-%d")
                 start_time = fav_date.replace(hour=0, minute=0, second=0, microsecond=0)
                 end_time = fav_date.replace(hour=23, minute=59, second=59, microsecond=0)
                 
@@ -1238,8 +1238,8 @@ class LLMClient:
         
         # Parse date and calculate end time
         try:
-            start_dt = datetime.datetime.fromisoformat(date)
-            end_dt = start_dt + datetime.timedelta(minutes=duration)
+            start_dt = datetime.fromisoformat(date)
+            end_dt = start_dt + timedelta(minutes=duration)
         except ValueError:
             print(f"Invalid date format: {date}")
             return {"scheduled": False, "overlap": False, "event_code": None}
@@ -1291,7 +1291,7 @@ class LLMClient:
         # Prepare event data for database
         event_data = {
             "subscription_id": subscription_id,
-            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "title": title_of_event,
             "service_id": service_id,
             "thread_id": thread_id,
