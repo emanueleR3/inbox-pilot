@@ -73,7 +73,7 @@ from ..prompts.templates import (
 
 # Import utils and db_client for calendar operations
 from ..utils import utils
-from ...db_client import get_supabase_client
+from db_client import get_supabase_client
 
 T = TypeVar('T')
 
