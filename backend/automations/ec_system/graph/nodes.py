@@ -2096,6 +2096,23 @@ def scheduler_node(state):
         extended_summary = state.get("extended_summary", "")
         appointment_date = state.get("appointment_date")
         
+        # Get user config and extracted info for additional parameters
+        user_config = state.get("user_config", {})
+        extracted_info = state.get("extracted_info", {})
+        
+        service_id = user_config.get("service_id")
+        thread_id = extracted_info.get("thread_id")
+        created_by = extracted_info.get("from", "unknown")
+        event_type = "APPOINTMENT"  # Default event type
+        
+        if not service_id:
+            print(f"⚠️ [SCHEDULER] No service_id found in user_config, cannot book appointment")
+            state["appointment_scheduled"] = False
+            state["appointment_overlap"] = False
+            state["appointment_event_code"] = None
+            state["appointment_proposed_slots"] = None
+            return state
+        
         # Determine if we need to propose slots or book directly
         propose_slots = appointment_date is None
         
@@ -2103,6 +2120,8 @@ def scheduler_node(state):
         print(f"   🔒 Language: {language}")
         print(f"   🎯 Propose slots: {propose_slots}")
         print(f"   📅 Appointment date: {appointment_date}")
+        print(f"   🔑 Service ID: {service_id}")
+        print(f"   👤 Created by: {created_by}")
         
         # Get current timestamp
         from datetime import datetime
@@ -2125,6 +2144,10 @@ def scheduler_node(state):
             extended_summary=extended_summary,
             propose_slots=propose_slots,
             appointment_info=appointment_info,
+            service_id=service_id,
+            event_type=event_type,
+            created_by=created_by,
+            thread_id=thread_id,
             language=language
         )
         

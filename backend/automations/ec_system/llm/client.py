@@ -6,10 +6,12 @@ import os
 import secrets
 import string
 import re
+import datetime
+import random
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import PydanticOutputParser
-from typing import TypeVar, Type
+from typing import TypeVar, Type, Optional
 
 from ..models.llm_responses import (
     LanguageDetectionResponse, 
@@ -65,6 +67,10 @@ from ..prompts.templates import (
     SCHEDULER_PROMPT_ITA,
     SCHEDULER_PROMPT_ENG
 )
+
+# Import utils and db_client for calendar operations
+from ..utils import utils
+from ...db_client import get_supabase_client
 
 T = TypeVar('T')
 
@@ -901,6 +907,10 @@ class LLMClient:
         extended_summary: str,
         propose_slots: bool,
         appointment_info: dict,
+        service_id: str,
+        event_type: str,
+        created_by: str,
+        thread_id: Optional[str] = None,
         language: str = "ITA"
     ) -> SchedulerResponse:
         """
@@ -912,6 +922,10 @@ class LLMClient:
             extended_summary: Extended conversation summary
             propose_slots: Whether to propose new slots (True) or book directly (False)
             appointment_info: Dictionary with appointment details (title, date, duration, etc.)
+            service_id: Service ID from subscription_services
+            event_type: Type of event
+            created_by: Email of the creator
+            thread_id: Optional thread ID
             language: Language for prompts (ITA or ENG)
             
         Returns:
@@ -1016,6 +1030,7 @@ class LLMClient:
                         # Call the propose_new_slots tool function
                         args = tool_call['args']
                         proposed_slots = self._propose_new_slots_tool(
+                            service_id=service_id,
                             favorite_day=args.get('favorite_day'),
                             not_available_dates=args.get('not_available_dates', [])
                         )
@@ -1026,6 +1041,10 @@ class LLMClient:
                             title_of_event=appointment_info.get('title_of_event'),
                             date=appointment_info.get('date'),
                             duration=appointment_info.get('duration', 60),
+                            service_id=service_id,
+                            event_type=event_type,
+                            created_by=created_by,
+                            thread_id=thread_id,
                             attendees=appointment_info.get('attendees'),
                             place=appointment_info.get('place'),
                             additional_notes=appointment_info.get('additional_notes')
@@ -1053,26 +1072,116 @@ class LLMClient:
                 proposed_slots=None
             )
     
-    def _propose_new_slots_tool(self, favorite_day: str, not_available_dates: list) -> list:
+    def _propose_new_slots_tool(
+        self, 
+        service_id: str,
+        favorite_day: Optional[str] = None, 
+        not_available_dates: Optional[list] = None
+    ) -> list:
         """
         Tool function to propose new appointment slots.
         
         Args:
+            service_id: Service ID from subscription_services
             favorite_day: Preferred day in format YYYY-MM-DD or None
             not_available_dates: Array of rejected dates in format YYYY-MM-DD
             
         Returns:
-            Array of proposed date strings in format YYYY-MM-DD
+            Array of proposed date strings in ISO format (first 3 slots)
         """
-        # TODO: da implementare
         print(f"🛠️ [TOOL] propose_new_slots called: favorite_day={favorite_day}, not_available={not_available_dates}")
-        return []
+        
+        supabase = get_supabase_client()
+        
+        # Fetch subscription service data
+        response_sub_ser = supabase.table("subscription_services").select(
+            "subscription_id, calendar_provider, hash_token"
+        ).eq("service_id", service_id).execute()
+        
+        if not response_sub_ser.data:
+            print("No subscription service data found.")
+            return []
+        
+        data = response_sub_ser.data[0]
+        calendar_provider = data.get("calendar_provider")
+        hash_token = data.get("hash_token")
+        subscription_id = data.get("subscription_id")
+        
+        # Fetch subscription data for opening hours and working days
+        response_sub = supabase.table("subscriptions").select(
+            "opening_hrs, working_days, appointament_duration"
+        ).eq("subscription_id", subscription_id).execute()
+        
+        if not response_sub.data:
+            print("No subscription data found.")
+            return []
+        
+        opening_hrs = response_sub.data[0].get("opening_hrs")
+        working_days = response_sub.data[0].get("working_days")
+        appointment_duration = response_sub.data[0].get("appointament_duration")  # in minutes
+        
+        if not hash_token:
+            print("No hash token found.")
+            return []
+        
+        # Decrypt token
+        token = utils.decrypt(hash_token, "token")
+        
+        if not token:
+            print("Failed to decrypt token.")
+            return []
+        
+        # Determine time range for slot search
+        now = datetime.datetime.now()
+        start_time = now
+        end_time = now + datetime.timedelta(days=7)  # Look ahead 7 days by default
+        
+        if favorite_day:
+            try:
+                fav_date = datetime.datetime.strptime(favorite_day, "%Y-%m-%d")
+                start_time = fav_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_time = fav_date.replace(hour=23, minute=59, second=59, microsecond=0)
+                
+                if start_time < now:
+                    start_time = now
+            except ValueError:
+                print(f"Invalid favourite_day format: {favorite_day}")
+                pass
+        
+        # Get busy slots from calendar provider
+        busy_slots = []
+        
+        if calendar_provider == "google":
+            busy_slots = utils.get_google_busy_slots(token, start_time, end_time)
+        elif calendar_provider == "microsoft":
+            busy_slots = utils.get_microsoft_busy_slots(token, start_time, end_time)
+        else:
+            print(f"Unknown calendar provider: {calendar_provider}")
+            return []
+        
+        # Calculate free slots
+        free_slots = utils.calculate_free_slots(
+            start_time,
+            end_time,
+            busy_slots,
+            opening_hrs,
+            working_days,
+            appointment_duration,
+            not_available_dates
+        )
+        
+        print(f"✅ Found {len(free_slots)} free slots, returning first 3")
+        return free_slots[:3]
     
     def _book_appointment_tool(
         self,
         title_of_event: str,
         date: str,
         duration: int,
+        service_id: str,
+        event_type: str,
+        created_by: str,
+        thread_id: Optional[str] = None,
         attendees: list = None,
         place: str = None,
         additional_notes: str = None
@@ -1084,6 +1193,10 @@ class LLMClient:
             title_of_event: Title of the appointment
             date: Date and time in format YYYY-MM-DDThh:mm:ss
             duration: Duration in minutes
+            service_id: Service ID from subscription_services
+            event_type: Type of event
+            created_by: Email of the creator
+            thread_id: Optional thread ID
             attendees: List of attendee emails
             place: Location of the event
             additional_notes: Additional notes
@@ -1091,13 +1204,108 @@ class LLMClient:
         Returns:
             Dictionary with: scheduled (bool), overlap (bool), event_code (str)
         """
-        # TODO: da implementare
         print(f"🛠️ [TOOL] book_appointment called: title={title_of_event}, date={date}, duration={duration}")
-        return {
-            "scheduled": False,
-            "overlap": False,
-            "event_code": None
+        
+        supabase = get_supabase_client()
+        
+        # Fetch subscription service data
+        response_sub_ser = supabase.table("subscription_services").select(
+            "subscription_id, calendar_provider, hash_token"
+        ).eq("service_id", service_id).execute()
+        
+        if not response_sub_ser.data:
+            print("No subscription service data found.")
+            return {"scheduled": False, "overlap": False, "event_code": None}
+        
+        data = response_sub_ser.data[0]
+        calendar_provider = data.get("calendar_provider")
+        hash_token = data.get("hash_token")
+        subscription_id = data.get("subscription_id")
+        
+        if not hash_token:
+            print("No hash token found.")
+            return {"scheduled": False, "overlap": False, "event_code": None}
+        
+        # Decrypt token
+        token = utils.decrypt(hash_token, "token")
+        
+        if not token:
+            print("Failed to decrypt token.")
+            return {"scheduled": False, "overlap": False, "event_code": None}
+        
+        # Parse date and calculate end time
+        try:
+            start_dt = datetime.datetime.fromisoformat(date)
+            end_dt = start_dt + datetime.timedelta(minutes=duration)
+        except ValueError:
+            print(f"Invalid date format: {date}")
+            return {"scheduled": False, "overlap": False, "event_code": None}
+        
+        # Get busy slots from calendar provider
+        busy_slots = []
+        if calendar_provider == "google":
+            busy_slots = utils.get_google_busy_slots(token, start_dt, end_dt)
+        elif calendar_provider == "microsoft":
+            busy_slots = utils.get_microsoft_busy_slots(token, start_dt, end_dt)
+        else:
+            print(f"Unknown calendar provider: {calendar_provider}")
+            return {"scheduled": False, "overlap": False, "event_code": None}
+        
+        # Check for overlaps
+        is_overlap = False
+        for b_start, b_end in busy_slots:
+            b_start_naive = b_start.replace(tzinfo=None)
+            b_end_naive = b_end.replace(tzinfo=None)
+            start_dt_naive = start_dt.replace(tzinfo=None)
+            end_dt_naive = end_dt.replace(tzinfo=None)
+            
+            if start_dt_naive < b_end_naive and end_dt_naive > b_start_naive:
+                is_overlap = True
+                break
+        
+        if is_overlap:
+            print("Overlap detected with existing calendar events.")
+            return {"scheduled": False, "overlap": True, "event_code": None}
+        
+        # Generate unique event code
+        while True:
+            event_code = ''.join(random.choices(string.digits, k=6))
+            res = supabase.table("scheduled_events").select("event_code").eq("event_code", event_code).execute()
+            if not res.data:
+                break
+        
+        # Create event in external calendar
+        created_external = False
+        if calendar_provider == "google":
+            created_external = utils.create_google_calendar_event(token, title_of_event, start_dt, end_dt)
+        elif calendar_provider == "microsoft":
+            created_external = utils.create_microsoft_calendar_event(token, title_of_event, start_dt, end_dt)
+        
+        if not created_external:
+            print("Failed to create event in external calendar.")
+            return {"scheduled": False, "overlap": False, "event_code": None}
+        
+        # Prepare event data for database
+        event_data = {
+            "subscription_id": subscription_id,
+            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "title": title_of_event,
+            "service_id": service_id,
+            "thread_id": thread_id,
+            "event_type": event_type,
+            "event_code": event_code,
+            "created_by": created_by
         }
+        
+        # Insert into scheduled_events table
+        try:
+            supabase.table("scheduled_events").insert(event_data).execute()
+            print(f"✅ Event created successfully with code: {event_code}")
+        except Exception as e:
+            print(f"Error inserting into DB: {e}")
+            return {"scheduled": False, "overlap": False, "event_code": None}
+        
+        return {"scheduled": True, "overlap": False, "event_code": event_code}
 
 
 # Global LLM client instance
