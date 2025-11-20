@@ -372,6 +372,123 @@ def get_email_attachments_sync(message_id: str) -> list:
         return []
 
 
+def get_calendar_service_data(service_id: str) -> Optional[Dict]:
+    """
+    Recupera dati del servizio calendario e subscription dal DB.
+    
+    Args:
+        service_id: Service ID from subscription_services
+        
+    Returns:
+        Dict con calendar_provider, access_token (decrypted), opening_hrs, working_days, appointment_duration
+        None se non trovato
+    """
+    try:
+        from ec_system.utils.utils import decrypt
+        
+        supabase = get_supabase_client()
+        
+        # Fetch subscription service data
+        response_sub_ser = supabase.table("subscription_services").select(
+            "subscription_id, calendar_provider, hashed_access_token"
+        ).eq("service_id", service_id).execute()
+        
+        if not response_sub_ser.data:
+            print(f"❌ [DB_CLIENT] No subscription service data found for service_id: {service_id}")
+            return None
+        
+        data = response_sub_ser.data[0]
+        calendar_provider = data.get("calendar_provider")
+        hashed_access_token = data.get("hashed_access_token")
+        subscription_id = data.get("subscription_id")
+        
+        if not hashed_access_token:
+            print(f"❌ [DB_CLIENT] No hashed access token found")
+            return None
+        
+        # Decrypt token
+        access_token = decrypt(hashed_access_token, "token")
+        if not access_token:
+            print(f"❌ [DB_CLIENT] Failed to decrypt token")
+            return None
+        
+        # Fetch subscription data
+        response_sub = supabase.table("subscriptions").select(
+            "opening_hrs, working_days, appointment_duration"
+        ).eq("subscription_id", subscription_id).execute()
+        
+        if not response_sub.data:
+            print(f"❌ [DB_CLIENT] No subscription data found for subscription_id: {subscription_id}")
+            return None
+        
+        sub_data = response_sub.data[0]
+        
+        result = {
+            "subscription_id": subscription_id,
+            "calendar_provider": calendar_provider,
+            "access_token": access_token,
+            "opening_hrs": sub_data.get("opening_hrs"),
+            "working_days": sub_data.get("working_days"),
+            "appointment_duration": sub_data.get("appointment_duration")
+        }
+        
+        print(f"✅ [DB_CLIENT] Calendar service data retrieved for service_id: {service_id}")
+        return result
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving calendar service data: {str(e)}")
+        return None
+
+
+def insert_scheduled_event(event_data: Dict) -> bool:
+    """
+    Inserisce un evento nella tabella scheduled_events.
+    
+    Args:
+        event_data: Dizionario con i dati dell'evento (title, service_id, thread_id, event_type, event_code, created_by, created_at)
+        
+    Returns:
+        bool: True se inserimento riuscito, False altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("scheduled_events").insert(event_data).execute()
+        
+        if response.data:
+            print(f"✅ [DB_CLIENT] Event inserted with code: {event_data.get('event_code')}")
+            return True
+        else:
+            print(f"❌ [DB_CLIENT] Failed to insert event")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error inserting event: {e}")
+        return False
+
+
+def check_event_code_exists(event_code: str) -> bool:
+    """
+    Verifica se un event_code esiste già nel database.
+    
+    Args:
+        event_code: Event code da verificare
+        
+    Returns:
+        bool: True se esiste, False altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("scheduled_events").select("event_code").eq("event_code", event_code).execute()
+        
+        return bool(response.data)
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error checking event code: {e}")
+        return False
+
+
 if __name__ == "__main__":
     # Test del modulo
     import asyncio

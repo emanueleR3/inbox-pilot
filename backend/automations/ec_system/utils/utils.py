@@ -59,6 +59,87 @@ def get_timezone_from_country(country: str) -> str:
         return "Europe/Rome"
     return timezone
 
+
+def get_google_calendar_timezone(token: str) -> str:
+    """
+    Retrieve timezone from Google Calendar user settings.
+    
+    Args:
+        token: Google access token
+        
+    Returns:
+        Timezone string (e.g., "Europe/Rome"). Defaults to "Europe/Rome" on error.
+    """
+    url = "https://www.googleapis.com/calendar/v3/users/me/settings/timezone"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+    
+    try:
+        response = httpx.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        timezone = data.get("value", "Europe/Rome")
+        print(f"🌍 Retrieved Google Calendar timezone: {timezone}")
+        return timezone
+    except Exception as e:
+        print(f"❌ Error retrieving Google Calendar timezone: {e}")
+        print(f"   Using default: Europe/Rome")
+        return "Europe/Rome"
+
+
+# Mapping of Microsoft timezone names to IANA timezone strings
+MICROSOFT_TIMEZONE_MAP = {
+    "W. Europe Standard Time": "Europe/Rome",
+    "GMT Standard Time": "Europe/London",
+    "Romance Standard Time": "Europe/Paris",
+    "Central Europe Standard Time": "Europe/Warsaw",
+    "Central European Standard Time": "Europe/Belgrade",
+    "E. Europe Standard Time": "Europe/Bucharest",
+    "FLE Standard Time": "Europe/Helsinki",
+    "GTB Standard Time": "Europe/Athens",
+    "UTC": "UTC",
+    "Eastern Standard Time": "America/New_York",
+    "Central Standard Time": "America/Chicago",
+    "Mountain Standard Time": "America/Denver",
+    "Pacific Standard Time": "America/Los_Angeles",
+}
+
+
+def get_microsoft_calendar_timezone(token: str) -> str:
+    """
+    Retrieve timezone from Microsoft Outlook mailbox settings.
+    
+    Args:
+        token: Microsoft access token
+        
+    Returns:
+        Timezone string in IANA format (e.g., "Europe/Rome"). Defaults to "Europe/Rome" on error.
+    """
+    url = "https://graph.microsoft.com/v1.0/me/mailboxSettings"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+    
+    try:
+        response = httpx.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        ms_timezone = data.get("timeZone", "W. Europe Standard Time")
+        print(f"🌍 Retrieved Microsoft timezone: {ms_timezone}")
+        
+        # Convert Microsoft timezone to IANA format
+        iana_timezone = MICROSOFT_TIMEZONE_MAP.get(ms_timezone, "Europe/Rome")
+        if ms_timezone not in MICROSOFT_TIMEZONE_MAP:
+            print(f"⚠️ Microsoft timezone '{ms_timezone}' not in mapping, using default Europe/Rome")
+        
+        print(f"   Converted to IANA: {iana_timezone}")
+        return iana_timezone
+    except Exception as e:
+        print(f"❌ Error retrieving Microsoft timezone: {e}")
+        print(f"   Using default: Europe/Rome")
+        return "Europe/Rome"
+
 encryption_key_token = os.getenv("ENCRYPTION_KEY_TOKEN")
 encryption_key_pass = os.getenv("ENCRYPTION_KEY_PASS")
 
@@ -93,9 +174,21 @@ def get_google_busy_slots(token: str, start_time: datetime, end_time: datetime) 
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
+    
+    # Ensure times are in UTC for API request
+    if start_time.tzinfo is None:
+        start_time_utc = start_time.replace(tzinfo=timezone.utc)
+    else:
+        start_time_utc = start_time.astimezone(timezone.utc)
+    
+    if end_time.tzinfo is None:
+        end_time_utc = end_time.replace(tzinfo=timezone.utc)
+    else:
+        end_time_utc = end_time.astimezone(timezone.utc)
+    
     body = {
-        "timeMin": start_time.isoformat() + "Z",
-        "timeMax": end_time.isoformat() + "Z",
+        "timeMin": start_time_utc.isoformat(),
+        "timeMax": end_time_utc.isoformat(),
         "items": [{"id": "primary"}]
     }
     
