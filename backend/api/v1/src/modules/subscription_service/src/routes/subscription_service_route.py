@@ -422,3 +422,120 @@ async def finish_quiz(
 )
 async def list_sessions():
     return await forward_get("/sessions")
+
+@router.get(
+    "/get_subscription_service/{subscription_id}/{email}",
+    summary="Recupera i servizi associati a una sottoscrizione",
+    description=(
+        "Restituisce tutti i record della tabella `subscription_services` collegati alla sottoscrizione indicata. "
+        "Il contenuto restituito varia in base al provider del servizio (Google, Microsoft o provider personalizzato IMAP)."
+    ),
+    responses={
+        200: {
+            "description": "Servizi trovati",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "google": {
+                            "summary": "Servizio Google",
+                            "value": [
+                                {
+                                    "email": "user@gmail.com",
+                                    "email_provider": "google",
+                                    "calendar_provider": "google",
+                                    "calendar_names": None,
+                                    "information": None,
+                                    "imap_server": None,
+                                    "imap_port": None,
+                                    "smtp_server": None,
+                                    "smtp_port": None,
+                                    "hashed_password": None,
+                                    "hashed_access_token": "token",
+                                    "hashed_refresh_token": "token",
+                                    "expiry_token": "2025-11-07T18:13:22.691046Z",
+                                    "confidence_response_threshold": 0.8,
+                                    "confidence_review_mail": 0.7,
+                                    "priority_threshold": 0.6,
+                                    "confidence_classification_threshold": 0.75,
+                                    "urgent_meeting_threshold": 0.9,
+                                    "history_id": "2425387",
+                                    "microsoft_subscription_id_inbound": None,
+                                    "microsoft_subscription_id_outbound": None,
+                                    "microsoft_expiration_datetime_inbound": None,
+                                    "microsoft_expiration_datetime_outbound": None,
+                                    "oauth_user_id": None
+                                }
+                            ]
+                        },
+                        "microsoft": {
+                            "summary": "Servizio Microsoft",
+                            "value": [
+                                {
+                                    "email": "user@outlook.com",
+                                    "email_provider": "microsoft",
+                                    "calendar_provider": "microsoft",
+                                    "calendar_names": None,
+                                    "information": None,
+                                    "imap_server": None,
+                                    "imap_port": None,
+                                    "smtp_server": None,
+                                    "smtp_port": None,
+                                    "hashed_password": None,
+                                    "hashed_access_token": "token",
+                                    "hashed_refresh_token": "token",
+                                    "expiry_token": "2025-11-07T18:43:23.158594Z",
+                                    "confidence_response_threshold": 0.8,
+                                    "confidence_review_mail": 0.7,
+                                    "priority_threshold": 0.6,
+                                    "confidence_classification_threshold": 0.75,
+                                    "urgent_meeting_threshold": 0.9,
+                                    "history_id": None,
+                                    "microsoft_subscription_id_inbound": "fdf98a28-a9e9-4111-8294-ae669735713c",
+                                    "microsoft_subscription_id_outbound": "b474af03-2b22-42f8-bc5c-39cafec4c147",
+                                    "microsoft_expiration_datetime_inbound": "2025-11-09T17:47:52Z",
+                                    "microsoft_expiration_datetime_outbound": "2025-11-09T17:47:55Z",
+                                    "oauth_user_id": None
+                                }
+                            ]
+                        },
+                        "imap": {
+                            "summary": "Servizio IMAP personalizzato",
+                            "value": [
+                                {
+                                    "email": "user@custommail.com",
+                                    "email_provider": "imap",
+                                    "calendar_provider": None,
+                                    "calendar_names": None,
+                                    "information": None,
+                                    "imap_server": "imaps.custommail.com",
+                                    "imap_port": 993,
+                                    "smtp_server": "smtps.custommail.com",
+                                    "smtp_port": 465,
+                                    "hashed_password": "token",
+                                    "hashed_access_token": None,
+                                    "hashed_refresh_token": None,
+                                    "expiry_token": None,
+                                    "confidence_response_threshold": 0.8,
+                                    "confidence_review_mail": 0.7,
+                                    "priority_threshold": 0.6,
+                                    "confidence_classification_threshold": 0.75,
+                                    "urgent_meeting_threshold": 0.9,
+                                    "history_id": None,
+                                    "microsoft_subscription_id_inbound": None,
+                                    "microsoft_subscription_id_outbound": None,
+                                    "microsoft_expiration_datetime_inbound": None,
+                                    "microsoft_expiration_datetime_outbound": None,
+                                    "oauth_user_id": None
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        404: {"description": "Nessun servizio associato trovato"},
+        500: {"description": "Errore interno del server"}
+    }
+)
+async def get_services_by_subscription(subscription_id: str, email: str):
+    return controller.get_services_by_subscription(subscription_id, email)

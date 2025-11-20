@@ -1,7 +1,7 @@
 from pydantic import BaseModel
-
 from google.oauth2.credentials import Credentials
 from datetime import datetime
+from typing import Optional, List, Dict
 
 from typing import Optional, List, Dict
 

@@ -43,20 +43,22 @@ def get_user_by_email(email: str):
                     "example": {
                         "message": "Registrazione completata",
                         "result": {
-                            "user_id": "abc123",
+                            "id": "id_12345",
                             "email": "user@example.com",
                             "subscriptions": [
                                 {
-                                    "subscription_id": "sub_xyz789",
-                                    "name": "TechVision Srl",
+                                    "subscription_id": "sub_id12345",
+                                    "name": "Palestra Torino17",
                                     "vat_number": "IT123456789",
-                                    "adress": "Corso Francia 100",
-                                    "active": True,
+                                    "city": "Torino",
+                                    "address": "Corso Francia 100",
+                                    "active": "true",
                                     "current_period_end": "2025-12-31T23:59:59Z",
-                                    "plan": "premium",
+                                    "plan": "Premium",
+                                    "is_configurated": "false", 
                                 }
                             ],
-                            "jwt": "token",
+                            "jwt": "jwt_token",
                             "sub_selected": 0
                         }
                     }
@@ -309,21 +311,22 @@ def get_users_by_subscription(subscription_id: str):
                     "example": {
                         "message": "Login effettuato",
                         "result": {
-                            "id": "user123",
-                            "email": "user@example.it",
+                            "id": "id_12345",
+                            "email": "user@example.com",
                             "subscriptions": [
                                 {
-                                    "subscription_id": "sub001",
-                                    "name": "example name",
-                                    "vat_number": "1234567890",
-                                    "city": "Torino",
-                                    "address": "via Bobbio 12",
+                                    "subscription_id": "sub_id12345",
+                                    "name": "Name Srl",
+                                    "vat_number": "0987654321",
+                                    "city": "Lecce",
+                                    "address": "Via Enrico Fermi, 8",
                                     "active": "true",
-                                    "current_period_end": "2025-12-04T00:00:00Z",
-                                    "plan": "Premium"
+                                    "current_period_end": "2025-12-20T00:00:00Z",
+                                    "plan": "personal",
+                                    "is_configurated": "true"
                                 }
                             ],
-                            "jwt": "token",
+                            "jwt": "jwt_token",
                             "sub_selected": 0
                         }
                     }
@@ -496,3 +499,32 @@ def logout(current_user=Depends(get_current_user)):
 def delete_user(user_id: str, current_user=Depends(get_current_user)):
     controller.delete_account(user_id)
     return {"message": "Account cancellato"}
+
+@router.get(
+    "/get-subscription/{subscription_id}",
+    summary="Recupera i dati di una sottoscrizione",
+    description="Restituisce tutti i dettagli della sottoscrizione identificata dall'ID specificato.",
+    responses={
+        200: {
+            "description": "Sottoscrizione trovata",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "subscription_id": "d7a8dfe2-47af-4c98-a02c-2fcb49c4716c",
+                        "name": "ACME S.r.l.",
+                        "vat_number": "IT123456789",
+                        "city": "Milano",
+                        "address": "Via Roma 1",
+                        "active": True,
+                        "plan": "pro",
+                        "current_period_end": "2025-12-01T12:00:00Z"
+                    }
+                }
+            }
+        },
+        404: {"description": "Sottoscrizione non trovata"},
+        500: {"description": "Errore interno del server"}
+    }
+)
+async def get_subscription_by_id(subscription_id: str):
+    return controller.get_subscription_by_id(subscription_id)

@@ -20,7 +20,7 @@ app.include_router(subscription_service_router, prefix="/subscriptionServiceRout
 # CORS (puoi restringerlo in produzione)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # da limitare in prod
+    allow_origins=["https://corretto.pro", "http://localhost:3000"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

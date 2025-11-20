@@ -99,7 +99,26 @@ def create_session(service_id: str) -> QuizSession:
 
 
 def get_session(session_id: str) -> Optional[QuizSession]:
-    return _SESSIONS.get(session_id)
+    if session_id is None:
+        return None
+
+    key = str(session_id)
+    key = key.strip().strip('"').strip("'")
+
+    sess = _SESSIONS.get(key)
+    if sess:
+        return sess
+
+    key_no_dash = key.replace('-', '')
+    for k, v in _SESSIONS.items():
+        if k.replace('-', '') == key_no_dash:
+            return v
+
+    matches = [v for k, v in _SESSIONS.items() if key in k or k in key]
+    if matches:
+        return matches[0]
+
+    return None
 
 
 def delete_session(session_id: str) -> None:

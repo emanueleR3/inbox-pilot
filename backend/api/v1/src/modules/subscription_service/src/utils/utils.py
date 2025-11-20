@@ -1,14 +1,15 @@
 from fastapi import HTTPException
 import httpx
 import json
+import os
 
-BASE_URL = "https://api.corretto.pro:8010/internal-quiz"
+BASE_URL = os.getenv("AUTOMATION_API_URL")
 
 
 async def forward_post(endpoint: str, payload: dict):
     async with httpx.AsyncClient(timeout=None) as client:
         try:
-            res = await client.post(f"{BASE_URL}{endpoint}", json=payload)
+            res = await client.post(f"{BASE_URL}internal-quiz{endpoint}", json=payload)
             res.raise_for_status()
             return res.json()
         except httpx.HTTPStatusError as e:
@@ -25,7 +26,7 @@ async def forward_post(endpoint: str, payload: dict):
 async def forward_get(endpoint: str):
     async with httpx.AsyncClient(timeout=None) as client:
         try:
-            res = await client.get(f"{BASE_URL}{endpoint}")
+            res = await client.get(f"{BASE_URL}internal-quiz{endpoint}")
             res.raise_for_status()
             return res.json()
         except httpx.HTTPStatusError as e:
