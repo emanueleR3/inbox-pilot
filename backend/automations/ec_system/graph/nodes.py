@@ -2157,7 +2157,19 @@ def scheduler_node(state):
             return state
         
         # Determine if we need to propose slots or book directly
-        propose_slots = appointment_date is None
+        propose_slots = False
+        if appointment_date is None:
+            propose_slots = True
+        else:
+            try:
+                if isinstance(appointment_date, str) and 'T' in appointment_date:
+                    time_part = appointment_date.split('T', 1)[1]
+                    hh_mm = ':'.join(time_part.split(':')[:2])  # "hh:mm"
+                    propose_slots = (hh_mm == "00:00")
+                else:
+                    propose_slots = False
+            except Exception:
+                propose_slots = False
         
         print(f"📋 [SCHEDULER] Scheduling parameters:")
         print(f"   🔒 Language: {language}")
