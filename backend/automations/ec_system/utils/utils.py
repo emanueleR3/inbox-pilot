@@ -374,7 +374,14 @@ def create_google_calendar_event(token: str, title: str, start_time: datetime, e
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
-    # Date/time passed is already in local time - don't specify timeZone to avoid conversion
+    
+    # Ensure datetime has timezone info - if not, assume UTC
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+    
+    # Google expects RFC3339 format with timezone
     body = {
         "summary": title,
         "start": {
@@ -399,7 +406,14 @@ def create_microsoft_calendar_event(token: str, title: str, start_time: datetime
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
-    # Date/time passed is already in local time - don't specify timeZone to avoid conversion
+    
+    # Ensure datetime has timezone info - if not, assume UTC
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+    
+    # Microsoft expects ISO8601 format with timezone
     body = {
         "subject": title,
         "start": {
