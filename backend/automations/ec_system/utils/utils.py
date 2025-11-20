@@ -374,15 +374,14 @@ def create_google_calendar_event(token: str, title: str, start_time: datetime, e
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
+    # Date/time passed is already in local time - don't specify timeZone to avoid conversion
     body = {
         "summary": title,
         "start": {
-            "dateTime": start_time.isoformat(),
-            "timeZone": "UTC"
+            "dateTime": start_time.isoformat()
         },
         "end": {
-            "dateTime": end_time.isoformat(),
-            "timeZone": "UTC"
+            "dateTime": end_time.isoformat()
         }
     }
     
@@ -400,15 +399,14 @@ def create_microsoft_calendar_event(token: str, title: str, start_time: datetime
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
+    # Date/time passed is already in local time - don't specify timeZone to avoid conversion
     body = {
         "subject": title,
         "start": {
-            "dateTime": start_time.isoformat(),
-            "timeZone": "UTC"
+            "dateTime": start_time.isoformat()
         },
         "end": {
-            "dateTime": end_time.isoformat(),
-            "timeZone": "UTC"
+            "dateTime": end_time.isoformat()
         }
     }
     
