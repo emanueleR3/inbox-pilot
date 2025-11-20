@@ -1081,18 +1081,7 @@ class LLMClient:
         favorite_day: Optional[str] = None, 
         not_available_dates: Optional[list] = None
     ) -> list:
-        """
-        Tool function to propose new appointment slots.
-        
-        Args:
-            service_id: Service ID from subscription_services
-            favorite_day: Preferred day in format YYYY-MM-DD or None
-            not_available_dates: Array of rejected dates in format YYYY-MM-DD
-            
-        Returns:
-            Array of proposed date strings in ISO format (first 3 slots)
-        """
-        print(f"🛠️ [TOOL] propose_new_slots called: favorite_day={favorite_day}, not_available={not_available_dates}")
+        print(f"\n🛠️ [TOOL] propose_new_slots called: favorite_day={favorite_day}, not_available={not_available_dates}")
         
         supabase = get_supabase_client()
         
@@ -1102,7 +1091,7 @@ class LLMClient:
         ).eq("service_id", service_id).execute()
         
         if not response_sub_ser.data:
-            print("No subscription service data found.")
+            print("❌ No subscription service data found.")
             return []
         
         data = response_sub_ser.data[0]
@@ -1110,57 +1099,65 @@ class LLMClient:
         hashed_access_token = data.get("hashed_access_token")
         subscription_id = data.get("subscription_id")
         
-        # Fetch subscription data for opening hours and working days
+        # Fetch subscription data
         response_sub = supabase.table("subscriptions").select(
             "opening_hrs, working_days, appointment_duration"
         ).eq("subscription_id", subscription_id).execute()
         
         if not response_sub.data:
-            print("No subscription data found.")
+            print("❌ No subscription data found.")
             return []
         
         opening_hrs = response_sub.data[0].get("opening_hrs")
         working_days = response_sub.data[0].get("working_days")
-        appointment_duration = response_sub.data[0].get("appointment_duration")  # in minutes
+        appointment_duration = response_sub.data[0].get("appointment_duration")
         
         if not hashed_access_token:
-            print("No hashed access token found.")
+            print("❌ No hashed access token found.")
             return []
         
-        # Decrypt token
+        # Decrypt
         token = utils.decrypt(hashed_access_token, "token")
-        
         if not token:
-            print("Failed to decrypt token.")
+            print("❌ Failed to decrypt token.")
             return []
         
-        # Determine time range for slot search
+        # Time range
         now = datetime.now()
         start_time = now
-        end_time = now + timedelta(days=7)  # Look ahead 7 days by default
+        end_time = now + timedelta(days=7)
         
         if favorite_day:
             try:
                 fav_date = datetime.strptime(favorite_day, "%Y-%m-%d")
                 start_time = fav_date.replace(hour=0, minute=0, second=0, microsecond=0)
                 end_time = fav_date.replace(hour=23, minute=59, second=59, microsecond=0)
-                
                 if start_time < now:
                     start_time = now
             except ValueError:
-                print(f"Invalid favourite_day format: {favorite_day}")
-                pass
+                print(f"❌ Invalid favourite_day format: {favorite_day}")
         
-        # Get busy slots from calendar provider
-        busy_slots = []
-        
+        # Busy slots
         if calendar_provider == "google":
             busy_slots = utils.get_google_busy_slots(token, start_time, end_time)
         elif calendar_provider == "microsoft":
             busy_slots = utils.get_microsoft_busy_slots(token, start_time, end_time)
         else:
-            print(f"Unknown calendar provider: {calendar_provider}")
+            print(f"❌ Unknown calendar provider: {calendar_provider}")
             return []
+        
+        # DEBUG FULL STATE
+        print("\n====== DEBUG BEFORE calculate_free_slots() ======")
+        print(f"start_time: {start_time}")
+        print(f"end_time:   {end_time}")
+        print(f"opening_hrs: {opening_hrs}")
+        print(f"working_days: {working_days}")
+        print(f"appointment_duration: {appointment_duration}")
+        print(f"busy_slots: {len(busy_slots)}")
+        for i, (bs, be) in enumerate(busy_slots[:10]):
+            print(f"  busy[{i}] = {bs} -> {be}")
+        print(f"not_available_dates: {not_available_dates}")
+        print("=================================================\n")
         
         # Calculate free slots
         free_slots = utils.calculate_free_slots(
@@ -1173,8 +1170,9 @@ class LLMClient:
             not_available_dates
         )
         
-        print(f"✅ Found {len(free_slots)} free slots, returning first 3")
+        print(f"✅ Found {len(free_slots)} free slots.")
         return free_slots[:3]
+
     
     def _book_appointment_tool(
         self,

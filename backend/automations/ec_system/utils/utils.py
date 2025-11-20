@@ -112,6 +112,16 @@ def calculate_free_slots(
     not_available_dates: Optional[List[str]]
 ) -> List[str]:
     
+    print("\n====== DEBUG calculate_free_slots() START ======")
+    print(f"start_time: {start_time}")
+    print(f"end_time:   {end_time}")
+    print(f"opening_hrs: {opening_hrs}")
+    print(f"working_days: {working_days}")
+    print(f"duration: {duration}")
+    print(f"busy_slots: {len(busy_slots)} items")
+    print(f"not_available_dates: {not_available_dates}")
+    print("================================================\n")
+
     free_slots = []
     current_time = start_time
     
@@ -121,88 +131,69 @@ def calculate_free_slots(
         open_h, open_m = map(int, open_str.split(":"))
         close_h, close_m = map(int, close_str.split(":"))
     except ValueError:
-        print(f"Invalid opening_hrs format: {opening_hrs}")
+        print(f"❌ Invalid opening_hrs format: {opening_hrs}")
         return []
 
     # Normalize not_available_dates
-    not_avail_set = set()
-    if not_available_dates:
-        for d in not_available_dates:
-            not_avail_set.add(d)
+    not_avail_set = set(not_available_dates or [])
 
     while current_time + timedelta(minutes=duration) <= end_time:
-        # Check if current day is a working day
-        # Python weekday: 0=Mon, 6=Sun. 
-        # Assuming working_days uses same convention.
+
+        print(f"\n[ITER] Checking: {current_time}")
+
+        # Not working day
         if current_time.weekday() not in working_days:
+            print(f"  ⛔ Skipped: not working day (weekday={current_time.weekday()})")
             current_time += timedelta(days=1)
             current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
             continue
-            
-        # Check if current date is in not_available_dates
-        if current_time.strftime("%Y-%m-%d") in not_avail_set:
-             current_time += timedelta(days=1)
-             current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
-             continue
-
-        # Check if within opening hours
-        slot_end = current_time + timedelta(minutes=duration)
         
+        # Day rejected
+        if current_time.strftime("%Y-%m-%d") in not_avail_set:
+            print(f"  ⛔ Skipped: date rejected ({current_time.strftime('%Y-%m-%d')})")
+            current_time += timedelta(days=1)
+            current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
+            continue
+        
+        # Opening hours
         day_open = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
         day_close = current_time.replace(hour=close_h, minute=close_m, second=0, microsecond=0)
-        
+        slot_end = current_time + timedelta(minutes=duration)
+
         if current_time < day_open:
+            print(f"  ⛔ Before opening: {day_open}")
             current_time = day_open
             continue
-            
+
         if slot_end > day_close:
+            print(f"  ⛔ After closing: slot ends {slot_end}, close={day_close}")
             current_time += timedelta(days=1)
             current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
             continue
-            
-        # Check overlap with busy slots
-        is_busy = False
-        for b_start, b_end in busy_slots:
-            # Check intersection
-            # Slot: [current_time, slot_end]
-            # Busy: [b_start, b_end]
-            # Overlap if start < b_end AND end > b_start
-            
-            # Ensure timezones match or are offset-naive. 
-            # busy_slots are likely offset-aware (UTC). current_time is likely offset-naive (local) or vice versa.
-            # Let's make current_time offset-aware if busy_slots are.
-            
-            # Simplification: Convert busy slots to naive if needed or vice versa.
-            # For now, let's assume we compare timestamps or ensure both are UTC.
-            # The prompt says "current timestamp", usually implies local or UTC.
-            # Let's handle timezone naivety by stripping tzinfo for comparison if one has it and other doesn't.
-            
-            b_start_naive = b_start.replace(tzinfo=None)
-            b_end_naive = b_end.replace(tzinfo=None)
-            current_time_naive = current_time.replace(tzinfo=None)
-            slot_end_naive = slot_end.replace(tzinfo=None)
 
-            if current_time_naive < b_end_naive and slot_end_naive > b_start_naive:
+        # Busy slot overlap
+        is_busy = False
+        for (b_start, b_end) in busy_slots:
+            if current_time.replace(tzinfo=None) < b_end.replace(tzinfo=None) and \
+               slot_end.replace(tzinfo=None) > b_start.replace(tzinfo=None):
+                print(f"  ⛔ Overlaps busy: {b_start} -> {b_end}")
                 is_busy = True
                 break
-        
+
         if not is_busy:
+            print(f"  ✅ FREE SLOT: {current_time.isoformat()}")
             free_slots.append(current_time.isoformat())
             if len(free_slots) >= 3:
+                print("=== RETURNING FIRST 3 FREE SLOTS ===")
                 return free_slots
-            # Move to next slot? Or just next candidate?
-            # Usually we want consecutive slots or spaced out?
-            # "propose the first 3 free slots" -> likely consecutive available is fine.
-            # Let's increment by duration or some step. 
-            # If I propose 10:00-10:30, next check 10:30-11:00?
             current_time += timedelta(minutes=duration)
         else:
-            # If busy, move past the busy slot? 
-            # Or just increment by small step (e.g. 15 mins)?
-            # Incrementing by 15 mins is safer to find gaps.
+            print("  ↪ Moving forward 15 minutes")
             current_time += timedelta(minutes=15)
-            
+
+    print("=== END — Returning free_slots ===")
     return free_slots
+
 
 def create_google_calendar_event(token: str, title: str, start_time: datetime, end_time: datetime) -> Optional[str]:
     url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
