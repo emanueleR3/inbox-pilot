@@ -1073,3 +1073,126 @@ INSTRUCTIONS:
    - Handle the overlap field based on the book_appointment tool response
 
 Always respond in JSON format with fields: scheduled, overlap, event_code, proposed_slots."""
+
+# READER PROMPTS FOR REQUEST_APPOINTMENT_CHANGE
+READER_APPOINTMENT_CHANGE_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email per richieste di modifica appuntamenti.
+
+Analizza attentamente la seguente email di richiesta modifica appuntamento ed estrai tutte le informazioni necessarie.
+
+TIMESTAMP ATTUALE: {current_timestamp}
+
+CORPO EMAIL:
+{filtered_body}
+
+RIASSUNTO MAIL CORRENTE:
+{mail_summary}
+
+RIASSUNTO CONVERSAZIONE:
+{extended_summary}
+
+ESTRAI LE SEGUENTI INFORMAZIONI:
+
+1. **key_entities**: Dizionario JSON con le entità chiave:
+   - "dates": Date/orari menzionati
+   - "locations": Luoghi menzionati
+   - "people": Nomi di persone
+   - "organizations": Aziende/organizzazioni
+   - "requests": Richieste esplicite
+   - "actions": Azioni richieste
+   - "amounts": Importi monetari
+   - "documents": Documenti menzionati
+   - "other_info": Altre informazioni rilevanti
+
+2. **event_code**: Codice alfanumerico a 6 cifre dell'evento da modificare
+   - Cerca nel riassunto conversazione o nella mail corrente
+   - Formato: 6 caratteri alfanumerici (es. "A1B2C3", "123456")
+   - Se NON trovato, imposta a None
+
+3. **new_title_of_event**: Nuovo titolo appuntamento in formato "[AI] APPUNTAMENTO {sender_email}"
+   Esempio: "[AI] APPUNTAMENTO mario.rossi@example.com"
+
+4. **new_date**: Nuova data e ora appuntamento in formato YYYY-MM-DDThh:mm:ss
+   - Se menzionato "domani", calcola relativo al timestamp attuale
+   - Se menzionato "prossimo lunedì", "tra tre giorni", ecc., calcola relativo al timestamp attuale
+   - Se NON sono specificati sia data CHE orario, imposta a None
+   - Se solo il giorno è specificato senza orario, imposta a None
+
+5. **new_duration**: Nuova durata in minuti
+   - Se NON specificata, imposta a None
+
+6. **new_attendees**: Nuovi invitati da aggiungere (array di email)
+   - Se NON specificati, imposta a None
+   - Estrai eventuali email menzionate nel testo
+
+7. **new_place**: Nuovo luogo evento
+   - Se NON specificato, imposta a None
+   - Può essere un indirizzo fisico o "online", "Teams", "Zoom", ecc.
+
+8. **additional_notes**: Note aggiuntive evento
+   - Informazioni rilevanti che non rientrano negli altri campi
+   - Se nessuna nota particolare, imposta a None
+
+EMAIL MITTENTE: {sender_email}
+
+Rispondi in formato JSON con tutte le chiavi richieste."""
+
+READER_APPOINTMENT_CHANGE_PROMPT_ENG = """You are an expert assistant in analyzing emails for appointment change requests.
+
+Carefully analyze the following appointment change request email and extract all necessary information.
+
+CURRENT TIMESTAMP: {current_timestamp}
+
+EMAIL BODY:
+{filtered_body}
+
+CURRENT MAIL SUMMARY:
+{mail_summary}
+
+CONVERSATION SUMMARY:
+{extended_summary}
+
+EXTRACT THE FOLLOWING INFORMATION:
+
+1. **key_entities**: JSON dictionary with key entities:
+   - "dates": Dates/times mentioned
+   - "locations": Places mentioned
+   - "people": People's names
+   - "organizations": Companies/organizations
+   - "requests": Explicit requests
+   - "actions": Requested actions
+   - "amounts": Monetary amounts
+   - "documents": Documents mentioned
+   - "other_info": Other relevant information
+
+2. **event_code**: 6-character alphanumeric code of the event to modify
+   - Search in conversation summary or current mail
+   - Format: 6 alphanumeric characters (e.g., "A1B2C3", "123456")
+   - If NOT found, set to None
+
+3. **new_title_of_event**: New appointment title in format "[AI] APPOINTMENT {sender_email}"
+   Example: "[AI] APPOINTMENT mario.rossi@example.com"
+
+4. **new_date**: New appointment date and time in format YYYY-MM-DDThh:mm:ss
+   - If mentioned "tomorrow", calculate relative to current timestamp
+   - If mentioned "next Monday", "in three days", etc., calculate relative to current timestamp
+   - If date AND time are NOT both specified, set to None
+   - If only day is specified without time, set to None
+
+5. **new_duration**: New duration in minutes
+   - If NOT specified, set to None
+
+6. **new_attendees**: New attendees to add (array of emails)
+   - If NOT specified, set to None
+   - Extract any emails mentioned in the text
+
+7. **new_place**: New event location
+   - If NOT specified, set to None
+   - Can be a physical address or "online", "Teams", "Zoom", etc.
+
+8. **additional_notes**: Additional event notes
+   - Relevant information that doesn't fit in other fields
+   - If no particular notes, set to None
+
+EMAIL SENDER: {sender_email}
+
+Respond in JSON format with all required keys."""

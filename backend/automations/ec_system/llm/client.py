@@ -30,6 +30,7 @@ from ..models.llm_responses import (
     OtherEvaluatorResponse,
     ReaderResponse,
     ReaderAppointmentResponse,
+    ReaderAppointmentChangeResponse,
     SchedulerResponse
 )
 from ..prompts.templates import (
@@ -64,6 +65,8 @@ from ..prompts.templates import (
     READER_PROMPT_ENG,
     READER_APPOINTMENT_PROMPT_ITA,
     READER_APPOINTMENT_PROMPT_ENG,
+    READER_APPOINTMENT_CHANGE_PROMPT_ITA,
+    READER_APPOINTMENT_CHANGE_PROMPT_ENG,
     SCHEDULER_PROMPT_ITA,
     SCHEDULER_PROMPT_ENG
 )
@@ -1307,6 +1310,102 @@ class LLMClient:
         
         return {"scheduled": True, "overlap": False, "event_code": event_code}
 
+    def read_appointment_change_request(
+            self,
+            filtered_body: str,
+            mail_summary: str,
+            extended_summary: str,
+            current_timestamp: str,
+            sender_email: str,
+            language: str = "ITA"
+        ) -> ReaderAppointmentChangeResponse:
+            """
+            Read and extract information from appointment change request email.
+            
+            Args:
+                filtered_body: Filtered email body
+                mail_summary: Summary of current email
+                extended_summary: Extended conversation summary
+                current_timestamp: Current timestamp in ISO format for relative date calculations
+                sender_email: Email address of the sender
+                language: Language for prompts (ITA or ENG)
+                
+            Returns:
+                ReaderAppointmentChangeResponse with appointment change details
+            """
+            try:
+                # Create output parser
+                parser = PydanticOutputParser(pydantic_object=ReaderAppointmentChangeResponse)
+                
+                # Select prompt based on language
+                prompt_text = READER_APPOINTMENT_CHANGE_PROMPT_ITA if language == "ITA" else READER_APPOINTMENT_CHANGE_PROMPT_ENG
+                
+                # Set default for extended_summary and mail_summary if empty
+                if not extended_summary:
+                    if language == "ITA":
+                        default_extended = "Nessun riassunto precedente."
+                    else:
+                        default_extended = "No previous summary."
+                    used_extended_summary = default_extended
+                else:
+                    used_extended_summary = extended_summary
+                
+                if not mail_summary:
+                    if language == "ITA":
+                        default_mail = "Nessun riassunto disponibile."
+                    else:
+                        default_mail = "No summary available."
+                    used_mail_summary = default_mail
+                else:
+                    used_mail_summary = mail_summary
+                
+                # Format prompt
+                prompt_text = prompt_text.format(
+                    current_timestamp=current_timestamp,
+                    filtered_body=filtered_body,
+                    mail_summary=used_mail_summary,
+                    extended_summary=used_extended_summary,
+                    sender_email=sender_email
+                )
+                
+                # Add format instructions
+                prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+                
+                # Create message
+                message = HumanMessage(content=prompt_with_format)
+                
+                # Get response from LLM
+                response = self.llm.invoke([message])
+                
+                # Parse response
+                parsed_response = parser.parse(response.content)
+                
+                print(f"📅 [LLM] Appointment change request analyzed ({language}): event_code={parsed_response.event_code}, new_date={parsed_response.new_date}")
+                return parsed_response
+                
+            except Exception as e:
+                print(f"❌ [LLM] Error in appointment change request reading: {e}")
+                # Return default response on error
+                return ReaderAppointmentChangeResponse(
+                    key_entities={
+                        "dates": [],
+                        "locations": [],
+                        "people": [],
+                        "organizations": [],
+                        "requests": [],
+                        "actions": [],
+                        "amounts": [],
+                        "documents": [],
+                        "other_info": []
+                    },
+                    event_code=None,
+                    new_title_of_event=f"[AI] APPUNTAMENTO {sender_email}",
+                    new_date=None,
+                    new_duration=None,
+                    new_attendees=None,
+                    new_place=None,
+                    additional_notes=None
+                )
 
 # Global LLM client instance
 llm_client = LLMClient()

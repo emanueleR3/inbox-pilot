@@ -227,6 +227,42 @@ class SchedulerResponse(BaseModel):
     )
 
 
+class ReaderAppointmentChangeResponse(BaseModel):
+    """Response model for Reader node analysis of REQUEST_APPOINTMENT_CHANGE subcategory."""
+    key_entities: dict = Field(
+        ...,
+        description="Entità chiave estratte dalla mail e allegati (date, informazioni, richieste, luoghi, ecc.)"
+    )
+    event_code: Optional[str] = Field(
+        None,
+        description="Codice alfanumerico a 6 cifre dell'evento da modificare, None se non trovato"
+    )
+    new_title_of_event: str = Field(
+        ...,
+        description="Nuovo titolo dell'appuntamento nella forma '[AI] APPUNTAMENTO + sender email'"
+    )
+    new_date: Optional[str] = Field(
+        None,
+        description="Nuova data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss, None se non specificato"
+    )
+    new_duration: Optional[int] = Field(
+        None,
+        description="Nuova durata dell'appuntamento in minuti, None se non specificato"
+    )
+    new_attendees: Optional[list] = Field(
+        None,
+        description="Nuovi invitati da aggiungere (array di email), None se non specificati"
+    )
+    new_place: Optional[str] = Field(
+        None,
+        description="Nuovo luogo dell'evento, None se non specificato"
+    )
+    additional_notes: Optional[str] = Field(
+        None,
+        description="Note aggiuntive sull'evento"
+    )
+
+
 # EVALUATOR SUBCATEGORY ENUMS
 class PromotionSubcategory(str, Enum):
     """Subcategories for PROMOTION emails."""
