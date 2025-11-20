@@ -1099,9 +1099,9 @@ class LLMClient:
         hashed_access_token = data.get("hashed_access_token")
         subscription_id = data.get("subscription_id")
         
-        # Fetch subscription data
+        # Fetch subscription data including timezone
         response_sub = supabase.table("subscriptions").select(
-            "opening_hrs, working_days, appointment_duration"
+            "opening_hrs, working_days, appointment_duration, timezone"
         ).eq("subscription_id", subscription_id).execute()
         
         if not response_sub.data:
@@ -1111,6 +1111,11 @@ class LLMClient:
         opening_hrs = response_sub.data[0].get("opening_hrs")
         working_days = response_sub.data[0].get("working_days")
         appointment_duration = response_sub.data[0].get("appointment_duration")
+        country = response_sub.data[0].get("timezone")  # Country name from DB
+        
+        # Get timezone from country
+        user_timezone = utils.get_timezone_from_country(country) if country else "Europe/Rome"
+        print(f"🌍 User timezone: {user_timezone} (from country: {country})")
         
         if not hashed_access_token:
             print("❌ No hashed access token found.")
@@ -1159,7 +1164,7 @@ class LLMClient:
         print(f"not_available_dates: {not_available_dates}")
         print("=================================================\n")
         
-        # Calculate free slots
+        # Calculate free slots with user's timezone
         free_slots = utils.calculate_free_slots(
             start_time,
             end_time,
@@ -1167,7 +1172,8 @@ class LLMClient:
             opening_hrs,
             working_days,
             appointment_duration,
-            not_available_dates
+            not_available_dates,
+            user_timezone=user_timezone
         )
         
         print(f"✅ Found {len(free_slots)} free slots.")

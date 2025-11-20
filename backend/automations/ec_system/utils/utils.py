@@ -3,9 +3,61 @@ import base64
 import hashlib
 from cryptography.fernet import Fernet
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import httpx
+from zoneinfo import ZoneInfo
+
+# Mapping of European countries to their timezones
+COUNTRY_TIMEZONE_MAP = {
+    "Italy": "Europe/Rome",
+    "United Kingdom": "Europe/London",
+    "Germany": "Europe/Berlin",
+    "France": "Europe/Paris",
+    "Spain": "Europe/Madrid",
+    "Portugal": "Europe/Lisbon",
+    "Netherlands": "Europe/Amsterdam",
+    "Belgium": "Europe/Brussels",
+    "Austria": "Europe/Vienna",
+    "Switzerland": "Europe/Zurich",
+    "Greece": "Europe/Athens",
+    "Poland": "Europe/Warsaw",
+    "Czech Republic": "Europe/Prague",
+    "Hungary": "Europe/Budapest",
+    "Romania": "Europe/Bucharest",
+    "Sweden": "Europe/Stockholm",
+    "Norway": "Europe/Oslo",
+    "Denmark": "Europe/Copenhagen",
+    "Finland": "Europe/Helsinki",
+    "Ireland": "Europe/Dublin",
+    "Croatia": "Europe/Zagreb",
+    "Bulgaria": "Europe/Sofia",
+    "Slovakia": "Europe/Bratislava",
+    "Slovenia": "Europe/Ljubljana",
+    "Lithuania": "Europe/Vilnius",
+    "Latvia": "Europe/Riga",
+    "Estonia": "Europe/Tallinn",
+    "Luxembourg": "Europe/Luxembourg",
+    "Malta": "Europe/Malta",
+    "Cyprus": "Asia/Nicosia",
+    "Iceland": "Atlantic/Reykjavik",
+}
+
+def get_timezone_from_country(country: str) -> str:
+    """
+    Get timezone string from country name.
+    
+    Args:
+        country: Country name (e.g., "Italy", "Germany")
+        
+    Returns:
+        Timezone string (e.g., "Europe/Rome"). Defaults to "Europe/Rome" if country not found.
+    """
+    timezone = COUNTRY_TIMEZONE_MAP.get(country)
+    if not timezone:
+        print(f"⚠️ Country '{country}' not found in timezone map, using default Europe/Rome")
+        return "Europe/Rome"
+    return timezone
 
 encryption_key_token = os.getenv("ENCRYPTION_KEY_TOKEN")
 encryption_key_pass = os.getenv("ENCRYPTION_KEY_PASS")
@@ -109,7 +161,8 @@ def calculate_free_slots(
     opening_hrs: str, 
     working_days: List[int], 
     duration: int,
-    not_available_dates: Optional[List[str]]
+    not_available_dates: Optional[List[str]],
+    user_timezone: str = "Europe/Rome"  # Default timezone for Italy
 ) -> List[str]:
     
     print("\n====== DEBUG calculate_free_slots() START ======")
@@ -120,9 +173,24 @@ def calculate_free_slots(
     print(f"duration: {duration}")
     print(f"busy_slots: {len(busy_slots)} items")
     print(f"not_available_dates: {not_available_dates}")
+    print(f"user_timezone: {user_timezone}")
     print("================================================\n")
 
     working_days = {int(d) for d in working_days}
+    
+    # Get user timezone
+    tz = ZoneInfo(user_timezone)
+    
+    # Convert start_time and end_time to user timezone if they are naive
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=tz)
+    else:
+        start_time = start_time.astimezone(tz)
+    
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=tz)
+    else:
+        end_time = end_time.astimezone(tz)
 
     free_slots = []
     current_time = start_time
@@ -173,12 +241,22 @@ def calculate_free_slots(
             current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
             continue
 
-        # Busy slot overlap
+        # Busy slot overlap - convert busy slots to user timezone for comparison
         is_busy = False
         for (b_start, b_end) in busy_slots:
-            if current_time.replace(tzinfo=None) < b_end.replace(tzinfo=None) and \
-               slot_end.replace(tzinfo=None) > b_start.replace(tzinfo=None):
-                print(f"  ⛔ Overlaps busy: {b_start} -> {b_end}")
+            # Convert busy slot times to user timezone
+            if b_start.tzinfo is not None:
+                b_start_local = b_start.astimezone(tz)
+            else:
+                b_start_local = b_start.replace(tzinfo=tz)
+            
+            if b_end.tzinfo is not None:
+                b_end_local = b_end.astimezone(tz)
+            else:
+                b_end_local = b_end.replace(tzinfo=tz)
+            
+            if current_time < b_end_local and slot_end > b_start_local:
+                print(f"  ⛔ Overlaps busy: {b_start_local} -> {b_end_local}")
                 is_busy = True
                 break
 
