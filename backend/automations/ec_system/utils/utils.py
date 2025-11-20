@@ -204,7 +204,6 @@ def calculate_free_slots(
             
     return free_slots
 
-
 def create_google_calendar_event(token: str, title: str, start_time: datetime, end_time: datetime) -> Optional[str]:
     url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
     headers = {
