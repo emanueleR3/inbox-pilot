@@ -354,8 +354,6 @@ def create_email_classification_graph():
         NodeNames.HANDLE_REQUEST_QUOTE,
         NodeNames.HANDLE_REQUEST_DOCUMENT,
         # momentaneamente anche questi + controllare ritorno del reader TODO
-        NodeNames.HANDLE_REQUEST_APPOINTMENT,
-        NodeNames.HANDLE_REQUEST_APPOINTMENT_CHANGE,
         NodeNames.HANDLE_CANCEL_APPOINTMENT
     ]
     
@@ -370,7 +368,9 @@ def create_email_classification_graph():
         NodeNames.HANDLE_RESPONSE_TO_REQUEST,
         NodeNames.HANDLE_EVENT_FOLLOWUP,
         NodeNames.HANDLE_GENERAL_GREETING,
-        NodeNames.HANDLE_GENERAL_INQUIRY
+        NodeNames.HANDLE_GENERAL_INQUIRY,
+        NodeNames.HANDLE_REQUEST_APPOINTMENT,
+        NodeNames.HANDLE_REQUEST_APPOINTMENT_CHANGE
     ]
     
     # These nodes always go to READER for analysis
@@ -749,7 +749,7 @@ def run_workflow(email_data: dict = None):
             return result["automation_executed"]
         
         # Check if high priority email was detected TODO provvisorio
-        if "high_priority_email" in result:
+        if "high_priority_email" in result and result["high_priority_email"]:
             print(f"🔥 [WORKFLOW] HIGH PRIORITY EMAIL DETECTED!")
             return result["high_priority_email"]
         
