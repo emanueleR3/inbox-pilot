@@ -1123,7 +1123,7 @@ class LLMClient:
         working_days = response_sub.data[0].get("working_days")
         appointment_duration = response_sub.data[0].get("appointament_duration")  # in minutes
         
-        if not hash ed_access_token:
+        if not hashed_access_token:
             print("No hashed access token found.")
             return []
         
