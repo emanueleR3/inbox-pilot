@@ -1098,7 +1098,7 @@ class LLMClient:
         
         # Fetch subscription service data
         response_sub_ser = supabase.table("subscription_services").select(
-            "subscription_id, calendar_provider, hash_token"
+            "subscription_id, calendar_provider, hashed_access_token"
         ).eq("service_id", service_id).execute()
         
         if not response_sub_ser.data:
@@ -1107,7 +1107,7 @@ class LLMClient:
         
         data = response_sub_ser.data[0]
         calendar_provider = data.get("calendar_provider")
-        hash_token = data.get("hash_token")
+        hashed_access_token = data.get("hashed_access_token")
         subscription_id = data.get("subscription_id")
         
         # Fetch subscription data for opening hours and working days
@@ -1123,12 +1123,12 @@ class LLMClient:
         working_days = response_sub.data[0].get("working_days")
         appointment_duration = response_sub.data[0].get("appointament_duration")  # in minutes
         
-        if not hash_token:
-            print("No hash token found.")
+        if not hash ed_access_token:
+            print("No hashed access token found.")
             return []
         
         # Decrypt token
-        token = utils.decrypt(hash_token, "token")
+        token = utils.decrypt(hashed_access_token, "token")
         
         if not token:
             print("Failed to decrypt token.")
@@ -1213,7 +1213,7 @@ class LLMClient:
         
         # Fetch subscription service data
         response_sub_ser = supabase.table("subscription_services").select(
-            "subscription_id, calendar_provider, hash_token"
+            "subscription_id, calendar_provider, hashed_access_token"
         ).eq("service_id", service_id).execute()
         
         if not response_sub_ser.data:
@@ -1222,15 +1222,15 @@ class LLMClient:
         
         data = response_sub_ser.data[0]
         calendar_provider = data.get("calendar_provider")
-        hash_token = data.get("hash_token")
+        hashed_access_token = data.get("hashed_access_token")
         subscription_id = data.get("subscription_id")
         
-        if not hash_token:
-            print("No hash token found.")
+        if not hashed_access_token:
+            print("No hashed access token found.")
             return {"scheduled": False, "overlap": False, "event_code": None}
         
         # Decrypt token
-        token = utils.decrypt(hash_token, "token")
+        token = utils.decrypt(hashed_access_token, "token")
         
         if not token:
             print("Failed to decrypt token.")
