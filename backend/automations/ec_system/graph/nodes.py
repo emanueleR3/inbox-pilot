@@ -2156,7 +2156,7 @@ def scheduler_node(state):
             state["appointment_proposed_slots"] = None
             return state
         
-        # Determine if we need to propose slots or book directly
+        # Determine if we need to propose slots or book directly TODO migliorare logica
         propose_slots = False
         if appointment_date is None:
             propose_slots = True

@@ -1288,7 +1288,6 @@ class LLMClient:
         
         # Prepare event data for database
         event_data = {
-            "subscription_id": subscription_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "title": title_of_event,
             "service_id": service_id,
