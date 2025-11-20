@@ -1083,49 +1083,27 @@ class LLMClient:
     ) -> list:
         print(f"\n🛠️ [TOOL] propose_new_slots called: favorite_day={favorite_day}, not_available={not_available_dates}")
         
-        supabase = get_supabase_client()
+        from db_client import get_calendar_service_data
         
-        # Fetch subscription service data
-        response_sub_ser = supabase.table("subscription_services").select(
-            "subscription_id, calendar_provider, hashed_access_token"
-        ).eq("service_id", service_id).execute()
-        
-        if not response_sub_ser.data:
-            print("❌ No subscription service data found.")
+        # Get calendar service data from DB
+        service_data = get_calendar_service_data(service_id)
+        if not service_data:
             return []
         
-        data = response_sub_ser.data[0]
-        calendar_provider = data.get("calendar_provider")
-        hashed_access_token = data.get("hashed_access_token")
-        subscription_id = data.get("subscription_id")
+        calendar_provider = service_data["calendar_provider"]
+        token = service_data["access_token"]
+        opening_hrs = service_data["opening_hrs"]
+        working_days = service_data["working_days"]
+        appointment_duration = service_data["appointment_duration"]
         
-        # Fetch subscription data including timezone
-        response_sub = supabase.table("subscriptions").select(
-            "opening_hrs, working_days, appointment_duration, timezone"
-        ).eq("subscription_id", subscription_id).execute()
-        
-        if not response_sub.data:
-            print("❌ No subscription data found.")
-            return []
-        
-        opening_hrs = response_sub.data[0].get("opening_hrs")
-        working_days = response_sub.data[0].get("working_days")
-        appointment_duration = response_sub.data[0].get("appointment_duration")
-        country = response_sub.data[0].get("timezone")  # Country name from DB
-        
-        # Get timezone from country
-        user_timezone = utils.get_timezone_from_country(country) if country else "Europe/Rome"
-        print(f"🌍 User timezone: {user_timezone} (from country: {country})")
-        
-        if not hashed_access_token:
-            print("❌ No hashed access token found.")
-            return []
-        
-        # Decrypt
-        token = utils.decrypt(hashed_access_token, "token")
-        if not token:
-            print("❌ Failed to decrypt token.")
-            return []
+        # Get timezone from calendar provider API
+        if calendar_provider == "google":
+            user_timezone = utils.get_google_calendar_timezone(token)
+        elif calendar_provider == "microsoft":
+            user_timezone = utils.get_microsoft_calendar_timezone(token)
+        else:
+            print(f"⚠️ Unknown calendar provider: {calendar_provider}, using default Europe/Rome")
+            user_timezone = "Europe/Rome"
         
         # Time range
         now = datetime.now()
@@ -1213,32 +1191,15 @@ class LLMClient:
         """
         print(f"🛠️ [TOOL] book_appointment called: title={title_of_event}, date={date}, duration={duration}")
         
-        supabase = get_supabase_client()
+        from db_client import get_calendar_service_data, insert_scheduled_event, check_event_code_exists
         
-        # Fetch subscription service data
-        response_sub_ser = supabase.table("subscription_services").select(
-            "subscription_id, calendar_provider, hashed_access_token"
-        ).eq("service_id", service_id).execute()
-        
-        if not response_sub_ser.data:
-            print("No subscription service data found.")
+        # Get calendar service data from DB
+        service_data = get_calendar_service_data(service_id)
+        if not service_data:
             return {"scheduled": False, "overlap": False, "event_code": None}
         
-        data = response_sub_ser.data[0]
-        calendar_provider = data.get("calendar_provider")
-        hashed_access_token = data.get("hashed_access_token")
-        subscription_id = data.get("subscription_id")
-        
-        if not hashed_access_token:
-            print("No hashed access token found.")
-            return {"scheduled": False, "overlap": False, "event_code": None}
-        
-        # Decrypt token
-        token = utils.decrypt(hashed_access_token, "token")
-        
-        if not token:
-            print("Failed to decrypt token.")
-            return {"scheduled": False, "overlap": False, "event_code": None}
+        calendar_provider = service_data["calendar_provider"]
+        token = service_data["access_token"]
         
         # Parse date and calculate end time
         try:
@@ -1277,8 +1238,7 @@ class LLMClient:
         # Generate unique event code
         while True:
             event_code = ''.join(random.choices(string.digits, k=6))
-            res = supabase.table("scheduled_events").select("event_code").eq("event_code", event_code).execute()
-            if not res.data:
+            if not check_event_code_exists(event_code):
                 break
         
         # Create event in external calendar
@@ -1304,14 +1264,10 @@ class LLMClient:
         }
         
         # Insert into scheduled_events table
-        try:
-            supabase.table("scheduled_events").insert(event_data).execute()
-            print(f"✅ Event created successfully with code: {event_code}")
-        except Exception as e:
-            print(f"Error inserting into DB: {e}")
+        if insert_scheduled_event(event_data):
+            return {"scheduled": True, "overlap": False, "event_code": event_code}
+        else:
             return {"scheduled": False, "overlap": False, "event_code": None}
-        
-        return {"scheduled": True, "overlap": False, "event_code": event_code}
 
     def read_appointment_change_request(
             self,
