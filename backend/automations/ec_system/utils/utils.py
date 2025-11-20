@@ -122,6 +122,8 @@ def calculate_free_slots(
     print(f"not_available_dates: {not_available_dates}")
     print("================================================\n")
 
+    working_days = {int(d) for d in working_days}
+
     free_slots = []
     current_time = start_time
     
