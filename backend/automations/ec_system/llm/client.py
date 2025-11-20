@@ -1201,10 +1201,25 @@ class LLMClient:
         calendar_provider = service_data["calendar_provider"]
         token = service_data["access_token"]
         
+        # Get user timezone from calendar API
+        if calendar_provider == "google":
+            user_timezone = utils.get_google_calendar_timezone(token)
+        elif calendar_provider == "microsoft":
+            user_timezone = utils.get_microsoft_calendar_timezone(token)
+        else:
+            user_timezone = "Europe/Rome"  # Default fallback
+        
         # Parse date and calculate end time
         try:
-            start_dt = datetime.fromisoformat(date)
-            end_dt = start_dt + timedelta(minutes=duration)
+            # Parse as naive datetime
+            start_dt_naive = datetime.fromisoformat(date)
+            end_dt_naive = start_dt_naive + timedelta(minutes=duration)
+            
+            # Localize to user's timezone (keeping the same local time)
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo(user_timezone)
+            start_dt = start_dt_naive.replace(tzinfo=tz)
+            end_dt = end_dt_naive.replace(tzinfo=tz)
         except ValueError:
             print(f"Invalid date format: {date}")
             return {"scheduled": False, "overlap": False, "event_code": None}
