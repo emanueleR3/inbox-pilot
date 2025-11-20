@@ -1050,7 +1050,7 @@ class LLMClient:
                             thread_id=thread_id,
                             attendees=appointment_info.get('attendees'),
                             place=appointment_info.get('place'),
-                            additional_notes=appointment_info.get('additional_notes')
+                            additional_notes=appointment_info.get('additional_notes') + "\n\nScheduled via Corretto AI Assistant." if appointment_info.get('additional_notes') else "Scheduled via Corretto AI Assistant."
                         )
                         scheduled = booking_result.get('scheduled', False)
                         overlap = booking_result.get('overlap', False)
