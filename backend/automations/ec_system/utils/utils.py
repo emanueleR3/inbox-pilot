@@ -3,7 +3,7 @@ import base64
 import hashlib
 from cryptography.fernet import Fernet
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 import httpx
 
@@ -36,7 +36,7 @@ def decrypt(value: str, cond: str) -> str:
     return cipher.decrypt(value.encode()).decode()
 
 def get_google_busy_slots(token: str, start_time: datetime, end_time: datetime) -> List[tuple]:
-    url = "https://www.googleapis.com/calendar/v3/freebusy"
+    url = "https://www.googleapis.com/calendar/v3/freeBusy"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
@@ -54,8 +54,8 @@ def get_google_busy_slots(token: str, start_time: datetime, end_time: datetime) 
         busy = data.get("calendars", {}).get("primary", {}).get("busy", [])
         slots = []
         for slot in busy:
-            start = datetime.datetime.fromisoformat(slot["start"].replace("Z", "+00:00"))
-            end = datetime.datetime.fromisoformat(slot["end"].replace("Z", "+00:00"))
+            start = datetime.fromisoformat(slot["start"].replace("Z", "+00:00"))
+            end = datetime.fromisoformat(slot["end"].replace("Z", "+00:00"))
             slots.append((start, end))
         return slots
     except Exception as e:
@@ -94,8 +94,8 @@ def get_microsoft_busy_slots(token: str, start_time: datetime, end_time: datetim
             items = schedule.get("scheduleItems", [])
             for item in items:
                 if item["status"] != "free":
-                    start = datetime.datetime.fromisoformat(item["start"]["dateTime"])
-                    end = datetime.datetime.fromisoformat(item["end"]["dateTime"])
+                    start = datetime.fromisoformat(item["start"]["dateTime"])
+                    end = datetime.fromisoformat(item["end"]["dateTime"])
                     slots.append((start, end))
         return slots
     except Exception as e:
@@ -130,23 +130,23 @@ def calculate_free_slots(
         for d in not_available_dates:
             not_avail_set.add(d)
 
-    while current_time + datetime.timedelta(minutes=duration) <= end_time:
+    while current_time + timedelta(minutes=duration) <= end_time:
         # Check if current day is a working day
         # Python weekday: 0=Mon, 6=Sun. 
         # Assuming working_days uses same convention.
         if current_time.weekday() not in working_days:
-            current_time += datetime.timedelta(days=1)
+            current_time += timedelta(days=1)
             current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
             continue
             
         # Check if current date is in not_available_dates
         if current_time.strftime("%Y-%m-%d") in not_avail_set:
-             current_time += datetime.timedelta(days=1)
+             current_time += timedelta(days=1)
              current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
              continue
 
         # Check if within opening hours
-        slot_end = current_time + datetime.timedelta(minutes=duration)
+        slot_end = current_time + timedelta(minutes=duration)
         
         day_open = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
         day_close = current_time.replace(hour=close_h, minute=close_m, second=0, microsecond=0)
@@ -156,7 +156,7 @@ def calculate_free_slots(
             continue
             
         if slot_end > day_close:
-            current_time += datetime.timedelta(days=1)
+            current_time += timedelta(days=1)
             current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
             continue
             
@@ -195,12 +195,12 @@ def calculate_free_slots(
             # "propose the first 3 free slots" -> likely consecutive available is fine.
             # Let's increment by duration or some step. 
             # If I propose 10:00-10:30, next check 10:30-11:00?
-            current_time += datetime.timedelta(minutes=duration)
+            current_time += timedelta(minutes=duration)
         else:
             # If busy, move past the busy slot? 
             # Or just increment by small step (e.g. 15 mins)?
             # Incrementing by 15 mins is safer to find gaps.
-            current_time += datetime.timedelta(minutes=15)
+            current_time += timedelta(minutes=15)
             
     return free_slots
 
