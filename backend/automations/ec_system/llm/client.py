@@ -1112,7 +1112,7 @@ class LLMClient:
         
         # Fetch subscription data for opening hours and working days
         response_sub = supabase.table("subscriptions").select(
-            "opening_hrs, working_days, appointament_duration"
+            "opening_hrs, working_days, appointment_duration"
         ).eq("subscription_id", subscription_id).execute()
         
         if not response_sub.data:
@@ -1121,7 +1121,7 @@ class LLMClient:
         
         opening_hrs = response_sub.data[0].get("opening_hrs")
         working_days = response_sub.data[0].get("working_days")
-        appointment_duration = response_sub.data[0].get("appointament_duration")  # in minutes
+        appointment_duration = response_sub.data[0].get("appointment_duration")  # in minutes
         
         if not hashed_access_token:
             print("No hashed access token found.")
