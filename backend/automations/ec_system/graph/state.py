@@ -40,6 +40,14 @@ class EmailState(TypedDict):
     appointment_overlap: Optional[bool]  # True if there's overlap with other events
     appointment_event_code: Optional[str]  # Event code if booked
     appointment_proposed_slots: Optional[List[str]]  # Proposed dates if booking not possible
+    # Appointment change fields (for REQUEST_APPOINTMENT_CHANGE subcategory)
+    change_event_code: Optional[str]  # Code of event to modify
+    change_new_title: Optional[str]  # New title for appointment
+    change_new_date: Optional[str]  # New date for appointment
+    change_new_duration: Optional[int]  # New duration in minutes
+    change_new_attendees: Optional[List[str]]  # New attendees to add
+    change_new_place: Optional[str]  # New location
+    change_additional_notes: Optional[str]  # Additional notes
 
 
 def create_initial_state() -> EmailState:
@@ -74,5 +82,12 @@ def create_initial_state() -> EmailState:
         "appointment_scheduled": None,
         "appointment_overlap": None,
         "appointment_event_code": None,
-        "appointment_proposed_slots": None
+        "appointment_proposed_slots": None,
+        "change_event_code": None,
+        "change_new_title": None,
+        "change_new_date": None,
+        "change_new_duration": None,
+        "change_new_attendees": None,
+        "change_new_place": None,
+        "change_additional_notes": None
     }

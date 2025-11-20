@@ -2035,6 +2035,49 @@ def reader_node(state):
             print(f"   📍 Place: {appointment_response.place}")
             print(f"   📝 Notes: {appointment_response.additional_notes}")
             
+        # Check if this is a REQUEST_APPOINTMENT_CHANGE email
+        elif subcategory == "REQUEST_APPOINTMENT_CHANGE":
+            print(f"🔄 [READER] Detected REQUEST_APPOINTMENT_CHANGE - using appointment change analysis")
+            
+            # Get additional data for appointment change analysis
+            from datetime import datetime
+            extended_summary = state.get("extended_summary", "")
+            mail_summary = state.get("mail_summary", "")
+            extracted_info = state.get("extracted_info", {})
+            sender_email = extracted_info.get("from", "mail not available")
+            current_timestamp = datetime.now().isoformat()
+            
+            # Analyze appointment change request using specialized LLM method
+            change_response = llm_client.read_appointment_change_request(
+                filtered_body,
+                mail_summary,
+                extended_summary,
+                current_timestamp,
+                sender_email,
+                language
+            )
+            
+            # Update state with appointment change details
+            state["key_entities"] = change_response.key_entities
+            state["change_event_code"] = change_response.event_code
+            state["change_new_title"] = change_response.new_title_of_event
+            state["change_new_date"] = change_response.new_date
+            state["change_new_duration"] = change_response.new_duration
+            state["change_new_attendees"] = change_response.new_attendees
+            state["change_new_place"] = change_response.new_place
+            state["change_additional_notes"] = change_response.additional_notes
+            # REQUEST_APPOINTMENT_CHANGE needs_response is not used
+            state["needs_response"] = None
+            
+            print(f"✅ [READER] Appointment change analysis completed successfully")
+            print(f"   🔑 Event code: {change_response.event_code}")
+            print(f"   📅 New title: {change_response.new_title_of_event}")
+            print(f"   🕐 New date: {change_response.new_date}")
+            print(f"   ⏱️ New duration: {change_response.new_duration} minutes")
+            print(f"   👥 New attendees: {change_response.new_attendees}")
+            print(f"   📍 New place: {change_response.new_place}")
+            print(f"   📝 Notes: {change_response.additional_notes}")
+            
         else:
             # Standard email analysis for non-appointment emails
             reader_response = llm_client.read_email(
