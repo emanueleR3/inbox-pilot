@@ -1092,8 +1092,7 @@ class LLMClient:
         
         calendar_provider = service_data["calendar_provider"]
         token = service_data["access_token"]
-        opening_hrs = service_data["opening_hrs"]
-        working_days = service_data["working_days"]
+        business_hours = service_data["business_hours"]
         appointment_duration = service_data["appointment_duration"]
         
         # Get timezone from calendar provider API
@@ -1133,8 +1132,7 @@ class LLMClient:
         print("\n====== DEBUG BEFORE calculate_free_slots() ======")
         print(f"start_time: {start_time}")
         print(f"end_time:   {end_time}")
-        print(f"opening_hrs: {opening_hrs}")
-        print(f"working_days: {working_days}")
+        print(f"business_hours: {business_hours}")
         print(f"appointment_duration: {appointment_duration}")
         print(f"busy_slots: {len(busy_slots)}")
         for i, (bs, be) in enumerate(busy_slots[:10]):
@@ -1147,8 +1145,7 @@ class LLMClient:
             start_time,
             end_time,
             busy_slots,
-            opening_hrs,
-            working_days,
+            business_hours,
             appointment_duration,
             not_available_dates,
             user_timezone=user_timezone

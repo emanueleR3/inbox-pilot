@@ -251,25 +251,40 @@ def calculate_free_slots(
     start_time: datetime, 
     end_time: datetime, 
     busy_slots: List[tuple], 
-    opening_hrs: str, 
-    working_days: List[int], 
+    business_hours: dict, 
     duration: int,
     not_available_dates: Optional[List[str]],
     user_timezone: str = "Europe/Rome"  # Default timezone for Italy
 ) -> List[str]:
+    """
+    Calculate free slots based on business hours.
+    
+    Args:
+        start_time: Start of search period
+        end_time: End of search period
+        busy_slots: List of (start, end) busy time tuples
+        business_hours: Dict with weekday as key (0=Monday, 6=Sunday) and list of time ranges as value
+                       Example: {"0": ["9:00-13:00", "15:00-18:00"], "1": ["9:00-13:00"]}
+        duration: Appointment duration in minutes
+        not_available_dates: List of dates to exclude (format: YYYY-MM-DD)
+        user_timezone: Timezone string (e.g., "Europe/Rome")
+        
+    Returns:
+        List of available time slots in ISO format
+    """
     
     print("\n====== DEBUG calculate_free_slots() START ======")
     print(f"start_time: {start_time}")
     print(f"end_time:   {end_time}")
-    print(f"opening_hrs: {opening_hrs}")
-    print(f"working_days: {working_days}")
+    print(f"business_hours: {business_hours}")
     print(f"duration: {duration}")
     print(f"busy_slots: {len(busy_slots)} items")
     print(f"not_available_dates: {not_available_dates}")
     print(f"user_timezone: {user_timezone}")
     print("================================================\n")
 
-    working_days = {int(d) for d in working_days}
+    # Convert business_hours keys to set of working weekdays
+    working_days = {int(day) for day in business_hours.keys()}
     
     # Get user timezone
     tz = ZoneInfo(user_timezone)
@@ -286,16 +301,38 @@ def calculate_free_slots(
         end_time = end_time.astimezone(tz)
 
     free_slots = []
+    
+    # Round to next slot boundary based on duration
+    # Slots must start at "round" times: for 60min -> start of hour, for 30min -> :00 or :30, for 15min -> :00, :15, :30, :45
     current_time = start_time
     
-    # Parse opening hours
-    try:
-        open_str, close_str = opening_hrs.split("-")
-        open_h, open_m = map(int, open_str.split(":"))
-        close_h, close_m = map(int, close_str.split(":"))
-    except ValueError:
-        print(f"❌ Invalid opening_hrs format: {opening_hrs}")
-        return []
+    # Calculate next round time based on duration
+    if duration >= 60:
+        # For 60+ minutes: round to next hour
+        if current_time.minute > 0 or current_time.second > 0 or current_time.microsecond > 0:
+            current_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    elif duration >= 30:
+        # For 30-59 minutes: round to next half hour (:00 or :30)
+        if current_time.minute < 30:
+            current_time = current_time.replace(minute=30, second=0, microsecond=0)
+        else:
+            current_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    elif duration >= 15:
+        # For 15-29 minutes: round to next quarter hour (:00, :15, :30, :45)
+        next_quarter = ((current_time.minute // 15) + 1) * 15
+        if next_quarter >= 60:
+            current_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        else:
+            current_time = current_time.replace(minute=next_quarter, second=0, microsecond=0)
+    else:
+        # For < 15 minutes: round to next 15 minutes
+        next_quarter = ((current_time.minute // 15) + 1) * 15
+        if next_quarter >= 60:
+            current_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        else:
+            current_time = current_time.replace(minute=next_quarter, second=0, microsecond=0)
+    
+    print(f"🔄 Rounded start_time to next slot boundary: {current_time}")
 
     # Normalize not_available_dates
     not_avail_set = set(not_available_dates or [])
@@ -303,36 +340,65 @@ def calculate_free_slots(
     while current_time + timedelta(minutes=duration) <= end_time:
 
         print(f"\n[ITER] Checking: {current_time}")
+        
+        weekday = current_time.weekday()
+        weekday_str = str(weekday)
 
         # Not working day
-        if current_time.weekday() not in working_days:
-            print(f"  ⛔ Skipped: not working day (weekday={current_time.weekday()})")
+        if weekday_str not in business_hours:
+            print(f"  ⛔ Skipped: not working day (weekday={weekday})")
             current_time += timedelta(days=1)
-            current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
+            current_time = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
             continue
         
         # Day rejected
         if current_time.strftime("%Y-%m-%d") in not_avail_set:
             print(f"  ⛔ Skipped: date rejected ({current_time.strftime('%Y-%m-%d')})")
             current_time += timedelta(days=1)
-            current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
+            current_time = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
             continue
         
-        # Opening hours
-        day_open = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
-        day_close = current_time.replace(hour=close_h, minute=close_m, second=0, microsecond=0)
+        # Get business hours for this weekday
+        day_hours = business_hours[weekday_str]  # e.g., ["9:00-13:00", "15:00-18:00"]
+        
+        # Check if current_time falls within any of the business hour ranges
         slot_end = current_time + timedelta(minutes=duration)
-
-        if current_time < day_open:
-            print(f"  ⛔ Before opening: {day_open}")
-            current_time = day_open
-            continue
-
-        if slot_end > day_close:
-            print(f"  ⛔ After closing: slot ends {slot_end}, close={day_close}")
-            current_time += timedelta(days=1)
-            current_time = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
-            continue
+        is_within_hours = False
+        next_opening = None
+        
+        for time_range in day_hours:
+            try:
+                open_str, close_str = time_range.split("-")
+                open_h, open_m = map(int, open_str.split(":"))
+                close_h, close_m = map(int, close_str.split(":"))
+                
+                range_open = current_time.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
+                range_close = current_time.replace(hour=close_h, minute=close_m, second=0, microsecond=0)
+                
+                # Check if slot fits within this range
+                if current_time >= range_open and slot_end <= range_close:
+                    is_within_hours = True
+                    break
+                
+                # Track next opening time if we're before it
+                if current_time < range_open and (next_opening is None or range_open < next_opening):
+                    next_opening = range_open
+                    
+            except ValueError:
+                print(f"  ⚠️ Invalid time range format: {time_range}")
+                continue
+        
+        # If not within any business hours, jump to next opening or next day
+        if not is_within_hours:
+            if next_opening and next_opening > current_time:
+                print(f"  ⛔ Outside business hours, jumping to next opening: {next_opening}")
+                current_time = next_opening
+                continue
+            else:
+                print(f"  ⛔ No more openings today, moving to next day")
+                current_time += timedelta(days=1)
+                current_time = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+                continue
 
         # Busy slot overlap - convert busy slots to user timezone for comparison
         is_busy = False
@@ -359,10 +425,30 @@ def calculate_free_slots(
             if len(free_slots) >= 3:
                 print("=== RETURNING FIRST 3 FREE SLOTS ===")
                 return free_slots
-            current_time += timedelta(minutes=duration)
+            
+            # Move to next slot boundary based on duration
+            if duration >= 60:
+                # For 60+ minutes: move to next hour
+                current_time += timedelta(hours=1)
+            elif duration >= 30:
+                # For 30-59 minutes: move to next half hour
+                current_time += timedelta(minutes=30)
+            elif duration >= 15:
+                # For 15-29 minutes: move to next quarter hour
+                current_time += timedelta(minutes=15)
+            else:
+                # For < 15 minutes: move to next 15 minutes
+                current_time += timedelta(minutes=15)
         else:
-            print("  ↪ Moving forward 15 minutes")
-            current_time += timedelta(minutes=15)
+            # Move forward by slot increment to check next boundary
+            if duration >= 60:
+                current_time += timedelta(hours=1)
+            elif duration >= 30:
+                current_time += timedelta(minutes=30)
+            elif duration >= 15:
+                current_time += timedelta(minutes=15)
+            else:
+                current_time += timedelta(minutes=15)
 
     print("=== END — Returning free_slots ===")
     return free_slots
