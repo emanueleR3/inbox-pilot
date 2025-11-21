@@ -172,6 +172,7 @@ jobs:
             ${{ steps.changes.outputs.listeners_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/listeners:latest' || 'echo "Skipping listeners pull - no changes"' }}
             ${{ steps.changes.outputs.refreshers_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/refreshers:latest' || 'echo "Skipping refreshers pull - no changes"' }}
             ${{ steps.changes.outputs.automations_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/automations:latest' || 'echo "Skipping automations pull - no changes"' }}
+            ${{ steps.changes.outputs.senders_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/senders:latest' || 'echo "Skipping senders pull - no changes"' }}
             
             docker image prune -a -f --filter "until=24h" || true
             docker compose -f /home/deploy/corretto/docker-compose.yml down || true
