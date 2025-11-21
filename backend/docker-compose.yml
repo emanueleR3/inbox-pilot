@@ -107,8 +107,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    volumes:
-      - ./senders:/app/credentials:ro
     ports:
       - "8020:8020"
     networks:

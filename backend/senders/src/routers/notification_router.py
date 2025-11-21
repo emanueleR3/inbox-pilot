@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from ..models import NotificationRequest, NotificationResponse
 from ..db_client import get_user_email_from_box_email
-from ..gmail_client import get_gmail_client
+from ..smtp_client import get_smtp_client
 from ..email_templates import get_email_template
 
 logger = logging.getLogger(__name__)
@@ -81,9 +81,9 @@ async def send_notification(notification: NotificationRequest):
             summary_attachment=notification.summary_attachment
         )
         
-        # Step 3: Send email via Gmail API
-        gmail_client = get_gmail_client()
-        email_sent = gmail_client.send_email(
+        # Step 3: Send email via SMTP
+        smtp_client = get_smtp_client()
+        email_sent = smtp_client.send_email(
             to_email=user_email,
             subject=email_subject,
             html_body=html_body
