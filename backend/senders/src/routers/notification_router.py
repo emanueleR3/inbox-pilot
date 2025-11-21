@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, status
 
 from ..models import NotificationRequest, NotificationResponse
 from ..db_client import get_user_email_from_box_email
+from ..gmail_client import get_gmail_client
+from ..email_templates import get_email_template
 
 logger = logging.getLogger(__name__)
 
@@ -67,22 +69,43 @@ async def send_notification(notification: NotificationRequest):
         
         print("="*80 + "\n")
         
-        # TODO: Implement actual email sending logic here
-        # Send email to: user_email
-        # This is where the notification email should be sent
-        # For now, we just log and return success
+        # Step 2: Generate email HTML template
+        email_subject = f"🔔 Corretto AI - {notification.notification_type.replace('_', ' ').title()}"
+        html_body = get_email_template(
+            notification_type=notification.notification_type,
+            sender_email=notification.sender_email,
+            subject=notification.subject,
+            body=notification.body,
+            timestamp=notification.timestamp,
+            overlap=notification.overlap,
+            summary_attachment=notification.summary_attachment
+        )
+        
+        # Step 3: Send email via Gmail API
+        gmail_client = get_gmail_client()
+        email_sent = gmail_client.send_email(
+            to_email=user_email,
+            subject=email_subject,
+            html_body=html_body
+        )
         
         # Generate a unique notification ID (for future tracking)
         notification_id = f"notif_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
         
-        logger.info(f"✅ Notification processed successfully - ID: {notification_id}")
-        logger.info(f"📧 Would send notification email to: {user_email}")
-        
-        return NotificationResponse(
-            success=True,
-            message="Notification received and queued for processing",
-            notification_id=notification_id
-        )
+        if email_sent:
+            logger.info(f"✅ Notification processed and email sent successfully - ID: {notification_id}")
+            return NotificationResponse(
+                success=True,
+                message=f"Notification email sent successfully to {user_email}",
+                notification_id=notification_id
+            )
+        else:
+            logger.warning(f"⚠️ Notification processed but email failed to send - ID: {notification_id}")
+            return NotificationResponse(
+                success=False,
+                message=f"Failed to send notification email to {user_email}",
+                notification_id=notification_id
+            )
         
     except Exception as e:
         logger.error(f"❌ Error processing notification: {str(e)}", exc_info=True)
