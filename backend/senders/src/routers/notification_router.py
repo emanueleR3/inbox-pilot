@@ -41,7 +41,7 @@ async def send_notification(notification: NotificationRequest):
         
         # Debug: Print the complete payload
         print("\n" + "="*80)
-        print("🔔 NOTIFICATION RECEIVED")
+        print("🔔 NOTIFICATION RECEIVED ")
         print("="*80)
         print(f"Type:              {notification.notification_type}")
         print(f"Sender Email:      {notification.sender_email}")
