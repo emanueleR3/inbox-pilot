@@ -101,9 +101,9 @@ services:
     depends_on:
       - notifications
 
-  notifications:
-    image: ghcr.io/correttoai/backend/notifications:latest
-    container_name: notifications
+  senders:
+    image: ghcr.io/correttoai/backend/senders:latest
+    container_name: senders
     restart: unless-stopped
     env_file:
       - .env

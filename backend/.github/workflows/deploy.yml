@@ -60,10 +60,10 @@ jobs:
             echo "automations_changed=false" >> $GITHUB_OUTPUT
           fi
           
-          if echo "$CHANGED_FILES" | grep -q "^notifications/"; then
-            echo "notifications_changed=true" >> $GITHUB_OUTPUT
+          if echo "$CHANGED_FILES" | grep -q "^senders/"; then
+            echo "senders_changed=true" >> $GITHUB_OUTPUT
           else
-            echo "notifications_changed=false" >> $GITHUB_OUTPUT
+            echo "senders_changed=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Log in to GitHub Container Registry
@@ -124,16 +124,16 @@ jobs:
           docker push ${AUTOMATIONS_IMAGE}:latest
           docker push ${AUTOMATIONS_IMAGE}:${SHA_TAG}
 
-      - name: Build and push Docker image (notifications)
-        if: steps.changes.outputs.notifications_changed == 'true'
+      - name: Build and push Docker image (senders)
+        if: steps.changes.outputs.senders_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           SHA_TAG=${{ github.sha }}
-          NOTIFICATIONS_IMAGE=ghcr.io/${REPO_LOWER}/notifications
-          docker build --no-cache -t ${NOTIFICATIONS_IMAGE}:latest -t ${NOTIFICATIONS_IMAGE}:${SHA_TAG} notifications
-          docker push ${NOTIFICATIONS_IMAGE}:latest
-          docker push ${NOTIFICATIONS_IMAGE}:${SHA_TAG}
+          SENDERS_IMAGE=ghcr.io/${REPO_LOWER}/senders
+          docker build --no-cache -t ${SENDERS_IMAGE}:latest -t ${SENDERS_IMAGE}:${SHA_TAG} senders
+          docker push ${SENDERS_IMAGE}:latest
+          docker push ${SENDERS_IMAGE}:${SHA_TAG}
 
       - name: Ensure remote directory exists
         uses: appleboy/ssh-action@v1.1.0

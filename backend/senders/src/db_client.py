@@ -1,6 +1,6 @@
 """
 Database client for Supabase operations.
-Handles queries for retrieving user information for notifications.
+Handles queries for retrieving user information for senders.
 """
 
 import os

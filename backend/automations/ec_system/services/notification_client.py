@@ -11,7 +11,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 # Get notifications service URL from environment or use default
-NOTIFICATIONS_URL = os.getenv("NOTIFICATIONS_URL", "http://notifications:8020")
+SENDERS_URL = os.getenv("SENDERS_URL", "http://senders:8020")
 
 
 class NotificationType:
@@ -19,6 +19,7 @@ class NotificationType:
     HIGH_PRIORITY = "HIGH_PRIORITY"
     LOW_CONFIDENCE_CLASSIFICATION = "LOW_CONFIDENCE_CLASSIFICATION"
     EVENT_INVITE_RECEIVED = "EVENT_INVITE_RECEIVED"
+    APPOINTMENT_NOT_SCHEDULED = "APPOINTMENT_NOT_SCHEDULED"
 
 
 def send_notification(
@@ -28,7 +29,8 @@ def send_notification(
     subject: str,
     body: str,
     summary_attachment: Optional[str] = None,
-    timestamp: Optional[str] = None
+    timestamp: Optional[str] = None,
+    overlap: Optional[bool] = None
 ) -> bool:
     """
     Send a notification to the notifications service.
@@ -41,6 +43,7 @@ def send_notification(
         body: Email body content
         summary_attachment: Summary of attachments if present
         timestamp: Timestamp with timezone (defaults to current time)
+        overlap: Whether appointment has overlap (for APPOINTMENT_NOT_SCHEDULED)
         
     Returns:
         bool: True if notification was sent successfully, False otherwise
@@ -61,13 +64,17 @@ def send_notification(
             "timestamp": timestamp
         }
         
-        # Send request to notifications service
-        endpoint = f"{NOTIFICATIONS_URL}/send-notification"
+        # Add overlap if provided (for APPOINTMENT_NOT_SCHEDULED)
+        if overlap is not None:
+            payload["overlap"] = overlap
+        
+        # Send request to senders service
+        endpoint = f"{SENDERS_URL}/notification/send"
         logger.info(f"📤 Sending notification to {endpoint} - Type: {notification_type}")
         
         response = requests.post(
             endpoint,
-            json=payload,
+            json=payload,   
             timeout=10,
             headers={"Content-Type": "application/json"}
         )
@@ -174,4 +181,37 @@ def send_event_invite_notification(
         subject=subject,
         body=body,
         summary_attachment=summary_attachment
+    )
+
+
+def send_appointment_not_scheduled_notification(
+    sender_email: str,
+    box_email: str,
+    subject: str,
+    body: str,
+    summary_attachment: Optional[str] = None,
+    overlap: Optional[bool] = None
+) -> bool:
+    """
+    Send an appointment not scheduled notification.
+    
+    Args:
+        sender_email: Email address of the sender
+        box_email: Email address of the mailbox
+        subject: Email subject
+        body: Email body content
+        summary_attachment: Summary of attachments if present
+        overlap: Whether there was an overlap with existing appointments
+        
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    return send_notification(
+        notification_type=NotificationType.APPOINTMENT_NOT_SCHEDULED,
+        sender_email=sender_email,
+        box_email=box_email,
+        subject=subject,
+        body=body,
+        summary_attachment=summary_attachment,
+        overlap=overlap
     )

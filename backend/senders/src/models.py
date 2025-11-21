@@ -12,6 +12,7 @@ class NotificationType(str, Enum):
     HIGH_PRIORITY = "HIGH_PRIORITY"
     LOW_CONFIDENCE_CLASSIFICATION = "LOW_CONFIDENCE_CLASSIFICATION"
     EVENT_INVITE_RECEIVED = "EVENT_INVITE_RECEIVED"
+    APPOINTMENT_NOT_SCHEDULED = "APPOINTMENT_NOT_SCHEDULED"
 
 
 class NotificationRequest(BaseModel):
@@ -23,6 +24,7 @@ class NotificationRequest(BaseModel):
     body: str = Field(..., description="Email body content")
     summary_attachment: Optional[str] = Field(None, description="Summary of attachments if present")
     timestamp: str = Field(..., description="Timestamp with timezone")
+    overlap: Optional[bool] = Field(None, description="Whether appointment has overlap (for APPOINTMENT_NOT_SCHEDULED)")
 
     class Config:
         json_schema_extra = {

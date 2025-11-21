@@ -608,6 +608,7 @@ def create_email_classification_graph():
             print(f"📅 [SCHEDULER] Tool book_appointment called - checking scheduled status")
             
             if scheduled:
+                # TODO dovrà rispondere con email di conferma
                 print(f"✅ [SCHEDULER] Appointment successfully scheduled - event_code: {event_code}")
                 automation_response = AutomationExecutedResponse(
                     message_id=message_id,
@@ -638,6 +639,34 @@ def create_email_classification_graph():
                     }
                 )
             else:
+                # Insert notification in database
+                box_email = extracted_info.get("box_email", "unknown")
+                try:
+                    from db_client import insert_notification_sync
+                    notification_success = insert_notification_sync(
+                        email=box_email,
+                        notification_type="APPOINTMENT_NOT_SCHEDULED_MAIL",
+                        message_id=message_id,
+                        text=None
+                    )
+                    
+                    if not notification_success:
+                        print(f"❌ [SCHEDULER] Failed to insert notification for {box_email}")
+                        
+                except Exception as e:
+                    print(f"❌ [SCHEDULER] Error inserting notification: {e}")
+                
+                # Send notification webhook for appointment not scheduled
+                from ..services.notification_client import send_appointment_not_scheduled_notification
+                send_appointment_not_scheduled_notification(
+                    sender_email=extracted_info.get("from", "unknown"),
+                    box_email=box_email,
+                    subject=extracted_info.get("subject", "No subject"),
+                    body=state.get("email_body", ""),
+                    summary_attachment=state.get("summary_attachments"),
+                    overlap=overlap
+                )
+                
                 print(f"⚠️ [SCHEDULER] Appointment not scheduled - overlap: {overlap}")
                 automation_response = AutomationExecutedResponse(
                     message_id=message_id,
