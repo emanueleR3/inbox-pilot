@@ -67,19 +67,17 @@ def get_service_config(email: str):
         print(f"❌ Error decrypting token: {e}")
         return None
 
-    # Query subscriptions table for opening_hrs, working_days, appointment_duration
-    opening_hrs = None
-    working_days = None
+    # Query subscriptions table for business_hours and appointment_duration
+    business_hours = None
     appointment_duration = None
     subscription_id = data.get("subscription_id")
     if subscription_id:
         sub_resp = supabase.table("subscriptions").select(
-            "opening_hrs, working_days, appointment_duration"
+            "business_hours, appointment_duration"
         ).eq("subscription_id", subscription_id).execute()
         if sub_resp.data:
             sub_data = sub_resp.data[0]
-            opening_hrs = sub_data.get("opening_hrs")
-            working_days = sub_data.get("working_days")
+            business_hours = sub_data.get("business_hours")
             appointment_duration = sub_data.get("appointment_duration")
 
     config = {
@@ -88,16 +86,14 @@ def get_service_config(email: str):
         "email": data.get("email"),
         "calendar_provider": data.get("calendar_provider"),
         "access_token": decrypted_token,
-        "opening_hrs": opening_hrs,
-        "working_days": working_days,
+        "business_hours": business_hours,
         "appointment_duration": appointment_duration
     }
 
     print(f"📋 Service Configuration:")
     print(f"   - service_id: {config['service_id']}")
     print(f"   - calendar_provider: {config['calendar_provider']}")
-    print(f"   - opening_hrs: {config['opening_hrs']}")
-    print(f"   - working_days: {config['working_days']}")
+    print(f"   - business_hours: {config['business_hours']}")
     print(f"   - appointment_duration: {config['appointment_duration']}")
 
     return config

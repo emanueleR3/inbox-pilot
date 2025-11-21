@@ -414,7 +414,7 @@ def get_calendar_service_data(service_id: str) -> Optional[Dict]:
         
         # Fetch subscription data
         response_sub = supabase.table("subscriptions").select(
-            "opening_hrs, working_days, appointment_duration"
+            "business_hours, appointment_duration"
         ).eq("subscription_id", subscription_id).execute()
         
         if not response_sub.data:
@@ -427,8 +427,7 @@ def get_calendar_service_data(service_id: str) -> Optional[Dict]:
             "subscription_id": subscription_id,
             "calendar_provider": calendar_provider,
             "access_token": access_token,
-            "opening_hrs": sub_data.get("opening_hrs"),
-            "working_days": sub_data.get("working_days"),
+            "business_hours": sub_data.get("business_hours"),
             "appointment_duration": sub_data.get("appointment_duration")
         }
         
