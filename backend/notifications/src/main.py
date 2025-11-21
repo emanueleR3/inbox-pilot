@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from .models import NotificationRequest, NotificationResponse, NotificationType
+from .db_client import get_user_email_from_box_email
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +48,14 @@ async def send_notification(notification: NotificationRequest):
     try:
         logger.info(f"📬 Received notification request - Type: {notification.notification_type}")
         
+        # Step 1: Retrieve user email from box_email
+        user_email = get_user_email_from_box_email(notification.box_email)
+        
+        if not user_email:
+            logger.warning(f"⚠️ Could not find user email for box_email: {notification.box_email}")
+            # Continue anyway for debugging purposes
+            user_email = "NOT_FOUND"
+        
         # Debug: Print the complete payload
         print("\n" + "="*80)
         print("🔔 NOTIFICATION RECEIVED")
@@ -54,6 +63,7 @@ async def send_notification(notification: NotificationRequest):
         print(f"Type:              {notification.notification_type}")
         print(f"Sender Email:      {notification.sender_email}")
         print(f"Box Email:         {notification.box_email}")
+        print(f"👤 USER TO NOTIFY: {user_email}")
         print(f"Subject:           {notification.subject}")
         print(f"Timestamp:         {notification.timestamp}")
         print(f"\nBody Preview:")
@@ -70,6 +80,7 @@ async def send_notification(notification: NotificationRequest):
         print("="*80 + "\n")
         
         # TODO: Implement actual email sending logic here
+        # Send email to: user_email
         # This is where the notification email should be sent
         # For now, we just log and return success
         
@@ -77,6 +88,7 @@ async def send_notification(notification: NotificationRequest):
         notification_id = f"notif_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
         
         logger.info(f"✅ Notification processed successfully - ID: {notification_id}")
+        logger.info(f"📧 Would send notification email to: {user_email}")
         
         return NotificationResponse(
             success=True,
