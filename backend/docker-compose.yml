@@ -99,7 +99,7 @@ services:
     networks:
       - broker_net
     depends_on:
-      - notifications
+      - senders
 
   senders:
     image: ghcr.io/correttoai/backend/senders:latest
