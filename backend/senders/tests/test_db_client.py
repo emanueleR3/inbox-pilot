@@ -3,12 +3,11 @@ Test for db_client: retrieve user email from box_email.
 """
 import os
 import sys
-import pytest
 
 # Ensure src is in path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from db_client import get_user_email_from_box_email
+from src.db_client import get_user_email_from_box_email
 
 def test_get_user_email_from_box_email():
     box_email = "INSERT_TEST_BOX_EMAIL_HERE"

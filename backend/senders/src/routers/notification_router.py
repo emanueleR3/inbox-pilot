@@ -1,40 +1,23 @@
 """
-Notifications Service - Main Application
-Handles notification webhooks from the automations service.
+Notification Router - Handles notification webhook endpoints.
 """
 
-import os
 import logging
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import JSONResponse
-import uvicorn
+from fastapi import APIRouter, HTTPException, status
 
-from .models import NotificationRequest, NotificationResponse, NotificationType
-from .db_client import get_user_email_from_box_email
+from ..models import NotificationRequest, NotificationResponse
+from ..db_client import get_user_email_from_box_email
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Notifications Service",
-    description="Webhook service for handling email notifications from automations",
-    version="1.0.0"
+router = APIRouter(
+    prefix="/notification",
+    tags=["notification"]
 )
 
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "notifications"}
-
-
-@app.post("/send-notification", response_model=NotificationResponse)
+@router.post("/send", response_model=NotificationResponse)
 async def send_notification(notification: NotificationRequest):
     """
     Webhook endpoint to receive notification requests from automations service.
@@ -66,6 +49,11 @@ async def send_notification(notification: NotificationRequest):
         print(f"👤 USER TO NOTIFY: {user_email}")
         print(f"Subject:           {notification.subject}")
         print(f"Timestamp:         {notification.timestamp}")
+        
+        # Print overlap if present (for APPOINTMENT_NOT_SCHEDULED)
+        if notification.overlap is not None:
+            print(f"Overlap:           {notification.overlap}")
+        
         print(f"\nBody Preview:")
         print("-" * 80)
         print(notification.body[:500] + "..." if len(notification.body) > 500 else notification.body)
@@ -102,37 +90,3 @@ async def send_notification(notification: NotificationRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process notification: {str(e)}"
         )
-
-
-@app.get("/")
-async def root():
-    """Root endpoint with service information."""
-    return {
-        "service": "Notifications Service",
-        "version": "1.0.0",
-        "status": "running",
-        "endpoints": {
-            "health": "/health",
-            "send_notification": "/send-notification"
-        }
-    }
-
-
-def main():
-    """Main entry point for the notifications service."""
-    port = int(os.getenv("NOTIFICATIONS_PORT", "8020"))
-    host = os.getenv("NOTIFICATIONS_HOST", "0.0.0.0")
-    
-    logger.info(f"🚀 Starting Notifications Service on {host}:{port}")
-    
-    uvicorn.run(
-        "src.main:app",
-        host=host,
-        port=port,
-        reload=False,
-        log_level="info"
-    )
-
-
-if __name__ == "__main__":
-    main()
