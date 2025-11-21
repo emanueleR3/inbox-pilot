@@ -1,0 +1,177 @@
+"""
+Notification client for sending notifications to the notifications service.
+"""
+
+import os
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+import requests
+
+logger = logging.getLogger(__name__)
+
+# Get notifications service URL from environment or use default
+NOTIFICATIONS_URL = os.getenv("NOTIFICATIONS_URL", "http://notifications:8020")
+
+
+class NotificationType:
+    """Types of notifications that can be sent."""
+    HIGH_PRIORITY = "HIGH_PRIORITY"
+    LOW_CONFIDENCE_CLASSIFICATION = "LOW_CONFIDENCE_CLASSIFICATION"
+    EVENT_INVITE_RECEIVED = "EVENT_INVITE_RECEIVED"
+
+
+def send_notification(
+    notification_type: str,
+    sender_email: str,
+    box_email: str,
+    subject: str,
+    body: str,
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
+) -> bool:
+    """
+    Send a notification to the notifications service.
+    
+    Args:
+        notification_type: Type of notification (HIGH_PRIORITY, LOW_CONFIDENCE_CLASSIFICATION, EVENT_INVITE_RECEIVED)
+        sender_email: Email address of the sender
+        box_email: Email address of the mailbox
+        subject: Email subject
+        body: Email body content
+        summary_attachment: Summary of attachments if present
+        timestamp: Timestamp with timezone (defaults to current time)
+        
+    Returns:
+        bool: True if notification was sent successfully, False otherwise
+    """
+    try:
+        # Generate timestamp if not provided
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc).isoformat()
+        
+        # Prepare payload
+        payload = {
+            "notification_type": notification_type,
+            "sender_email": sender_email,
+            "box_email": box_email,
+            "subject": subject,
+            "body": body,
+            "summary_attachment": summary_attachment,
+            "timestamp": timestamp
+        }
+        
+        # Send request to notifications service
+        endpoint = f"{NOTIFICATIONS_URL}/send-notification"
+        logger.info(f"📤 Sending notification to {endpoint} - Type: {notification_type}")
+        
+        response = requests.post(
+            endpoint,
+            json=payload,
+            timeout=10,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        response.raise_for_status()
+        
+        result = response.json()
+        logger.info(f"✅ Notification sent successfully - ID: {result.get('notification_id')}")
+        return True
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"❌ Failed to send notification: {str(e)}")
+        # Don't raise exception - notifications failing shouldn't break the workflow
+        return False
+    except Exception as e:
+        logger.error(f"❌ Unexpected error sending notification: {str(e)}")
+        return False
+
+
+def send_high_priority_notification(
+    sender_email: str,
+    box_email: str,
+    subject: str,
+    body: str,
+    summary_attachment: Optional[str] = None
+) -> bool:
+    """
+    Send a high priority notification.
+    
+    Args:
+        sender_email: Email address of the sender
+        box_email: Email address of the mailbox
+        subject: Email subject
+        body: Email body content
+        summary_attachment: Summary of attachments if present
+        
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    return send_notification(
+        notification_type=NotificationType.HIGH_PRIORITY,
+        sender_email=sender_email,
+        box_email=box_email,
+        subject=subject,
+        body=body,
+        summary_attachment=summary_attachment
+    )
+
+
+def send_low_confidence_notification(
+    sender_email: str,
+    box_email: str,
+    subject: str,
+    body: str,
+    summary_attachment: Optional[str] = None
+) -> bool:
+    """
+    Send a low confidence classification notification.
+    
+    Args:
+        sender_email: Email address of the sender
+        box_email: Email address of the mailbox
+        subject: Email subject
+        body: Email body content
+        summary_attachment: Summary of attachments if present
+        
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    return send_notification(
+        notification_type=NotificationType.LOW_CONFIDENCE_CLASSIFICATION,
+        sender_email=sender_email,
+        box_email=box_email,
+        subject=subject,
+        body=body,
+        summary_attachment=summary_attachment
+    )
+
+
+def send_event_invite_notification(
+    sender_email: str,
+    box_email: str,
+    subject: str,
+    body: str,
+    summary_attachment: Optional[str] = None
+) -> bool:
+    """
+    Send an event invite received notification.
+    
+    Args:
+        sender_email: Email address of the sender
+        box_email: Email address of the mailbox
+        subject: Email subject
+        body: Email body content
+        summary_attachment: Summary of attachments if present
+        
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    return send_notification(
+        notification_type=NotificationType.EVENT_INVITE_RECEIVED,
+        sender_email=sender_email,
+        box_email=box_email,
+        subject=subject,
+        body=body,
+        summary_attachment=summary_attachment
+    )

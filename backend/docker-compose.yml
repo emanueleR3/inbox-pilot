@@ -98,6 +98,19 @@ services:
       - "8010:8010"
     networks:
       - broker_net
+    depends_on:
+      - notifications
+
+  notifications:
+    image: ghcr.io/correttoai/backend/notifications:latest
+    container_name: notifications
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8020:8020"
+    networks:
+      - broker_net
 
 volumes:
   rabbitmq_data:

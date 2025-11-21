@@ -17,6 +17,8 @@ from db_client import get_user_configuration_sync, get_default_configuration, in
 
 # Import attachment extractor service
 from ..services.attachment_extractor import attachment_extractor
+# Import notification client
+from ..services.notification_client import send_low_confidence_notification, send_high_priority_notification, send_event_invite_notification
 """ from .utils import (
     get_email_body,
     get_attachments,
@@ -395,6 +397,35 @@ def classifier_node(state):
             print(f"   🎯 Threshold: {confidence_threshold} (FAILED)")
             print(f"   � Workflow terminated - human review required")
             
+            # Get extracted info for notifications
+            extracted_info = state.get("extracted_info", {})
+            message_id = extracted_info.get("message_id", "unknown")
+            box_email = extracted_info.get("box_email", "unknown")
+            
+            # Insert notification in database
+            try:
+                notification_success = insert_notification_sync(
+                    email=box_email,
+                    notification_type="LOW_CONFIDENCE_CLASSIFICATION_MAIL",
+                    message_id=message_id,
+                    text=None
+                )
+                
+                if not notification_success:
+                    print(f"❌ [CLASSIFIER] Failed to insert notification for {box_email}")
+                    
+            except Exception as e:
+                print(f"❌ [CLASSIFIER] Error inserting notification: {e}")
+            
+            # Send notification webhook for low confidence classification
+            send_low_confidence_notification(
+                sender_email=extracted_info.get("from", "unknown"),
+                box_email=box_email,
+                subject=extracted_info.get("subject", "No subject"),
+                body=state.get("email_body", ""),
+                summary_attachment=state.get("summary_attachments")
+            )
+            
             # Return low confidence classification for workflow termination
             return LowConfidenceClassification(
                 message_id=message_id,
@@ -751,6 +782,36 @@ def priority_controller_node(state):
         if priority_score >= priority_threshold:
             print(f"🚨 [PRIORITY_CONTROLLER] HIGH PRIORITY EMAIL - Ending workflow immediately")
             print(f"   ⚡ Score {priority_score} >= Threshold {priority_threshold}")
+            
+            # Get extracted info for notifications
+            extracted_info = state.get("extracted_info", {})
+            message_id = extracted_info.get("message_id", "unknown")
+            box_email = extracted_info.get("box_email", "unknown")
+            
+            # Insert notification in database
+            try:
+                notification_success = insert_notification_sync(
+                    email=box_email,
+                    notification_type="HIGH_PRIORITY_MAIL",
+                    message_id=message_id,
+                    text=None
+                )
+                
+                if not notification_success:
+                    print(f"❌ [PRIORITY_CONTROLLER] Failed to insert notification for {box_email}")
+                    
+            except Exception as e:
+                print(f"❌ [PRIORITY_CONTROLLER] Error inserting notification: {e}")
+            
+            # Send notification webhook for high priority email
+            send_high_priority_notification(
+                sender_email=extracted_info.get("from", "unknown"),
+                box_email=box_email,
+                subject=extracted_info.get("subject", "No subject"),
+                body=state.get("email_body", ""),
+                summary_attachment=state.get("summary_attachments")
+            )
+            
             # Mark for high priority handling
             state["high_priority_email"] = True
             state["workflow_decision"] = "END_HIGH_PRIORITY"
@@ -905,7 +966,46 @@ def handle_event_invite_node(state):
             }
         )
     else:
-        # TODO: chiamare webhook notification
+        # Get message details for notification
+        message_id = extracted_info.get("message_id")
+        thread_id = extracted_info.get("thread_id")
+        box_email = extracted_info.get("box_email", "unknown")
+        subcategory = state.get("subcategory")
+        mail_summary = state.get("mail_summary", "")
+        summary_attachments = state.get("summary_attachments", "")
+        
+        # Create extended summary
+        extended_parts = []
+        if mail_summary:
+            extended_parts.append(f"Contenuto email: {mail_summary}")
+        if summary_attachments:
+            extended_parts.append(f"Allegati: {summary_attachments}")
+        
+        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
+        
+        # Insert notification in database
+        try:
+            notification_success = insert_notification_sync(
+                email=box_email,
+                notification_type="EVENT_INVITE_MAIL",
+                message_id=message_id,
+                text=None
+            )
+            
+            if not notification_success:
+                print(f"❌ [EVENT_INVITE] Failed to insert notification for {box_email}")
+                
+        except Exception as e:
+            print(f"❌ [EVENT_INVITE] Error inserting notification: {e}")
+        
+        # Send notification webhook for event invite requiring human response
+        send_event_invite_notification(
+            sender_email=extracted_info.get("from", "unknown"),
+            box_email=box_email,
+            subject=extracted_info.get("subject", "No subject"),
+            body=state.get("email_body", ""),
+            summary_attachment=state.get("summary_attachments")
+        )
 
         return AutomationExecutedResponse(
             message_id=message_id,

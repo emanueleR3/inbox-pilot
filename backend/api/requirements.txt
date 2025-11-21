@@ -51,7 +51,7 @@ google-auth-httplib2==0.2.0
 google-api-python-client==2.121.0
 flask==3.0.0
 flask-cors==4.0.0
-python-dotenv==1.0.0
+python-dotenv==1.2.1
 redis==5.0.7
 supabase-auth==2.20.0
 
