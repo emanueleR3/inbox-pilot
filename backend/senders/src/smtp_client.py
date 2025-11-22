@@ -72,10 +72,18 @@ class SMTPClient:
             logger.info(f"📤 Sending email to {to_email} via SMTP...")
             logger.debug(f"🔧 Using SMTP server: {self.smtp_server}:{self.smtp_port}")
             
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()  # Secure the connection
-                server.login(self.sender_email, self.sender_password)
-                server.send_message(message)
+            # Port 465 requires SSL, port 587 requires STARTTLS
+            if self.smtp_port == 465:
+                # Use SMTP_SSL for port 465
+                with smtplib.SMTP_SSL(self.smtp_server, self.smtp_port) as server:
+                    server.login(self.sender_email, self.sender_password)
+                    server.send_message(message)
+            else:
+                # Use SMTP with STARTTLS for port 587
+                with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                    server.starttls()  # Upgrade to secure connection
+                    server.login(self.sender_email, self.sender_password)
+                    server.send_message(message)
             
             logger.info(f"✅ Email sent successfully to {to_email}")
             return True
