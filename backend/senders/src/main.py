@@ -7,6 +7,9 @@ import os
 import logging
 from fastapi import FastAPI
 import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from .routers import notification_router
 
