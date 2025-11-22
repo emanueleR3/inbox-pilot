@@ -20,6 +20,7 @@ class NotificationType:
     LOW_CONFIDENCE_CLASSIFICATION = "LOW_CONFIDENCE_CLASSIFICATION"
     EVENT_INVITE_RECEIVED = "EVENT_INVITE_RECEIVED"
     APPOINTMENT_NOT_SCHEDULED = "APPOINTMENT_NOT_SCHEDULED"
+    EVENT_FOLLOWUP_RECEIVED = "EVENT_FOLLOWUP_RECEIVED"
 
 
 def send_notification(
@@ -93,6 +94,34 @@ def send_notification(
         logger.error(f"❌ Unexpected error sending notification: {str(e)}")
         return False
 
+def send_event_followup_notification(
+    sender_email: str,
+    box_email: str,
+    subject: str,
+    body: str,
+    summary_attachment: Optional[str] = None
+) -> bool:
+    """
+    Send an event follow-up notification.
+    
+    Args:
+        sender_email: Email address of the sender
+        box_email: Email address of the mailbox
+        subject: Email subject
+        body: Email body content
+        summary_attachment: Summary of attachments if present
+        
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    return send_notification(
+        notification_type=NotificationType.EVENT_FOLLOWUP_RECEIVED,
+        sender_email=sender_email,
+        box_email=box_email,
+        subject=subject,
+        body=body,
+        summary_attachment=summary_attachment
+    )
 
 def send_high_priority_notification(
     sender_email: str,

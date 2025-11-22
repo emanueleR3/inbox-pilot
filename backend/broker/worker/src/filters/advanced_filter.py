@@ -3,10 +3,13 @@ Advanced email filtering logic.
 Handles complex filtering rules that go beyond the basic pre-filtering done in listeners.
 """
 
+import os
 from datetime import datetime, timezone
 from typing import Optional, List
 from src.repositories.thread_repository import ThreadRepository
+from dotenv import load_dotenv
 
+load_dotenv()
 
 class AdvancedEmailFilter:
     """
@@ -16,6 +19,7 @@ class AdvancedEmailFilter:
     
     def __init__(self):
         self.thread_repo = ThreadRepository()
+        self.notification_sender_email = os.getenv("SMTP_SENDER_EMAIL", "contact@example.com")
     
     async def process_message(self, email_data: dict) -> Optional[dict]:
         """
@@ -28,6 +32,12 @@ class AdvancedEmailFilter:
             Processing result or None if message should be skipped
         """
         try:
+            # Filter out notification emails from our own system
+            sender_email = self._extract_email_address(email_data.get("from", ""))
+            if sender_email.lower() == self.notification_sender_email.lower():
+                print(f"🚫 [FILTER] Skipping notification email from system sender: {sender_email}")
+                return None
+            
             # Check for duplicate message_id first
             message_id = email_data.get("message_id")
             box_email = email_data.get("user_email")
@@ -87,7 +97,7 @@ class AdvancedEmailFilter:
                     else:
                         print(f"❌ [FILTER] Failed to handle reply")
                         return None
-            
+
             # TODO: Add more filters here
             # - Check for replies to existing threads
             # - Check for duplicates
