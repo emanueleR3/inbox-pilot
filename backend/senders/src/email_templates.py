@@ -452,6 +452,83 @@ def create_appointment_not_scheduled_email(
     
     return get_base_template(content, "APPOINTMENT_NOT_SCHEDULED")
 
+def create_event_followup_email(
+    sender_email: str,
+    subject: str,
+    body: str,
+    timestamp: str,
+    summary_attachment: Optional[str] = None
+) -> str:
+    """Create HTML email for event follow-up notifications."""
+    
+    attachment_html = ""
+    if summary_attachment:
+        attachment_html = f"""
+        <div style="margin-top: 20px; padding: 15px; background-color: #dbeafe; border-left: 4px solid #3b82f6; border-radius: 6px;">
+            <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 600; color: #1e40af;">
+                📎 Dettagli Follow-up
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #1e3a8a;">
+                {summary_attachment}
+            </p>
+        </div>
+        """
+    
+    content = f"""
+    <div style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+        <p style="margin: 0; font-size: 16px; font-weight: 700; color: #1e40af;">
+            🔄 Follow-up Evento Ricevuto
+        </p>
+    </div>
+    
+    <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+        Hai ricevuto un <strong>follow-up relativo a un evento</strong>. Rivedi i dettagli per ulteriori informazioni.
+    </p>
+    
+    <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DA</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{sender_email}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">OGGETTO</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827; font-weight: 600;">{subject}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DATA</p>
+                </td>
+                <td style="padding: 8px 0; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{timestamp}</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+    <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+            Dettagli Follow-up
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.8; white-space: pre-wrap;">
+            {body[:500]}{'...' if len(body) > 500 else ''}
+        </p>
+    </div>
+    {attachment_html}
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 13px; color: #6b7280; text-align: center;">
+            💡 <em>Accedi al tuo calendario per rivedere i dettagli dell'evento</em>
+        </p>
+    </div>
+    """
+    return get_base_template(content, "EVENT_FOLLOWUP_RECEIVED")
 
 def get_email_template(
     notification_type: str,
@@ -485,6 +562,8 @@ def get_email_template(
         return create_event_invite_email(sender_email, subject, body, timestamp, summary_attachment)
     elif notification_type == "APPOINTMENT_NOT_SCHEDULED":
         return create_appointment_not_scheduled_email(sender_email, subject, body, timestamp, overlap, summary_attachment)
+    elif notification_type == "EVENT_FOLLOWUP_RECEIVED":
+        return create_event_followup_email(sender_email, subject, body, timestamp, summary_attachment)
     else:
         # Fallback to low confidence template
         return create_low_confidence_email(sender_email, subject, body, timestamp, summary_attachment)

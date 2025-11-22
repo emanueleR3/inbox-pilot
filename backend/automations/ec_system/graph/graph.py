@@ -20,6 +20,8 @@ from langgraph.graph import StateGraph, END
 
 from .state import create_initial_state
 from .config import NodeNames
+from ..services.notification_client import send_event_followup_notification, send_appointment_not_scheduled_notification
+from db_client import insert_notification_sync
 from .nodes import (
     new_mail_node,
     config_loader_node,
@@ -431,7 +433,30 @@ def create_email_classification_graph():
             extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
             
             if needs_response:
-                # TODO: chiamare notification webhook
+                # Insert notification in database
+                box_email = extracted_info.get("box_email", "unknown")
+                try:
+                    notification_success = insert_notification_sync(
+                        email=box_email,
+                        notification_type="EVENT_FOLLOWUP_MAIL",
+                        message_id=message_id,
+                        text=None
+                    )
+                    
+                    if not notification_success:
+                        print(f"❌ [SCHEDULER] Failed to insert notification for {box_email}")
+                        
+                except Exception as e:
+                    print(f"❌ [SCHEDULER] Error inserting notification: {e}")
+
+                send_event_followup_notification(
+                    sender_email=extracted_info.get("from", "unknown"),
+                    box_email=state.get("box_email", "unknown"),
+                    subject=state.get("subject", ""),
+                    body=state.get("mail_body", ""),
+                    summary_attachment=summary_attachments
+                )
+
                 automation_response = AutomationExecutedResponse(
                     message_id=message_id,
                     thread_id=thread_id,
@@ -642,7 +667,6 @@ def create_email_classification_graph():
                 # Insert notification in database
                 box_email = extracted_info.get("box_email", "unknown")
                 try:
-                    from db_client import insert_notification_sync
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="APPOINTMENT_NOT_SCHEDULED_MAIL",
@@ -655,9 +679,8 @@ def create_email_classification_graph():
                         
                 except Exception as e:
                     print(f"❌ [SCHEDULER] Error inserting notification: {e}")
-                
+
                 # Send notification webhook for appointment not scheduled
-                from ..services.notification_client import send_appointment_not_scheduled_notification
                 send_appointment_not_scheduled_notification(
                     sender_email=extracted_info.get("from", "unknown"),
                     box_email=box_email,
@@ -783,7 +806,6 @@ def run_workflow(email_data: dict = None):
             print(f"✅ [WORKFLOW] AUTOMATION EXECUTED SUCCESSFULLY!")
             return result["automation_executed"]
         
-        # Check if high priority email was detected TODO provvisorio
         if "high_priority_email" in result and result["high_priority_email"]:
             print(f"🔥 [WORKFLOW] HIGH PRIORITY EMAIL DETECTED!")
             return result["high_priority_email"]
