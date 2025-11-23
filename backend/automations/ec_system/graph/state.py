@@ -48,6 +48,12 @@ class EmailState(TypedDict):
     change_new_attendees: Optional[List[str]]  # New attendees to add
     change_new_place: Optional[str]  # New location
     change_additional_notes: Optional[str]  # Additional notes
+    # Extract info and write email
+    guidelines: Optional[List[str, str]]  # Guidelines for writing the email
+    written_email_body: Optional[str]  # Body of the email to write
+    chunked_company_informations: Optional[dict]  # Filtered company information  TODO decidere se dict, list o string
+    correctness_score: Optional[float]  # Correctness score of the email
+    needs_review: Optional[bool]  # Flag indicating if email needs review
 
 
 def create_initial_state() -> EmailState:
@@ -89,5 +95,10 @@ def create_initial_state() -> EmailState:
         "change_new_duration": None,
         "change_new_attendees": None,
         "change_new_place": None,
-        "change_additional_notes": None
+        "change_additional_notes": None,
+        "guidelines": None,
+        "written_email_body": None,
+        "chunked_company_informations": None,
+        "correctness_score": None,
+        "needs_review": None
     }

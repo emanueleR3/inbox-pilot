@@ -44,6 +44,10 @@ class NodeNames:
     SCHEDULER = "scheduler"
     RESCHEDULER = "rescheduler"
     CANCELLATION = "cancellation"
+    EXTRACTOR_COMPANY_INFO = "extractor_company_info"
+    WRITER = "writer"
+    REVIEWER = "reviewer"
+    SENDER = "sender"
     
     # Subcategory-specific nodes
     HANDLE_OFFER_PROMOTION = "handle_offer_promotion"
