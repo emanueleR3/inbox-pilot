@@ -68,7 +68,9 @@ from ..prompts.templates import (
     READER_APPOINTMENT_CHANGE_PROMPT_ITA,
     READER_APPOINTMENT_CHANGE_PROMPT_ENG,
     SCHEDULER_PROMPT_ITA,
-    SCHEDULER_PROMPT_ENG
+    SCHEDULER_PROMPT_ENG,
+    RESCHEDULER_PROMPT_ITA,
+    RESCHEDULER_PROMPT_ENG
 )
 
 # Import utils and db_client for calendar operations
@@ -1007,10 +1009,16 @@ class LLMClient:
             ]
             
             # Format prompt
+            # If extended_summary is empty, this is the first email of the thread
+            if not extended_summary:
+                extended_summary_text = "Questa è la prima email del thread." if language == "ITA" else "This is the first email of the thread."
+            else:
+                extended_summary_text = extended_summary
+            
             prompt_formatted = prompt_text.format(
                 current_timestamp=current_timestamp,
                 mail_summary=mail_summary,
-                extended_summary=extended_summary or ("Nessun riassunto precedente." if language == "ITA" else "No previous summary."),
+                extended_summary=extended_summary_text,
                 propose_slots=propose_slots
             )
             
@@ -1074,6 +1082,275 @@ class LLMClient:
                 event_code=None,
                 proposed_slots=None
             )
+
+    def read_appointment_change_request(
+            self,
+            filtered_body: str,
+            mail_summary: str,
+            extended_summary: str,
+            current_timestamp: str,
+            sender_email: str,
+            language: str = "ITA"
+        ) -> ReaderAppointmentChangeResponse:
+            """
+            Read and extract information from appointment change request email.
+            
+            Args:
+                filtered_body: Filtered email body
+                mail_summary: Summary of current email
+                extended_summary: Extended conversation summary
+                current_timestamp: Current timestamp in ISO format for relative date calculations
+                sender_email: Email address of the sender
+                language: Language for prompts (ITA or ENG)
+                
+            Returns:
+                ReaderAppointmentChangeResponse with appointment change details
+            """
+            try:
+                # Create output parser
+                parser = PydanticOutputParser(pydantic_object=ReaderAppointmentChangeResponse)
+                
+                # Select prompt based on language
+                prompt_text = READER_APPOINTMENT_CHANGE_PROMPT_ITA if language == "ITA" else READER_APPOINTMENT_CHANGE_PROMPT_ENG
+                
+                # Set default for extended_summary and mail_summary if empty
+                if not extended_summary:
+                    if language == "ITA":
+                        default_extended = "Nessun riassunto precedente."
+                    else:
+                        default_extended = "No previous summary."
+                    used_extended_summary = default_extended
+                else:
+                    used_extended_summary = extended_summary
+                
+                if not mail_summary:
+                    if language == "ITA":
+                        default_mail = "Nessun riassunto disponibile."
+                    else:
+                        default_mail = "No summary available."
+                    used_mail_summary = default_mail
+                else:
+                    used_mail_summary = mail_summary
+                
+                # Format prompt
+                prompt_text = prompt_text.format(
+                    current_timestamp=current_timestamp,
+                    filtered_body=filtered_body,
+                    mail_summary=used_mail_summary,
+                    extended_summary=used_extended_summary,
+                    sender_email=sender_email
+                )
+                
+                # Add format instructions
+                prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+                
+                # Create message
+                message = HumanMessage(content=prompt_with_format)
+                
+                # Get response from LLM
+                response = self.llm.invoke([message])
+                
+                # Parse response
+                parsed_response = parser.parse(response.content)
+                
+                print(f"📅 [LLM] Appointment change request analyzed ({language}): event_code={parsed_response.event_code}, new_date={parsed_response.new_date}")
+                return parsed_response
+                
+            except Exception as e:
+                print(f"❌ [LLM] Error in appointment change request reading: {e}")
+                # Return default response on error
+                return ReaderAppointmentChangeResponse(
+                    key_entities={
+                        "dates": [],
+                        "locations": [],
+                        "people": [],
+                        "organizations": [],
+                        "requests": [],
+                        "actions": [],
+                        "amounts": [],
+                        "documents": [],
+                        "other_info": []
+                    },
+                    event_code=None,
+                    new_title_of_event=f"[AI] APPUNTAMENTO {sender_email}",
+                    new_date=None,
+                    new_duration=None,
+                    new_attendees=None,
+                    new_place=None,
+                    additional_notes=None
+                )
+
+    def reschedule_appointment(
+        self,
+        current_timestamp: str,
+        mail_summary: str,
+        extended_summary: str,
+        event_code: str,
+        propose_slots: bool,
+        appointment_info: dict,
+        service_id: str,
+        thread_id: Optional[str] = None,
+        language: str = "ITA"
+    ) -> SchedulerResponse:
+        """
+        Reschedule an appointment or propose new slots using LLM with tool functions.
+        
+        Args:
+            current_timestamp: Current timestamp in ISO format
+            mail_summary: Summary of current email
+            extended_summary: Extended conversation summary
+            event_code: Code of the event to reschedule
+            propose_slots: Whether to propose new slots (True) or reschedule directly (False)
+            appointment_info: Dictionary with new appointment details (title, date, duration, etc.)
+            service_id: Service ID from subscription_services
+            thread_id: Optional thread ID
+            language: Language for prompts (ITA or ENG)
+            
+        Returns:
+            SchedulerResponse with rescheduling results
+        """
+        try:
+            # Select prompt based on language
+            prompt_text = RESCHEDULER_PROMPT_ITA if language == "ITA" else RESCHEDULER_PROMPT_ENG
+            
+            # Define tool functions
+            tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "propose_new_slots",
+                        "description": "Propose new available appointment slots when client wants to reschedule but doesn't provide specific date and hours",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "favorite_day": {
+                                    "type": "string",
+                                    "description": "Preferred day mentioned by sender in format YYYY-MM-DD, or null if not mentioned"
+                                },
+                                "not_available_dates": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "description": "Array of previously proposed but rejected dates in format YYYY-MM-DD"
+                                }
+                            },
+                            "required": ["favorite_day", "not_available_dates"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "reschedule_appointment",
+                        "description": "Reschedule an existing appointment to new date/time/details",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "event_code": {
+                                    "type": "string",
+                                    "description": "6-character code of the event to reschedule"
+                                },
+                                "new_title": {
+                                    "type": "string",
+                                    "description": "New title of the appointment"
+                                },
+                                "new_date": {
+                                    "type": "string",
+                                    "description": "New date and time in format YYYY-MM-DDThh:mm:ss"
+                                },
+                                "new_duration": {
+                                    "type": "integer",
+                                    "description": "New duration in minutes"
+                                },
+                                "new_attendees": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "description": "List of new attendee emails"
+                                },
+                                "new_place": {
+                                    "type": "string",
+                                    "description": "New location of the event"
+                                },
+                                "additional_notes": {
+                                    "type": "string",
+                                    "description": "Additional notes about the event"
+                                }
+                            },
+                            "required": ["event_code", "new_title", "new_date", "new_duration"]
+                        }
+                    }
+                }
+            ]
+            
+            # Format prompt
+            # If extended_summary is empty, this is the first email of the thread
+            if not extended_summary:
+                extended_summary_text = "Questa è la prima email del thread." if language == "ITA" else "This is the first email of the thread."
+            else:
+                extended_summary_text = extended_summary
+            
+            prompt_formatted = prompt_text.format(
+                current_timestamp=current_timestamp,
+                mail_summary=mail_summary,
+                extended_summary=extended_summary_text,
+                event_code=event_code,
+                propose_slots=propose_slots
+            )
+            
+            # Create LLM with tool binding
+            llm_with_tools = self.llm.bind_tools(tools)
+            
+            # Get response from LLM
+            message = HumanMessage(content=prompt_formatted)
+            response = llm_with_tools.invoke([message])
+            
+            # Process tool calls
+            scheduled = False
+            overlap = False
+            proposed_slots = None
+            
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                for tool_call in response.tool_calls:
+                    if tool_call['name'] == 'propose_new_slots':
+                        # Call the propose_new_slots tool function
+                        args = tool_call['args']
+                        proposed_slots = self._propose_new_slots_tool(
+                            service_id=service_id,
+                            favorite_day=args.get('favorite_day'),
+                            not_available_dates=args.get('not_available_dates', [])
+                        )
+                    elif tool_call['name'] == 'reschedule_appointment':
+                        # Call the reschedule_appointment tool function
+                        args = tool_call['args']
+                        reschedule_appointment = self._reschedule_appointment_tool(
+                            # TODO: implement tool
+                        )
+                        scheduled = reschedule_appointment['scheduled']
+                        overlap = reschedule_appointment['overlap']
+                        proposed_slots = reschedule_appointment['proposed_slots']
+            
+            print(f"📅 [LLM] Rescheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}")
+            
+            return SchedulerResponse(
+                scheduled=scheduled,
+                overlap=overlap,
+                event_code=event_code,
+                proposed_slots=proposed_slots
+            )
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in appointment rescheduling: {e}")
+            # Return default response on error
+            return SchedulerResponse(
+                scheduled=False,
+                overlap=False,
+                event_code=event_code,
+                proposed_slots=None
+            )
+
     
     def _propose_new_slots_tool(
         self, 
@@ -1254,15 +1531,17 @@ class LLMClient:
                 break
         
         # Create event in external calendar
-        created_external = False
+        provider_event_id = None
         if calendar_provider == "google":
-            created_external = utils.create_google_calendar_event(token, title_of_event, start_dt, end_dt)
+            provider_event_id = utils.create_google_calendar_event(token, title_of_event, start_dt, end_dt)
         elif calendar_provider == "microsoft":
-            created_external = utils.create_microsoft_calendar_event(token, title_of_event, start_dt, end_dt)
+            provider_event_id = utils.create_microsoft_calendar_event(token, title_of_event, start_dt, end_dt)
         
-        if not created_external:
+        if not provider_event_id:
             print("Failed to create event in external calendar.")
             return {"scheduled": False, "overlap": False, "event_code": None}
+        
+        print(f"✅ Event created in {calendar_provider} calendar with provider_event_id: {provider_event_id}")
         
         # Prepare event data for database
         event_data = {
@@ -1272,7 +1551,8 @@ class LLMClient:
             "thread_id": thread_id,
             "event_type": event_type,
             "event_code": event_code,
-            "created_by": created_by
+            "created_by": created_by,
+            "provider_event_id": provider_event_id  # Save the provider's event ID
         }
         
         # Insert into scheduled_events table
@@ -1281,102 +1561,57 @@ class LLMClient:
         else:
             return {"scheduled": False, "overlap": False, "event_code": None}
 
-    def read_appointment_change_request(
-            self,
-            filtered_body: str,
-            mail_summary: str,
-            extended_summary: str,
-            current_timestamp: str,
-            sender_email: str,
-            language: str = "ITA"
-        ) -> ReaderAppointmentChangeResponse:
-            """
-            Read and extract information from appointment change request email.
+
+    def _reschedule_appointment_tool(
+        self, 
+        event_code, 
+        new_title, 
+        new_date, 
+        new_duration, 
+        new_attendees, 
+        new_place, 
+        additional_notes
+    ):
+        """
+        Tool function to reschedule an appointment.
+        
+        Args:
+            event_code: Event code from scheduled_events
+            new_title: New title of the appointment
+            new_date: New date and time in format YYYY-MM-DDThh:mm:ss
+            new_duration: New duration in minutes
+            new_attendees: New list of attendee emails
+            new_place: New location of the event
+            additional_notes: New additional notes
             
-            Args:
-                filtered_body: Filtered email body
-                mail_summary: Summary of current email
-                extended_summary: Extended conversation summary
-                current_timestamp: Current timestamp in ISO format for relative date calculations
-                sender_email: Email address of the sender
-                language: Language for prompts (ITA or ENG)
-                
-            Returns:
-                ReaderAppointmentChangeResponse with appointment change details
-            """
-            try:
-                # Create output parser
-                parser = PydanticOutputParser(pydantic_object=ReaderAppointmentChangeResponse)
-                
-                # Select prompt based on language
-                prompt_text = READER_APPOINTMENT_CHANGE_PROMPT_ITA if language == "ITA" else READER_APPOINTMENT_CHANGE_PROMPT_ENG
-                
-                # Set default for extended_summary and mail_summary if empty
-                if not extended_summary:
-                    if language == "ITA":
-                        default_extended = "Nessun riassunto precedente."
-                    else:
-                        default_extended = "No previous summary."
-                    used_extended_summary = default_extended
-                else:
-                    used_extended_summary = extended_summary
-                
-                if not mail_summary:
-                    if language == "ITA":
-                        default_mail = "Nessun riassunto disponibile."
-                    else:
-                        default_mail = "No summary available."
-                    used_mail_summary = default_mail
-                else:
-                    used_mail_summary = mail_summary
-                
-                # Format prompt
-                prompt_text = prompt_text.format(
-                    current_timestamp=current_timestamp,
-                    filtered_body=filtered_body,
-                    mail_summary=used_mail_summary,
-                    extended_summary=used_extended_summary,
-                    sender_email=sender_email
-                )
-                
-                # Add format instructions
-                prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
-                
-                # Create message
-                message = HumanMessage(content=prompt_with_format)
-                
-                # Get response from LLM
-                response = self.llm.invoke([message])
-                
-                # Parse response
-                parsed_response = parser.parse(response.content)
-                
-                print(f"📅 [LLM] Appointment change request analyzed ({language}): event_code={parsed_response.event_code}, new_date={parsed_response.new_date}")
-                return parsed_response
-                
-            except Exception as e:
-                print(f"❌ [LLM] Error in appointment change request reading: {e}")
-                # Return default response on error
-                return ReaderAppointmentChangeResponse(
-                    key_entities={
-                        "dates": [],
-                        "locations": [],
-                        "people": [],
-                        "organizations": [],
-                        "requests": [],
-                        "actions": [],
-                        "amounts": [],
-                        "documents": [],
-                        "other_info": []
-                    },
-                    event_code=None,
-                    new_title_of_event=f"[AI] APPUNTAMENTO {sender_email}",
-                    new_date=None,
-                    new_duration=None,
-                    new_attendees=None,
-                    new_place=None,
-                    additional_notes=None
-                )
+        Returns:
+            Dictionary with: scheduled (bool), overlap (bool), proposed_slots (list)
+        """
+        print(f"🛠️ [TOOL] reschedule_appointment called")
+
+        # find event by event_code
+        from db_client import get_scheduled_event_by_code
+
+        event = get_scheduled_event_by_code(event_code)
+
+        if not event:
+            return {
+                'invalid_event_code': True,
+                'scheduled': False,
+            }
+        
+        event_provider_id = event['provider_event_id']
+
+        # TODO
+
+        return {
+            'scheduled': False,
+            'overlap': False,
+            'proposed_slots': None
+        }        
+    
+
+        
 
 # Global LLM client instance
 llm_client = LLMClient()

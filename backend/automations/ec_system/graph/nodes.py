@@ -2319,7 +2319,6 @@ def reader_node(state):
             print(f"🔄 [READER] Detected REQUEST_APPOINTMENT_CHANGE - using appointment change analysis")
             
             # Get additional data for appointment change analysis
-            from datetime import datetime
             extended_summary = state.get("extended_summary", "")
             mail_summary = state.get("mail_summary", "")
             extracted_info = state.get("extracted_info", {})
@@ -2505,6 +2504,161 @@ def scheduler_node(state):
         state["appointment_scheduled"] = False
         state["appointment_overlap"] = False
         state["appointment_event_code"] = None
+        state["appointment_proposed_slots"] = None
+        return state
+
+
+def rescheduler_node(state):
+    """
+    Reschedule appointments for REQUEST_APPOINTMENT_CHANGE subcategory.
+    First validates event_code, then uses LLM with tool functions to either reschedule appointment or propose new slots.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with rescheduling results or AutomationExecutedResponse if event_code invalid
+    """
+    try:
+        print(f"📅 [RESCHEDULER] Starting appointment rescheduling...")
+        
+        # Get event_code from state
+        event_code = state.get("change_event_code")
+        
+        # Validate event_code
+        if event_code is None or (isinstance(event_code, str) and len(event_code) != 6):
+            print(f"⚠️ [RESCHEDULER] Invalid event_code: {event_code}")
+            
+            # Extract necessary information for AutomationExecutedResponse
+            extracted_info = state.get("extracted_info", {})
+            message_id = extracted_info.get("message_id")
+            thread_id = extracted_info.get("thread_id")
+            category = state.get("category")
+            subcategory = state.get("subcategory")
+            mail_summary = state.get("mail_summary", "")
+            summary_attachments = state.get("summary_attachments", "")
+            
+            # Create extended summary
+            extended_parts = []
+            if mail_summary:
+                extended_parts.append(f"Contenuto email: {mail_summary}")
+            if summary_attachments:
+                extended_parts.append(f"Allegati: {summary_attachments}")
+            extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
+            
+            # TODO: This will be extended in the future
+            automation_response = AutomationExecutedResponse(
+                message_id=message_id,
+                thread_id=thread_id,
+                status="automation_executed",
+                message="Codice evento mancante o non valido nella richiesta di modifica appuntamento",
+                result={
+                    "category": category,
+                    "subcategory": subcategory,
+                    "human_response": True,
+                    "mail_summary": mail_summary,
+                    "extended_summary": extended_summary,
+                    "event_code": event_code,
+                    "message": "Event code missing or invalid (expected 6 characters)"
+                }
+            )
+            
+            # Add to state to signal END
+            state["automation_executed"] = automation_response.model_dump()
+            return state
+        
+        # Event code is valid, proceed with LLM rescheduling
+        print(f"✅ [RESCHEDULER] Valid event_code: {event_code}")
+        
+        # Get required data from state
+        language = state.get("language", "ITA")
+        mail_summary = state.get("mail_summary", "")
+        extended_summary = state.get("extended_summary", "")
+        new_date = state.get("change_new_date")
+        
+        # Get user config and extracted info for additional parameters
+        user_config = state.get("user_config", {})
+        extracted_info = state.get("extracted_info", {})
+        
+        service_id = user_config.get("service_id")
+        thread_id = extracted_info.get("thread_id")
+        
+        if not service_id:
+            print(f"⚠️ [RESCHEDULER] No service_id found in user_config, cannot reschedule appointment")
+            state["appointment_scheduled"] = False
+            state["appointment_overlap"] = False
+            state["appointment_event_code"] = event_code
+            state["appointment_proposed_slots"] = None
+            return state
+        
+        # Determine if we need to propose slots or reschedule directly
+        propose_slots = False
+        if new_date is None:
+            propose_slots = True
+        else:
+            try:
+                if isinstance(new_date, str) and 'T' in new_date:
+                    time_part = new_date.split('T', 1)[1]
+                    hh_mm = ':'.join(time_part.split(':')[:2])  # "hh:mm"
+                    propose_slots = (hh_mm == "00:00")
+                else:
+                    propose_slots = False
+            except Exception:
+                propose_slots = False
+        
+        print(f"📋 [RESCHEDULER] Rescheduling parameters:")
+        print(f"   🔒 Language: {language}")
+        print(f"   🎯 Propose slots: {propose_slots}")
+        print(f"   📅 New date: {new_date}")
+        print(f"   🔑 Service ID: {service_id}")
+        print(f"   🔑 Event code: {event_code}")
+        
+        # Get current timestamp
+        current_timestamp = datetime.now().isoformat()
+        
+        # Get appointment change details from state
+        appointment_info = {
+            "title_of_event": state.get("change_new_title"),
+            "date": state.get("change_new_date"),
+            "duration": state.get("change_new_duration"),
+            "attendees": state.get("change_new_attendees"),
+            "place": state.get("change_new_place"),
+            "additional_notes": state.get("change_additional_notes")
+        }
+        
+        # Call LLM rescheduler with tool functions
+        rescheduler_response = llm_client.reschedule_appointment(
+            current_timestamp=current_timestamp,
+            mail_summary=mail_summary,
+            extended_summary=extended_summary,
+            event_code=event_code,
+            propose_slots=propose_slots,
+            appointment_info=appointment_info,
+            service_id=service_id,
+            thread_id=thread_id,
+            language=language
+        )
+        
+        # Update state with rescheduling results
+        state["appointment_scheduled"] = rescheduler_response.scheduled
+        state["appointment_overlap"] = rescheduler_response.overlap
+        state["appointment_event_code"] = rescheduler_response.event_code
+        state["appointment_proposed_slots"] = rescheduler_response.proposed_slots
+        
+        print(f"✅ [RESCHEDULER] Rescheduling completed successfully")
+        print(f"   ✓ Scheduled: {rescheduler_response.scheduled}")
+        print(f"   ⚠️ Overlap: {rescheduler_response.overlap}")
+        print(f"   🔢 Event code: {rescheduler_response.event_code}")
+        print(f"   📆 Proposed slots: {rescheduler_response.proposed_slots}")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [RESCHEDULER] Error in appointment rescheduling: {e}")
+        # Set default values on error
+        state["appointment_scheduled"] = False
+        state["appointment_overlap"] = False
+        state["appointment_event_code"] = state.get("change_event_code")
         state["appointment_proposed_slots"] = None
         return state
 

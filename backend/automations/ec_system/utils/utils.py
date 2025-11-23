@@ -481,12 +481,15 @@ def create_google_calendar_event(token: str, title: str, start_time: datetime, e
     try:
         response = httpx.post(url, headers=headers, json=body)
         response.raise_for_status()
-        return True
+        event_data = response.json()
+        event_id = event_data.get("id")
+        print(f"✅ Created Google calendar event with ID: {event_id}")
+        return event_id  # Return the Google event ID
     except Exception as e:
         print(f"Error creating Google calendar event: {e}")
-        return False
+        return None
 
-def create_microsoft_calendar_event(token: str, title: str, start_time: datetime, end_time: datetime) -> bool:
+def create_microsoft_calendar_event(token: str, title: str, start_time: datetime, end_time: datetime) -> Optional[str]:
     url = "https://graph.microsoft.com/v1.0/me/events"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -513,7 +516,10 @@ def create_microsoft_calendar_event(token: str, title: str, start_time: datetime
     try:
         response = httpx.post(url, headers=headers, json=body)
         response.raise_for_status()
-        return True
+        event_data = response.json()
+        event_id = event_data.get("id")
+        print(f"✅ Created Microsoft calendar event with ID: {event_id}")
+        return event_id  # Return the Microsoft event ID
     except Exception as e:
         print(f"Error creating Microsoft calendar event: {e}")
         return None

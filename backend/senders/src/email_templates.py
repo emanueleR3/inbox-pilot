@@ -35,6 +35,11 @@ def get_base_template(content: str, notification_type: str) -> str:
             "primary": "#8B5CF6",  # Purple
             "secondary": "#EDE9FE",
             "accent": "#6D28D9"
+        },
+        "EVENT_FOLLOWUP_RECEIVED": {
+            "primary": "#3B82F6",  # Blue
+            "secondary": "#DBEAFE",
+            "accent": "#1D4ED8"
         }
     }
     
