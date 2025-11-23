@@ -22,6 +22,8 @@ from .state import create_initial_state
 from .config import NodeNames
 from ..services.notification_client import send_event_followup_notification, send_appointment_not_scheduled_notification
 from db_client import insert_notification_sync
+from datetime import datetime
+from ..models.llm_responses import AutomationExecutedResponse
 from .nodes import (
     new_mail_node,
     config_loader_node,
@@ -39,6 +41,7 @@ from .nodes import (
     subcategory_router_node,
     reader_node,
     scheduler_node,
+    rescheduler_node,
     # Subcategory handler nodes
     handle_offer_promotion_node,
     handle_newsletter_node,
@@ -103,6 +106,7 @@ def create_email_classification_graph():
     graph.add_node(NodeNames.SUBCATEGORY_ROUTER, subcategory_router_node)
     graph.add_node(NodeNames.READER, reader_node)
     graph.add_node(NodeNames.SCHEDULER, scheduler_node)
+    graph.add_node(NodeNames.RESCHEDULER, rescheduler_node)
     
     # Add subcategory handler nodes
     graph.add_node(NodeNames.HANDLE_OFFER_PROMOTION, handle_offer_promotion_node)
@@ -360,9 +364,7 @@ def create_email_classification_graph():
         NodeNames.HANDLE_PAYMENT_ISSUE, # human_response could be True or False
         # momentaneamente anche questi TODO
         NodeNames.HANDLE_REQUEST_QUOTE,
-        NodeNames.HANDLE_REQUEST_DOCUMENT,
-        # momentaneamente anche questi + controllare ritorno del reader TODO
-        NodeNames.HANDLE_CANCEL_APPOINTMENT
+        NodeNames.HANDLE_REQUEST_DOCUMENT
     ]
     
     # These nodes always go to END
@@ -378,7 +380,8 @@ def create_email_classification_graph():
         NodeNames.HANDLE_GENERAL_GREETING,
         NodeNames.HANDLE_GENERAL_INQUIRY,
         NodeNames.HANDLE_REQUEST_APPOINTMENT,
-        NodeNames.HANDLE_REQUEST_APPOINTMENT_CHANGE
+        NodeNames.HANDLE_REQUEST_APPOINTMENT_CHANGE,
+        NodeNames.HANDLE_CANCEL_APPOINTMENT
     ]
     
     # These nodes always go to READER for analysis
@@ -403,6 +406,11 @@ def create_email_classification_graph():
             print(f"📅 [READER] Routing to SCHEDULER for REQUEST_APPOINTMENT")
             return NodeNames.SCHEDULER
         
+        # Special routing for REQUEST_APPOINTMENT_CHANGE - goes to RESCHEDULER
+        if subcategory == "REQUEST_APPOINTMENT_CHANGE":
+            print(f"🔄 [READER] Routing to RESCHEDULER for REQUEST_APPOINTMENT_CHANGE")
+            return NodeNames.RESCHEDULER
+        
         # Subcategories that should check needs_response for conditional automation
         conditional_automation_subcategories = {
             "CONFIRM_APPOINTMENT",
@@ -422,15 +430,9 @@ def create_email_classification_graph():
             thread_id = extracted_info.get("thread_id", "unknown")
             category = state.get("category", "OTHER")
             mail_summary = state.get("mail_summary", "")
-            summary_attachments = state.get("summary_attachments", "")
             
-            # Create extended summary combining mail summary and attachments
-            extended_parts = []
-            if mail_summary:
-                extended_parts.append(f"Email: {mail_summary}")
-            if summary_attachments:
-                extended_parts.append(f"Attachments: {summary_attachments}")
-            extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
+            # Get extended_summary from state (not created from parts)
+            extended_summary = state.get("extended_summary", "")
             
             if needs_response:
                 # Insert notification in database
@@ -503,15 +505,9 @@ def create_email_classification_graph():
             thread_id = extracted_info.get("thread_id", "unknown")
             category = state.get("category", "OTHER")
             mail_summary = state.get("mail_summary", "")
-            summary_attachments = state.get("summary_attachments", "")
             
-            # Create extended summary combining mail summary and attachments
-            extended_parts = []
-            if mail_summary:
-                extended_parts.append(f"Email: {mail_summary}")
-            if summary_attachments:
-                extended_parts.append(f"Attachments: {summary_attachments}")
-            extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
+            # Get extended_summary from state (not created from parts)
+            extended_summary = state.get("extended_summary", "")
             
             automation_response = AutomationExecutedResponse(
                 message_id=message_id,
@@ -543,6 +539,7 @@ def create_email_classification_graph():
         should_continue_after_reader,
         {
             NodeNames.SCHEDULER: NodeNames.SCHEDULER,
+            NodeNames.RESCHEDULER: NodeNames.RESCHEDULER,
             END: END # TODO momentaneamente
         }
     )
@@ -554,8 +551,6 @@ def create_email_classification_graph():
         Routes based on which tool was called (propose_new_slots vs book_appointment)
         and the results obtained.
         """
-        from datetime import datetime
-        from ..models.llm_responses import AutomationExecutedResponse
         
         # Extract state data
         extracted_info = state.get("extracted_info", {})
@@ -564,15 +559,9 @@ def create_email_classification_graph():
         category = state.get("category", "INFO_REQUESTED")
         subcategory = state.get("subcategory", "REQUEST_APPOINTMENT")
         mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
         
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Attachments: {summary_attachments}")
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
+        # Get extended_summary from state (not created from parts)
+        extended_summary = state.get("extended_summary", "")
         
         # Get scheduler results
         scheduled = state.get("appointment_scheduled", False)
@@ -722,6 +711,179 @@ def create_email_classification_graph():
     graph.add_conditional_edges(
         NodeNames.SCHEDULER,
         should_continue_after_scheduler,
+        {
+            END: END
+        }
+    )
+    
+    # Conditional logic for Rescheduler node based on tool called and results
+    def should_continue_after_rescheduler(state):
+        """
+        Check rescheduler results and create appropriate AutomationExecutedResponse.
+        Routes based on which tool was called (propose_new_slots vs reschedule_appointment)
+        and the results obtained.
+        """
+        
+        # Extract state data
+        extracted_info = state.get("extracted_info", {})
+        message_id = extracted_info.get("message_id", "unknown")
+        thread_id = extracted_info.get("thread_id", "unknown")
+        category = state.get("category", "INFO_REQUESTED")
+        subcategory = state.get("subcategory", "REQUEST_APPOINTMENT_CHANGE")
+        mail_summary = state.get("mail_summary", "")
+        
+        # Get extended_summary from state (not created from parts)
+        extended_summary = state.get("extended_summary", "")
+        
+        # Get rescheduler results
+        scheduled = state.get("appointment_scheduled", False)
+        overlap = state.get("appointment_overlap", False)
+        event_code = state.get("appointment_event_code")
+        proposed_slots = state.get("appointment_proposed_slots")
+        
+        current_time = datetime.now().isoformat()
+        
+        # Case 1: propose_new_slots was called (proposed_slots is not None)
+        if proposed_slots is not None:
+            print(f"📅 [RESCHEDULER] Tool propose_new_slots called - checking results")
+            
+            # Check if array is empty
+            if not proposed_slots or len(proposed_slots) == 0:
+                print(f"⚠️ [RESCHEDULER] propose_new_slots returned empty array - error")
+                automation_response = AutomationExecutedResponse(
+                    message_id=message_id,
+                    thread_id=thread_id,
+                    status="automation_executed",
+                    message="Errore nel tool propose_new_slots, l'array è vuoto",
+                    result={
+                        "category": category,
+                        "subcategory": subcategory,
+                        "human_response": True,
+                        "mail_summary": mail_summary,
+                        "extended_summary": extended_summary
+                    }
+                )
+            else:
+                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots")
+                automation_response = AutomationExecutedResponse(
+                    message_id=message_id,
+                    thread_id=thread_id,
+                    status="automation_executed",
+                    message=f"Proposte {len(proposed_slots)} date disponibili per la riprogrammazione",
+                    result={
+                        "category": category,
+                        "subcategory": subcategory,
+                        "human_response": False,
+                        "mail_summary": mail_summary,
+                        "extended_summary": extended_summary,
+                        "email": {
+                            "sent": True,
+                            "body": "Da implementare",
+                            "processed_at": current_time,
+                            "duration": 0,
+                            "message": "Da implementare"
+                        },
+                        "event": {
+                            "event_code": event_code,
+                            "proposed_slots": proposed_slots
+                        }
+                    }
+                )
+        
+        # Case 2: reschedule_appointment was called (scheduled is not None and proposed_slots is None)
+        else:
+            print(f"📅 [RESCHEDULER] Tool reschedule_appointment called - checking scheduled status")
+            
+            if scheduled:
+                # Appointment successfully rescheduled
+                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code}")
+                automation_response = AutomationExecutedResponse(
+                    message_id=message_id,
+                    thread_id=thread_id,
+                    status="automation_executed",
+                    message="Appuntamento riprogrammato con successo",
+                    result={
+                        "category": category,
+                        "subcategory": subcategory,
+                        "human_response": False,
+                        "mail_summary": mail_summary,
+                        "extended_summary": extended_summary,
+                        "event": {
+                            "scheduled": True,
+                            "overlap": overlap,
+                            "event_code": event_code,
+                            "message": "Appuntamento riprogrammato con successo",
+                            "event_type": "APPOINTMENT_CHANGE",
+                            "created_at": current_time
+                        },
+                        "email": {
+                            "sent": True,
+                            "body": "Da implementare",
+                            "processed_at": current_time,
+                            "duration": 0,
+                            "message": "Da implementare"
+                        }
+                    }
+                )
+            else:
+                # Insert notification in database
+                box_email = extracted_info.get("box_email", "unknown")
+                try:
+                    notification_success = insert_notification_sync(
+                        email=box_email,
+                        notification_type="APPOINTMENT_NOT_SCHEDULED_MAIL",
+                        message_id=message_id,
+                        text=None
+                    )
+                    
+                    if not notification_success:
+                        print(f"❌ [RESCHEDULER] Failed to insert notification for {box_email}")
+                        
+                except Exception as e:
+                    print(f"❌ [RESCHEDULER] Error inserting notification: {e}")
+
+                # Send notification webhook for appointment not rescheduled
+                send_appointment_not_scheduled_notification(
+                    sender_email=extracted_info.get("from", "unknown"),
+                    box_email=box_email,
+                    subject=extracted_info.get("subject", "No subject"),
+                    body=state.get("email_body", ""),
+                    summary_attachment=state.get("summary_attachments"),
+                    overlap=overlap
+                )
+                
+                print(f"⚠️ [RESCHEDULER] Appointment not rescheduled - overlap: {overlap}")
+                automation_response = AutomationExecutedResponse(
+                    message_id=message_id,
+                    thread_id=thread_id,
+                    status="automation_executed",
+                    message="Evento non riprogrammato",
+                    result={
+                        "category": category,
+                        "subcategory": subcategory,
+                        "human_response": True,
+                        "mail_summary": mail_summary,
+                        "extended_summary": extended_summary,
+                        "event": {
+                            "scheduled": False,
+                            "overlap": overlap,
+                            "event_code": event_code,
+                            "message": "Evento non riprogrammato",
+                            "event_type": "APPOINTMENT_CHANGE",
+                            "created_at": current_time
+                        }
+                    }
+                )
+        
+        # Add automation response to state
+        state["automation_executed"] = automation_response.model_dump()
+        print(f"🏁 [RESCHEDULER] Workflow completed with automation response")
+        return END
+    
+    # Add conditional edge from RESCHEDULER
+    graph.add_conditional_edges(
+        NodeNames.RESCHEDULER,
+        should_continue_after_rescheduler,
         {
             END: END
         }

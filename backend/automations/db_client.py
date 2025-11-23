@@ -465,6 +465,29 @@ def insert_scheduled_event(event_data: Dict) -> bool:
         print(f"❌ [DB_CLIENT] Error inserting event: {e}")
         return False
 
+def get_scheduled_event_by_code(event_code: str) -> Optional[Dict]:
+    """
+    Recupera un evento dalla tabella scheduled_events per un event_code specifico.
+    
+    Args:
+        event_code: Event code per cui recuperare l'evento
+        
+    Returns:
+        Dict: Dizionario con i dati dell'evento se trovato, None altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("scheduled_events").select("*").eq("event_code", event_code).execute()
+        
+        if response.data:
+            return response.data[0]
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving event by code: {e}")
+        return None
 
 def check_event_code_exists(event_code: str) -> bool:
     """
