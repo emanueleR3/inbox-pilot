@@ -169,10 +169,15 @@ def decrypt(value: str, cond: str) -> str:
     return cipher.decrypt(value.encode()).decode()
 
 def get_google_busy_slots(token: str, start_time: datetime, end_time: datetime) -> List[tuple]:
-    url = "https://www.googleapis.com/calendar/v3/freeBusy"
+    """
+    Get busy time slots from Google Calendar with event IDs.
+    
+    Returns:
+        List of tuples: (start_datetime, end_datetime, event_id)
+    """
+    url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
     headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {token}"
     }
     
     # Ensure times are in UTC for API request
@@ -186,65 +191,79 @@ def get_google_busy_slots(token: str, start_time: datetime, end_time: datetime) 
     else:
         end_time_utc = end_time.astimezone(timezone.utc)
     
-    body = {
+    params = {
         "timeMin": start_time_utc.isoformat(),
         "timeMax": end_time_utc.isoformat(),
-        "items": [{"id": "primary"}]
+        "singleEvents": True,
+        "orderBy": "startTime"
     }
     
     try:
-        response = httpx.post(url, headers=headers, json=body)
+        response = httpx.get(url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
-        busy = data.get("calendars", {}).get("primary", {}).get("busy", [])
+        events = data.get("items", [])
         slots = []
-        for slot in busy:
-            start = datetime.fromisoformat(slot["start"].replace("Z", "+00:00"))
-            end = datetime.fromisoformat(slot["end"].replace("Z", "+00:00"))
-            slots.append((start, end))
+        for event in events:
+            # Skip all-day events
+            if "dateTime" not in event.get("start", {}):
+                continue
+            
+            start = datetime.fromisoformat(event["start"]["dateTime"].replace("Z", "+00:00"))
+            end = datetime.fromisoformat(event["end"]["dateTime"].replace("Z", "+00:00"))
+            event_id = event.get("id")
+            slots.append((start, end, event_id))
         return slots
     except Exception as e:
-        print(f"Error fetching Google calendar: {e}")
+        print(f"Error fetching Google calendar events: {e}")
         return []
 
 def get_microsoft_busy_slots(token: str, start_time: datetime, end_time: datetime) -> List[tuple]:
-    url = "https://graph.microsoft.com/v1.0/me/calendar/getSchedule"
+    """
+    Get busy time slots from Microsoft Calendar with event IDs.
+    
+    Returns:
+        List of tuples: (start_datetime, end_datetime, event_id)
+    """
+    url = "https://graph.microsoft.com/v1.0/me/calendar/calendarView"
     headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-        "Prefer": "outlook.timezone=\"UTC\""
+        "Authorization": f"Bearer {token}"
     }
-    body = {
-        "schedules": ["me"],
-        "startTime": {
-            "dateTime": start_time.isoformat(),
-            "timeZone": "UTC"
-        },
-        "endTime": {
-            "dateTime": end_time.isoformat(),
-            "timeZone": "UTC"
-        },
-        "availabilityViewInterval": 15
+    
+    # Ensure times are in UTC for API request
+    if start_time.tzinfo is None:
+        start_time_utc = start_time.replace(tzinfo=timezone.utc)
+    else:
+        start_time_utc = start_time.astimezone(timezone.utc)
+    
+    if end_time.tzinfo is None:
+        end_time_utc = end_time.replace(tzinfo=timezone.utc)
+    else:
+        end_time_utc = end_time.astimezone(timezone.utc)
+    
+    params = {
+        "startDateTime": start_time_utc.isoformat(),
+        "endDateTime": end_time_utc.isoformat()
     }
     
     try:
-        response = httpx.post(url, headers=headers, json=body)
+        response = httpx.get(url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
-        # Microsoft structure is slightly different, need to parse 'value' -> 'scheduleItems'
-        # Assuming 'value' is list of schedules
-        schedules = data.get("value", [])
+        events = data.get("value", [])
         slots = []
-        for schedule in schedules:
-            items = schedule.get("scheduleItems", [])
-            for item in items:
-                if item["status"] != "free":
-                    start = datetime.fromisoformat(item["start"]["dateTime"])
-                    end = datetime.fromisoformat(item["end"]["dateTime"])
-                    slots.append((start, end))
+        for event in events:
+            # Skip all-day events
+            if not event.get("start", {}).get("dateTime"):
+                continue
+            
+            start = datetime.fromisoformat(event["start"]["dateTime"])
+            end = datetime.fromisoformat(event["end"]["dateTime"])
+            event_id = event.get("id")
+            slots.append((start, end, event_id))
         return slots
     except Exception as e:
-        print(f"Error fetching Microsoft calendar: {e}")
+        print(f"Error fetching Microsoft calendar events: {e}")
         return []
 
 def calculate_free_slots(
@@ -402,7 +421,14 @@ def calculate_free_slots(
 
         # Busy slot overlap - convert busy slots to user timezone for comparison
         is_busy = False
-        for (b_start, b_end) in busy_slots:
+        for busy_slot in busy_slots:
+            # Handle both 2-tuple (old format) and 3-tuple (new format with event_id)
+            if len(busy_slot) == 3:
+                b_start, b_end, b_event_id = busy_slot
+            else:
+                b_start, b_end = busy_slot
+                b_event_id = None
+            
             # Convert busy slot times to user timezone
             if b_start.tzinfo is not None:
                 b_start_local = b_start.astimezone(tz)
@@ -454,7 +480,16 @@ def calculate_free_slots(
     return free_slots
 
 
-def create_google_calendar_event(token: str, title: str, start_time: datetime, end_time: datetime) -> Optional[str]:
+def create_google_calendar_event(
+    token: str, 
+    title: str, 
+    start_time: datetime, 
+    end_time: datetime,
+    attendees: Optional[List[str]] = None,
+    location: Optional[str] = None,
+    description: Optional[str] = None
+) -> Optional[str]:
+    """Create a Google Calendar event with full details."""
     url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -478,6 +513,14 @@ def create_google_calendar_event(token: str, title: str, start_time: datetime, e
         }
     }
     
+    # Add optional fields
+    if description:
+        body["description"] = description
+    if location:
+        body["location"] = location
+    if attendees:
+        body["attendees"] = [{"email": email} for email in attendees]
+    
     try:
         response = httpx.post(url, headers=headers, json=body)
         response.raise_for_status()
@@ -489,7 +532,16 @@ def create_google_calendar_event(token: str, title: str, start_time: datetime, e
         print(f"Error creating Google calendar event: {e}")
         return None
 
-def create_microsoft_calendar_event(token: str, title: str, start_time: datetime, end_time: datetime) -> Optional[str]:
+def create_microsoft_calendar_event(
+    token: str, 
+    title: str, 
+    start_time: datetime, 
+    end_time: datetime,
+    attendees: Optional[List[str]] = None,
+    location: Optional[str] = None,
+    description: Optional[str] = None
+) -> Optional[str]:
+    """Create a Microsoft Calendar event with full details."""
     url = "https://graph.microsoft.com/v1.0/me/events"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -506,12 +558,32 @@ def create_microsoft_calendar_event(token: str, title: str, start_time: datetime
     body = {
         "subject": title,
         "start": {
-            "dateTime": start_time.isoformat()
+            "dateTime": start_time.isoformat(),
+            "timeZone": "UTC"
         },
         "end": {
-            "dateTime": end_time.isoformat()
+            "dateTime": end_time.isoformat(),
+            "timeZone": "UTC"
         }
     }
+    
+    # Add optional fields
+    if description:
+        body["body"] = {
+            "contentType": "text",
+            "content": description
+        }
+    if location:
+        body["location"] = {
+            "displayName": location
+        }
+    if attendees:
+        body["attendees"] = [
+            {
+                "emailAddress": {"address": email},
+                "type": "required"
+            } for email in attendees
+        ]
     
     try:
         response = httpx.post(url, headers=headers, json=body)
@@ -531,8 +603,10 @@ def update_google_calendar_event(
     start_time: Optional[datetime] = None, 
     end_time: Optional[datetime] = None,
     description: Optional[str] = None,
-    attendees: Optional[List[str]] = None
-) -> bool:
+    attendees: Optional[List[str]] = None,
+    location: Optional[str] = None
+) -> Optional[str]:
+    """Update a Google Calendar event and return the event ID."""
     url = f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -549,17 +623,22 @@ def update_google_calendar_event(
         body["description"] = description
     if attendees:
         body["attendees"] = [{"email": email} for email in attendees]
+    if location:
+        body["location"] = location
     
     if not body:
-        return True # Nothing to update
+        return event_id  # Nothing to update, return original ID
         
     try:
         response = httpx.patch(url, headers=headers, json=body)
         response.raise_for_status()
-        return True
+        event_data = response.json()
+        updated_event_id = event_data.get("id", event_id)
+        print(f"✅ Updated Google calendar event with ID: {updated_event_id}")
+        return updated_event_id
     except Exception as e:
         print(f"Error updating Google calendar event: {e}")
-        return False
+        return None
 
 def update_microsoft_calendar_event(
     token: str, 
@@ -568,8 +647,10 @@ def update_microsoft_calendar_event(
     start_time: Optional[datetime] = None, 
     end_time: Optional[datetime] = None,
     description: Optional[str] = None,
-    attendees: Optional[List[str]] = None
-) -> bool:
+    attendees: Optional[List[str]] = None,
+    location: Optional[str] = None
+) -> Optional[str]:
+    """Update a Microsoft Calendar event and return the event ID."""
     url = f"https://graph.microsoft.com/v1.0/me/events/{event_id}"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -586,17 +667,22 @@ def update_microsoft_calendar_event(
         body["body"] = {"contentType": "text", "content": description}
     if attendees:
         body["attendees"] = [{"emailAddress": {"address": email}, "type": "required"} for email in attendees]
+    if location:
+        body["location"] = {"displayName": location}
         
     if not body:
-        return True # Nothing to update
+        return event_id  # Nothing to update, return original ID
     
     try:
         response = httpx.patch(url, headers=headers, json=body)
         response.raise_for_status()
-        return True
+        event_data = response.json()
+        updated_event_id = event_data.get("id", event_id)
+        print(f"✅ Updated Microsoft calendar event with ID: {updated_event_id}")
+        return updated_event_id
     except Exception as e:
         print(f"Error updating Microsoft calendar event: {e}")
-        return False
+        return None
 
 def delete_google_calendar_event(token: str, event_id: str) -> bool:
     url = f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}"

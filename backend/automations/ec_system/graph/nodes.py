@@ -2513,6 +2513,7 @@ def cancellation_node(state):
     
     current_timestamp = datetime.now().isoformat()
     
+    # TODO errore
     print(f"   📖 Reading cancellation request for event_code...")
     cancel_response = llm_client.read_appointment_change_request(
         filtered_body,
