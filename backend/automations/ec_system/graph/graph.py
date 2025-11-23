@@ -42,6 +42,7 @@ from .nodes import (
     reader_node,
     scheduler_node,
     rescheduler_node,
+    cancellation_node,
     # Subcategory handler nodes
     handle_offer_promotion_node,
     handle_newsletter_node,
@@ -107,6 +108,7 @@ def create_email_classification_graph():
     graph.add_node(NodeNames.READER, reader_node)
     graph.add_node(NodeNames.SCHEDULER, scheduler_node)
     graph.add_node(NodeNames.RESCHEDULER, rescheduler_node)
+    graph.add_node(NodeNames.CANCELLATION, cancellation_node)
     
     # Add subcategory handler nodes
     graph.add_node(NodeNames.HANDLE_OFFER_PROMOTION, handle_offer_promotion_node)
@@ -413,7 +415,7 @@ def create_email_classification_graph():
 
         if subcategory == "CANCEL_APPOINTMENT":
             print(f"❌ [READER] Routing to CANCEL_APPOINTMENT for CANCEL_APPOINTMENT")
-            return NodeNames.CANCELLETION
+            return NodeNames.CANCELLATION
         
         # Subcategories that should check needs_response for conditional automation
         conditional_automation_subcategories = {
@@ -544,7 +546,7 @@ def create_email_classification_graph():
         {
             NodeNames.SCHEDULER: NodeNames.SCHEDULER,
             NodeNames.RESCHEDULER: NodeNames.RESCHEDULER,
-            NodeNames.CANCELLETION: NodeNames.CANCELLETION,
+            NodeNames.CANCELLATION: NodeNames.CANCELLATION,
             END: END # TODO momentaneamente
         }
     )

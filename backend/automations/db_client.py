@@ -524,6 +524,36 @@ def delete_event_from_db(event_code: str):
     except Exception as e:
         return False
 
+def update_scheduled_event_provider_id(event_code: str, new_provider_event_id: str) -> bool:
+    """
+    Aggiorna il provider_event_id di un evento nella tabella scheduled_events.
+    
+    Args:
+        event_code: Event code dell'evento da aggiornare
+        new_provider_event_id: Nuovo provider event ID da salvare
+        
+    Returns:
+        bool: True se aggiornamento riuscito, False altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("scheduled_events").update({
+            "provider_event_id": new_provider_event_id
+        }).eq("event_code", event_code).execute()
+        
+        if response.data:
+            print(f"✅ [DB_CLIENT] Updated provider_event_id for event code: {event_code}")
+            return True
+        else:
+            print(f"❌ [DB_CLIENT] Failed to update provider_event_id for event code: {event_code}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error updating provider_event_id: {e}")
+        return False
+
+
 if __name__ == "__main__":
     # Test del modulo
     import asyncio

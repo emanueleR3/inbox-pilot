@@ -1408,12 +1408,18 @@ class LLMClient:
         # DEBUG FULL STATE
         print("\n====== DEBUG BEFORE calculate_free_slots() ======")
         print(f"start_time: {start_time}")
-        print(f"end_time:   {end_time}")
-        print(f"business_hours: {business_hours}")
-        print(f"appointment_duration: {appointment_duration}")
+        # Debug: print first 10 busy slots
         print(f"busy_slots: {len(busy_slots)}")
-        for i, (bs, be) in enumerate(busy_slots[:10]):
-            print(f"  busy[{i}] = {bs} -> {be}")
+        if len(busy_slots) > 0:
+            print(f"\n🗓️ Showing first {min(10, len(busy_slots))} busy slots:")
+            for i, busy_slot in enumerate(busy_slots[:10]):
+                # Handle both 2-tuple (old format) and 3-tuple (new format with event_id)
+                if len(busy_slot) == 3:
+                    bs, be, b_event_id = busy_slot
+                else:
+                    bs, be = busy_slot
+                    b_event_id = None
+                print(f"   {i+1}. {bs.strftime('%Y-%m-%d %H:%M')} to {be.strftime('%Y-%m-%d %H:%M')}")
         print(f"not_available_dates: {not_available_dates}")
         print("=================================================\n")
         
@@ -1510,7 +1516,14 @@ class LLMClient:
         
         # Check for overlaps
         is_overlap = False
-        for b_start, b_end in busy_slots:
+        for busy_slot in busy_slots:
+            # Handle both 2-tuple (old format) and 3-tuple (new format with event_id)
+            if len(busy_slot) == 3:
+                b_start, b_end, b_event_id = busy_slot
+            else:
+                b_start, b_end = busy_slot
+                b_event_id = None
+            
             b_start_naive = b_start.replace(tzinfo=None)
             b_end_naive = b_end.replace(tzinfo=None)
             start_dt_naive = start_dt.replace(tzinfo=None)
@@ -1533,9 +1546,25 @@ class LLMClient:
         # Create event in external calendar
         provider_event_id = None
         if calendar_provider == "google":
-            provider_event_id = utils.create_google_calendar_event(token, title_of_event, start_dt, end_dt)
+            provider_event_id = utils.create_google_calendar_event(
+                token=token,
+                title=title_of_event,
+                start_time=start_dt,
+                end_time=end_dt,
+                attendees=attendees,
+                location=place,
+                description=additional_notes
+            )
         elif calendar_provider == "microsoft":
-            provider_event_id = utils.create_microsoft_calendar_event(token, title_of_event, start_dt, end_dt)
+            provider_event_id = utils.create_microsoft_calendar_event(
+                token=token,
+                title=title_of_event,
+                start_time=start_dt,
+                end_time=end_dt,
+                attendees=attendees,
+                location=place,
+                description=additional_notes
+            )
         
         if not provider_event_id:
             print("Failed to create event in external calendar.")
@@ -1585,30 +1614,139 @@ class LLMClient:
             additional_notes: New additional notes
             
         Returns:
-            Dictionary with: scheduled (bool), overlap (bool), proposed_slots (list)
+            Dictionary with: scheduled (bool), overlap (bool), invalid_event_code (bool)
         """
-        print(f"🛠️ [TOOL] reschedule_appointment called")
+        print(f"🛠️ [TOOL] reschedule_appointment called for event_code: {event_code}")
 
-        # find event by event_code
-        from db_client import get_scheduled_event_by_code
+        # Import required functions
+        from db_client import get_scheduled_event_by_code, get_calendar_service_data, update_scheduled_event_provider_id
 
+        # Find event by event_code
         event = get_scheduled_event_by_code(event_code)
 
         if not event:
+            print(f"❌ Event with code {event_code} not found in database")
             return {
                 'invalid_event_code': True,
                 'scheduled': False,
+                'overlap': False
             }
         
-        event_provider_id = event['provider_event_id']
-
-        # TODO
-
+        # Get event details
+        provider_event_id = event['provider_event_id']
+        service_id = event['service_id']
+        
+        print(f"📋 Found event: provider_event_id={provider_event_id}, service_id={service_id}")
+        
+        # Get calendar service data
+        service_data = get_calendar_service_data(service_id)
+        if not service_data:
+            print(f"❌ Calendar service data not found for service_id: {service_id}")
+            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False}
+        
+        calendar_provider = service_data["calendar_provider"]
+        token = service_data["access_token"]
+        
+        # Get user timezone
+        if calendar_provider == "google":
+            user_timezone = utils.get_google_calendar_timezone(token)
+        elif calendar_provider == "microsoft":
+            user_timezone = utils.get_microsoft_calendar_timezone(token)
+        else:
+            user_timezone = "Europe/Rome"
+        
+        # Parse new date and calculate end time
+        try:
+            from zoneinfo import ZoneInfo
+            start_dt_naive = datetime.fromisoformat(new_date)
+            end_dt_naive = start_dt_naive + timedelta(minutes=new_duration)
+            
+            tz = ZoneInfo(user_timezone)
+            start_dt = start_dt_naive.replace(tzinfo=tz)
+            end_dt = end_dt_naive.replace(tzinfo=tz)
+        except ValueError as e:
+            print(f"❌ Invalid date format: {new_date}, error: {e}")
+            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False}
+        
+        # Get busy slots from calendar provider to check for overlaps
+        busy_slots = []
+        if calendar_provider == "google":
+            busy_slots = utils.get_google_busy_slots(token, start_dt, end_dt)
+        elif calendar_provider == "microsoft":
+            busy_slots = utils.get_microsoft_busy_slots(token, start_dt, end_dt)
+        
+        # Check for overlaps (excluding the current event being rescheduled)
+        is_overlap = False
+        for busy_slot in busy_slots:
+            # Handle both 2-tuple (old format) and 3-tuple (new format with event_id)
+            if len(busy_slot) == 3:
+                b_start, b_end, b_event_id = busy_slot
+            else:
+                b_start, b_end = busy_slot
+                b_event_id = None
+            
+            b_start_naive = b_start.replace(tzinfo=None)
+            b_end_naive = b_end.replace(tzinfo=None)
+            start_dt_naive_check = start_dt.replace(tzinfo=None)
+            end_dt_naive_check = end_dt.replace(tzinfo=None)
+            
+            if start_dt_naive_check < b_end_naive and end_dt_naive_check > b_start_naive:
+                # Check if this is the same event being rescheduled
+                if b_event_id and b_event_id == provider_event_id:
+                    print(f"⏭️ Skipping overlap check for the event being rescheduled (ID: {b_event_id})")
+                    continue  # This is the same event, not a conflict
+                
+                print(f"❌ Overlap detected with different event: {b_start} to {b_end}")
+                is_overlap = True
+                break
+        
+        if is_overlap:
+            print("❌ Overlap detected with existing calendar events")
+            return {'scheduled': False, 'overlap': True, 'invalid_event_code': False}
+        
+        # Update event in external calendar
+        updated_provider_event_id = None
+        if calendar_provider == "google":
+            updated_provider_event_id = utils.update_google_calendar_event(
+                token=token,
+                event_id=provider_event_id,
+                title=new_title,
+                start_time=start_dt,
+                end_time=end_dt,
+                attendees=new_attendees,
+                location=new_place,
+                description=additional_notes
+            )
+        elif calendar_provider == "microsoft":
+            updated_provider_event_id = utils.update_microsoft_calendar_event(
+                token=token,
+                event_id=provider_event_id,
+                title=new_title,
+                start_time=start_dt,
+                end_time=end_dt,
+                attendees=new_attendees,
+                location=new_place,
+                description=additional_notes
+            )
+        
+        if not updated_provider_event_id:
+            print(f"❌ Failed to update event in {calendar_provider} calendar")
+            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False}
+        
+        print(f"✅ Event updated in {calendar_provider} calendar")
+        
+        # If provider_event_id changed, update it in database
+        if updated_provider_event_id != provider_event_id:
+            print(f"🔄 Provider event ID changed from {provider_event_id} to {updated_provider_event_id}")
+            update_success = update_scheduled_event_provider_id(event_code, updated_provider_event_id)
+            if not update_success:
+                print(f"⚠️ Failed to update provider_event_id in database, but event was rescheduled")
+        
         return {
-            'scheduled': False,
+            'scheduled': True,
             'overlap': False,
-            'proposed_slots': None
-        }        
+            'invalid_event_code': False
+        }
     
 
         

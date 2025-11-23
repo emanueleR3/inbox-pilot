@@ -162,11 +162,11 @@ def test_book_appointment(service_id: str, test_date: str = None):
     title = "[TEST] Appointment from test script"
     duration = 60  # minutes
     event_type = "test_event"
-    created_by = "dev1@example.com"
+    created_by = "INSERT_MAIL"
     thread_id = None
-    attendees = None
-    place = None
-    additional_notes = "This is a test appointment created by test_calendar_tools.py"
+    attendees = ["test.attendee@example.com", "another.attendee@example.com"]
+    place = "Test Location - Conference Room A"
+    additional_notes = "This is a test appointment created by test_calendar_tools.py with full event details (attendees, location, description)."
     
     print(f"\n📝 Test Parameters:")
     print(f"   - service_id: {service_id}")
@@ -224,7 +224,7 @@ def main():
     print("="*60)
     
     # Configuration
-    test_email = "dev1@example.com"
+    test_email = "INSERT_MAIL"
     
     # Step 1: Get service configuration from database
     config = get_service_config(test_email)
