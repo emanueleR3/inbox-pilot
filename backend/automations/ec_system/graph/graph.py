@@ -410,6 +410,10 @@ def create_email_classification_graph():
         if subcategory == "REQUEST_APPOINTMENT_CHANGE":
             print(f"🔄 [READER] Routing to RESCHEDULER for REQUEST_APPOINTMENT_CHANGE")
             return NodeNames.RESCHEDULER
+
+        if subcategory == "CANCEL_APPOINTMENT":
+            print(f"❌ [READER] Routing to CANCEL_APPOINTMENT for CANCEL_APPOINTMENT")
+            return NodeNames.CANCELLETION
         
         # Subcategories that should check needs_response for conditional automation
         conditional_automation_subcategories = {
@@ -540,6 +544,7 @@ def create_email_classification_graph():
         {
             NodeNames.SCHEDULER: NodeNames.SCHEDULER,
             NodeNames.RESCHEDULER: NodeNames.RESCHEDULER,
+            NodeNames.CANCELLETION: NodeNames.CANCELLETION,
             END: END # TODO momentaneamente
         }
     )
