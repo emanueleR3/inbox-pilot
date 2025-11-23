@@ -263,6 +263,18 @@ class ReaderAppointmentChangeResponse(BaseModel):
     )
 
 
+class ReaderCancellationResponse(BaseModel):
+    event_code: Optional[str] = Field(
+        None,
+        description="Codice alfanumerico a 6 cifre dell'evento da cancellare, None se non trovato"
+    )
+    """Response model for Reader node analysis of CANCEL_APPOINTMENT subcategory."""
+    key_entities: dict = Field(
+        ...,
+        description="Entità chiave estratte dalla mail e allegati (date, informazioni, richieste, luoghi, ecc.)"
+    )
+
+
 # EVALUATOR SUBCATEGORY ENUMS
 class PromotionSubcategory(str, Enum):
     """Subcategories for PROMOTION emails."""
