@@ -783,14 +783,14 @@ def priority_controller_node(state):
         
         # Determine routing based on priority
         if priority_score >= priority_threshold:
-            print(f"🚨 [PRIORITY_CONTROLLER] HIGH PRIORITY EMAIL - Ending workflow immediately")
+            print(f"🚨 [PRIORITY_CONTROLLER] HIGH PRIORITY EMAIL")
             print(f"   ⚡ Score {priority_score} >= Threshold {priority_threshold}")
             
+            """
             # Get extracted info for notifications
             extracted_info = state.get("extracted_info", {})
             message_id = extracted_info.get("message_id", "unknown")
             box_email = extracted_info.get("box_email", "unknown")
-            
             # Insert notification in database
             try:
                 notification_success = insert_notification_sync(
@@ -814,7 +814,8 @@ def priority_controller_node(state):
                 body=state.get("email_body", ""),
                 summary_attachment=state.get("summary_attachments")
             )
-            
+            """
+
             # Mark for high priority handling
             state["high_priority_email"] = True
             state["workflow_decision"] = "END_HIGH_PRIORITY"
@@ -828,6 +829,7 @@ def priority_controller_node(state):
             return state
             
     except Exception as e:
+        # TODO Send notification and save to database
         print(f"❌ [PRIORITY_CONTROLLER] Error in priority control: {e}")
         # Default to normal priority on error
         state["high_priority_email"] = False
@@ -2233,6 +2235,9 @@ def reader_node(state):
         
     except Exception as e:
         print(f"❌ [READER] Error in email analysis: {e}")
+
+        # TODO return error, notification and save to db
+
         # Continue with default values on error
         state["key_entities"] = {
             "dates": [],
@@ -2272,21 +2277,33 @@ def scheduler_node(state):
         # Get user config and extracted info for additional parameters
         user_config = state.get("user_config", {})
         extracted_info = state.get("extracted_info", {})
-        
+        message_id = extracted_info.get("message_id")
         service_id = user_config.get("service_id")
         thread_id = extracted_info.get("thread_id")
         created_by = extracted_info.get("from", "unknown")
         event_type = "APPOINTMENT"  # Default event type
+        category = state.get("category", "")
+        subcategory = state.get("subcategory", "")
+        event_code = state.get("event_code", "")
         
         if not service_id:
+            # TODO notification and save to db
             print(f"⚠️ [SCHEDULER] No service_id found in user_config, cannot book appointment")
-            state["appointment_scheduled"] = False
-            state["appointment_overlap"] = False
-            state["appointment_event_code"] = None
-            state["appointment_proposed_slots"] = None
-            return state
+            return AutomationExecutedResponse(
+                message_id=message_id,
+                thread_id=thread_id,
+                status="automation_executed",
+                message=f"Servizio calendario non trovato per evento {event_code}",
+                result={
+                    "category": category,
+                    "subcategory": subcategory,
+                    "human_response": True,
+                    "mail_summary": mail_summary,
+                    "action": "service_not_found"
+                }
+            )
         
-        # Determine if we need to propose slots or book directly TODO migliorare logica
+        # Determine if we need to propose slots or book directly TODO migliorare logica -> prompt engineering
         propose_slots = False
         if appointment_date is None:
             propose_slots = True
@@ -2380,43 +2397,6 @@ def rescheduler_node(state):
         # Validate event_code
         if event_code is None or (isinstance(event_code, str) and len(event_code) != 6):
             print(f"⚠️ [RESCHEDULER] Invalid event_code: {event_code}")
-            
-            # Extract necessary information for AutomationExecutedResponse
-            extracted_info = state.get("extracted_info", {})
-            message_id = extracted_info.get("message_id")
-            thread_id = extracted_info.get("thread_id")
-            category = state.get("category")
-            subcategory = state.get("subcategory")
-            mail_summary = state.get("mail_summary", "")
-            summary_attachments = state.get("summary_attachments", "")
-            
-            # Create extended summary
-            extended_parts = []
-            if mail_summary:
-                extended_parts.append(f"Contenuto email: {mail_summary}")
-            if summary_attachments:
-                extended_parts.append(f"Allegati: {summary_attachments}")
-            extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-            
-            # TODO: This will be extended in the future
-            automation_response = AutomationExecutedResponse(
-                message_id=message_id,
-                thread_id=thread_id,
-                status="automation_executed",
-                message="Codice evento mancante o non valido nella richiesta di modifica appuntamento",
-                result={
-                    "category": category,
-                    "subcategory": subcategory,
-                    "human_response": True,
-                    "mail_summary": mail_summary,
-                    "extended_summary": extended_summary,
-                    "event_code": event_code,
-                    "message": "Event code missing or invalid (expected 6 characters)"
-                }
-            )
-            
-            # Add to state to signal END
-            state["automation_executed"] = automation_response.model_dump()
             return state
         
         # Event code is valid, proceed with LLM rescheduling
@@ -2431,17 +2411,8 @@ def rescheduler_node(state):
         # Get user config and extracted info for additional parameters
         user_config = state.get("user_config", {})
         extracted_info = state.get("extracted_info", {})
-        
         service_id = user_config.get("service_id")
         thread_id = extracted_info.get("thread_id")
-        
-        if not service_id:
-            print(f"⚠️ [RESCHEDULER] No service_id found in user_config, cannot reschedule appointment")
-            state["appointment_scheduled"] = False
-            state["appointment_overlap"] = False
-            state["appointment_event_code"] = event_code
-            state["appointment_proposed_slots"] = None
-            return state
         
         # Determine if we need to propose slots or reschedule directly
         propose_slots = False
@@ -2507,12 +2478,24 @@ def rescheduler_node(state):
         
     except Exception as e:
         print(f"❌ [RESCHEDULER] Error in appointment rescheduling: {e}")
-        # Set default values on error
-        state["appointment_scheduled"] = False
-        state["appointment_overlap"] = False
-        state["appointment_event_code"] = state.get("change_event_code")
-        state["appointment_proposed_slots"] = None
-        return state
+
+        # TODO notification and save to db
+
+        return AutomationExecutedResponse(
+            message_id=state.get("message_id"),
+            thread_id=state.get("thread_id"),
+            status="automation_executed",
+            message="Errore durante la modifica dell'appuntamento",
+            result={
+                "category": state.get("category"),
+                "subcategory": state.get("subcategory"),
+                "human_response": True,
+                "mail_summary": state.get("mail_summary"),
+                "extended_summary": state.get("extended_summary"),
+                "event_code": state.get("change_event_code"),
+                "message": "Errore durante la modifica dell'appuntamento"
+            }
+        )
 
 def cancellation_node(state):
     """
@@ -2543,7 +2526,6 @@ def cancellation_node(state):
     
     current_timestamp = datetime.now().isoformat()
     
-    # TODO errore
     print(f"   📖 Reading cancellation request for event_code...")
     cancel_response = llm_client.read_cancellation_request(
         filtered_body,
@@ -2556,9 +2538,13 @@ def cancellation_node(state):
     
     # Extract event_code from response
     event_code = cancel_response.event_code
+
+    if event_code is None or (isinstance(event_code, str) and len(event_code) != 6):
+        print(f"⚠️ [CANCELLATION] Invalid event_code: {event_code}")
+        return state
     
     # Check if event_code is present
-    if event_code:
+    if event_code and isinstance(event_code, str) and len(event_code) == 6:
         print(f"   🔑 Event code found: {event_code}")
         
         try:
@@ -2568,7 +2554,9 @@ def cancellation_node(state):
             
             if not event_response:
                 print(f"   ⚠️ Event {event_code} not found in database")
-                #TODO: Send a notification
+                
+                #TODO: Send a notification and save in DB
+
                 # Return automation response indicating event not found
                 return AutomationExecutedResponse(
                     message_id=message_id,
@@ -2596,6 +2584,8 @@ def cancellation_node(state):
             service_data = get_calendar_service_data(service_id)
             
             if not service_data:
+                #TODO: Send a notification and save in DB
+
                 print(f"   ❌ Calendar service data not found for service_id: {service_id}")
                 return AutomationExecutedResponse(
                     message_id=message_id,
@@ -2625,32 +2615,16 @@ def cancellation_node(state):
                     calendar_deleted = delete_microsoft_calendar_event(access_token, calendar_event_id)
                 else:
                     print(f"   ⚠️ Unknown calendar provider: {calendar_provider}")
-            else:
-                print(f"   ⚠️ No calendar_event_id found, skipping calendar deletion")
-                calendar_deleted = True  # Consider it successful if there's nothing to delete
             
             # Delete event from database
             print(f"   🗑️ Deleting event from scheduled_events table...")
             db_delete_response = delete_event_from_db(event_code)
             
-            if db_delete_response or calendar_deleted:
+            if db_delete_response:
                 print(f"   ✅ Event {event_code} successfully deleted")
-                return AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message=f"Appuntamento {event_code} cancellato con successo",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": False,
-                        "mail_summary": mail_summary,
-                        "event_code": event_code,
-                        "action": "cancelled",
-                        "calendar_deleted": calendar_deleted
-                    }
-                )
+                return state
             else:
+                #TODO: Send a notification and save in DB
                 print(f"   ❌ Failed to delete event {event_code}")
                 return AutomationExecutedResponse(
                     message_id=message_id,
@@ -2668,6 +2642,7 @@ def cancellation_node(state):
                 )
                 
         except Exception as e:
+            #TODO: Send a notification and save in DB
             print(f"   ❌ Error processing cancellation: {e}")
             return AutomationExecutedResponse(
                 message_id=message_id,
@@ -2685,9 +2660,8 @@ def cancellation_node(state):
                 }
             )
     else:
-        # Event code not present - terminate with AutomationExecutedResponse
+        #TODO: Send a notification and save in DB
         print(f"   ⚠️ No event code found in email")
-        #TODO: Send to sender
         return AutomationExecutedResponse(
             message_id=message_id,
             thread_id=thread_id,
@@ -2702,6 +2676,61 @@ def cancellation_node(state):
             }
         )
 
+def extractor_company_info_node(state):
+    """
+    Extract company information from email.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with company information or AutomationExecutedResponse if extraction fails
+    """
+    ## TODO
+    
+    return state
+
+def writer_node(state):
+    """
+    Write company information to database.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with company information or AutomationExecutedResponse if writing fails
+    """
+    ## TODO
+    
+    return state
+
+def reviewer_node(state):
+    """
+    Review company information.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with company information or AutomationExecutedResponse if review fails
+    """
+    ## TODO
+    
+    return state
+
+def sender_node(state):
+    """
+    Send company information to user.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with company information or AutomationExecutedResponse if sending fails
+    """
+    ## TODO
+    
+    return state
 
 def save_and_exit_node(state):
     """
