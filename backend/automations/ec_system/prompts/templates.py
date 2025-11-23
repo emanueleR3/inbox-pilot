@@ -1276,3 +1276,78 @@ INSTRUCTIONS:
    - Handle the overlap field based on the reschedule_appointment tool response
 
 Always respond in JSON format with fields: scheduled, overlap, event_code, proposed_slots."""
+
+# READER PROMPTS FOR CANCEL_APPOINTMENT
+READER_CANCELLATION_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email per richieste di cancellazione appuntamenti.
+
+Analizza attentamente la seguente email di richiesta cancellazione appuntamento ed estrai tutte le informazioni necessarie.
+
+TIMESTAMP ATTUALE: {current_timestamp}
+
+CORPO EMAIL:
+{filtered_body}
+
+RIASSUNTO MAIL CORRENTE:
+{mail_summary}
+
+RIASSUNTO CONVERSAZIONE:
+{extended_summary}
+
+ESTRAI LE SEGUENTI INFORMAZIONI:
+
+1. **key_entities**: Dizionario JSON con le entità chiave:
+   - "dates": Date/orari menzionati
+   - "locations": Luoghi menzionati
+   - "people": Nomi di persone
+   - "organizations": Aziende/organizzazioni
+   - "requests": Richieste esplicite
+   - "actions": Azioni richieste
+   - "amounts": Importi monetari
+   - "documents": Documenti menzionati
+   - "other_info": Altre informazioni rilevanti
+
+2. **event_code**: Codice alfanumerico a 6 cifre dell'evento da cancellare
+   - Cerca nel riassunto conversazione o nella mail corrente
+   - Formato: 6 caratteri alfanumerici (es. "A1B2C3", "123456")
+   - Se NON trovato, imposta a None
+
+EMAIL MITTENTE: {sender_email}
+
+Rispondi in formato JSON con tutte le chiavi richieste."""
+
+READER_CANCELLATION_PROMPT_ENG = """You are an expert assistant in analyzing emails for appointment cancellation requests.
+
+Carefully analyze the following appointment cancellation request email and extract all necessary information.
+
+CURRENT TIMESTAMP: {current_timestamp}
+
+EMAIL BODY:
+{filtered_body}
+
+CURRENT MAIL SUMMARY:
+{mail_summary}
+
+CONVERSATION SUMMARY:
+{extended_summary}
+
+EXTRACT THE FOLLOWING INFORMATION:
+
+1. **key_entities**: JSON dictionary with key entities:
+   - "dates": Dates/times mentioned
+   - "locations": Places mentioned
+   - "people": People's names
+   - "organizations": Companies/organizations
+   - "requests": Explicit requests
+   - "actions": Requested actions
+   - "amounts": Monetary amounts
+   - "documents": Documents mentioned
+   - "other_info": Other relevant information
+
+2. **event_code**: 6-character alphanumeric code of the event to cancel
+   - Search in conversation summary or current mail
+   - Format: 6 alphanumeric characters (e.g., "A1B2C3", "123456")
+   - If NOT found, set to None
+
+EMAIL SENDER: {sender_email}
+
+Respond in JSON format with all required keys."""

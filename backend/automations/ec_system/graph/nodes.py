@@ -2178,6 +2178,36 @@ def reader_node(state):
             print(f"   📍 New place: {change_response.new_place}")
             print(f"   📝 Notes: {change_response.additional_notes}")
             
+        # Check if this is a CANCEL_APPOINTMENT email
+        elif subcategory == "CANCEL_APPOINTMENT":
+            print(f"❌ [READER] Detected CANCEL_APPOINTMENT - using cancellation analysis")
+            
+            # Get additional data for cancellation analysis
+            extended_summary = state.get("extended_summary", "")
+            mail_summary = state.get("mail_summary", "")
+            extracted_info = state.get("extracted_info", {})
+            sender_email = extracted_info.get("from", "mail not available")
+            current_timestamp = datetime.now().isoformat()
+            
+            # Analyze cancellation request using specialized LLM method
+            cancellation_response = llm_client.read_cancellation_request(
+                filtered_body,
+                mail_summary,
+                extended_summary,
+                current_timestamp,
+                sender_email,
+                language
+            )
+            
+            # Update state with cancellation details
+            state["key_entities"] = cancellation_response.key_entities
+            state["cancellation_event_code"] = cancellation_response.event_code
+            # CANCEL_APPOINTMENT needs_response is not used
+            state["needs_response"] = None
+            
+            print(f"✅ [READER] Cancellation analysis completed successfully")
+            print(f"   🔑 Event code: {cancellation_response.event_code}")
+            
         else:
             # Standard email analysis for non-appointment emails
             reader_response = llm_client.read_email(
@@ -2515,7 +2545,7 @@ def cancellation_node(state):
     
     # TODO errore
     print(f"   📖 Reading cancellation request for event_code...")
-    cancel_response = llm_client.read_appointment_change_request(
+    cancel_response = llm_client.read_cancellation_request(
         filtered_body,
         mail_summary,
         extended_summary,
