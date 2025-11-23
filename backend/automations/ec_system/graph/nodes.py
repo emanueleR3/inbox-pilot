@@ -7,7 +7,7 @@ from langgraph.graph import END
 from .config import NodeNames
 from ..llm.client import llm_client
 from ..models.llm_responses import DangerousEmailDetected, LowConfidenceClassification, AutomationExecutedResponse
-from db_client import get_supabase_client, get_calendar_service_data
+from db_client import get_supabase_client, get_calendar_service_data, get_scheduled_event_by_code
 from ec_system.utils.utils import delete_google_calendar_event, delete_microsoft_calendar_event
 from datetime import datetime
 
@@ -1822,192 +1822,14 @@ def handle_payment_issue_node(state):
             }
         )
 
-
 def handle_cancel_appointment_node(state):
     """Handle CANCEL_APPOINTMENT subcategory emails."""
     print(f"❌ [CANCEL_APPOINTMENT] Processing appointment cancellation")
-    
-    # Extract necessary information from state
     extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    filtered_body = state.get("email_body", "")
-    extended_summary = state.get("extended_summary", "")
-    language = state.get("language", "ITA")
-    sender_email = extracted_info.get("from", "mail not available")
-    
     print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
+    # TODO: Implement specific logic for appointment requests
+    return state
     
-    current_timestamp = datetime.now().isoformat()
-    
-    print(f"   📖 Reading cancellation request for event_code...")
-    cancel_response = llm_client.read_appointment_change_request(
-        filtered_body,
-        mail_summary,
-        extended_summary,
-        current_timestamp,
-        sender_email,
-        language
-    )
-    
-    # Extract event_code from response
-    event_code = cancel_response.event_code
-    
-    # Check if event_code is present
-    if event_code:
-        print(f"   🔑 Event code found: {event_code}")
-        
-        try:
-            supabase = get_supabase_client()
-            
-            # Get the scheduled event from database
-            print(f"   🔍 Searching for event {event_code} in database...")
-            event_response = supabase.table("scheduled_events").select(
-                "event_id, service_id, calendar_event_id"
-            ).eq("event_code", event_code).execute()
-            
-            if not event_response.data:
-                print(f"   ⚠️ Event {event_code} not found in database")
-                #TODO: Send a notification
-                # Return automation response indicating event not found
-                return AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message=f"Codice evento {event_code} non trovato nel sistema",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": True,
-                        "mail_summary": mail_summary,
-                        "event_code": event_code,
-                        "action": "event_not_found"
-                    }
-                )
-            
-            event_data = event_response.data[0]
-            event_id = event_data.get("event_id")
-            service_id = event_data.get("service_id")
-            calendar_event_id = event_data.get("calendar_event_id")
-            
-            print(f"   ✅ Event found in database: event_id={event_id}")
-            
-            # Get calendar service data to determine provider and token
-            service_data = get_calendar_service_data(service_id)
-            
-            if not service_data:
-                print(f"   ❌ Calendar service data not found for service_id: {service_id}")
-                return AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message=f"Servizio calendario non trovato per evento {event_code}",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": True,
-                        "mail_summary": mail_summary,
-                        "event_code": event_code,
-                        "action": "service_not_found"
-                    }
-                )
-            
-            calendar_provider = service_data.get("calendar_provider")
-            access_token = service_data.get("access_token")
-            
-            # Delete event from calendar based on provider
-            calendar_deleted = False
-            if calendar_event_id:
-                print(f"   🗑️ Deleting event from {calendar_provider} calendar...")
-                if calendar_provider == "google":
-                    calendar_deleted = delete_google_calendar_event(access_token, calendar_event_id)
-                elif calendar_provider == "microsoft":
-                    calendar_deleted = delete_microsoft_calendar_event(access_token, calendar_event_id)
-                else:
-                    print(f"   ⚠️ Unknown calendar provider: {calendar_provider}")
-            else:
-                print(f"   ⚠️ No calendar_event_id found, skipping calendar deletion")
-                calendar_deleted = True  # Consider it successful if there's nothing to delete
-            
-            # Delete event from database
-            print(f"   🗑️ Deleting event from scheduled_events table...")
-            db_delete_response = supabase.table("scheduled_events").delete().eq(
-                "event_code", event_code
-            ).execute()
-            
-            if db_delete_response.data or calendar_deleted:
-                print(f"   ✅ Event {event_code} successfully deleted")
-                return AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message=f"Appuntamento {event_code} cancellato con successo",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": False,
-                        "mail_summary": mail_summary,
-                        "event_code": event_code,
-                        "action": "cancelled",
-                        "calendar_deleted": calendar_deleted
-                    }
-                )
-            else:
-                print(f"   ❌ Failed to delete event {event_code}")
-                return AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message=f"Errore durante la cancellazione dell'appuntamento {event_code}",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": True,
-                        "mail_summary": mail_summary,
-                        "event_code": event_code,
-                        "action": "deletion_failed"
-                    }
-                )
-                
-        except Exception as e:
-            print(f"   ❌ Error processing cancellation: {e}")
-            return AutomationExecutedResponse(
-                message_id=message_id,
-                thread_id=thread_id,
-                status="automation_executed",
-                message=f"Errore durante la cancellazione: {str(e)}",
-                result={
-                    "category": category,
-                    "subcategory": subcategory,
-                    "human_response": True,
-                    "mail_summary": mail_summary,
-                    "event_code": event_code,
-                    "action": "error",
-                    "error": str(e)
-                }
-            )
-    else:
-        # Event code not present - terminate with AutomationExecutedResponse
-        print(f"   ⚠️ No event code found in email")
-        #TODO: Send to sender
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Richiesta di cancellazione senza codice evento - richiede attenzione",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": True,
-                "mail_summary": mail_summary,
-                "action": "no_event_code"
-            }
-        )
-
-
 def handle_order_confirmation_node(state):
     """Handle ORDER_CONFIRMATION subcategory emails - automated processing."""
     print(f"🛒 [ORDER_CONFIRMATION] Processing order confirmation (automated)")
@@ -2661,6 +2483,193 @@ def rescheduler_node(state):
         state["appointment_event_code"] = state.get("change_event_code")
         state["appointment_proposed_slots"] = None
         return state
+
+def cancellation_node(state):
+    """
+    Cancellations for CANCELLATION subcategory.
+    First validates event_code, then uses LLM with tool functions to either delete appointment.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with cancellation results or AutomationExecutedResponse if event_code invalid
+    """
+    print(f"❌ [CANCELLATION] Processing appointment cancellation")
+    
+    # Extract necessary information from state
+    extracted_info = state.get("extracted_info", {})
+    message_id = extracted_info.get("message_id")
+    thread_id = extracted_info.get("thread_id")
+    category = state.get("category")
+    subcategory = state.get("subcategory")
+    mail_summary = state.get("mail_summary", "")
+    filtered_body = state.get("email_body", "")
+    extended_summary = state.get("extended_summary", "")
+    language = state.get("language", "ITA")
+    sender_email = extracted_info.get("from", "mail not available")
+    
+    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
+    
+    current_timestamp = datetime.now().isoformat()
+    
+    print(f"   📖 Reading cancellation request for event_code...")
+    cancel_response = llm_client.read_appointment_change_request(
+        filtered_body,
+        mail_summary,
+        extended_summary,
+        current_timestamp,
+        sender_email,
+        language
+    )
+    
+    # Extract event_code from response
+    event_code = cancel_response.event_code
+    
+    # Check if event_code is present
+    if event_code:
+        print(f"   🔑 Event code found: {event_code}")
+        
+        try:
+            print(f"   🔍 Searching for event {event_code} in database...")
+
+            event_response = get_scheduled_event_by_code(event_code)
+            
+            if not event_response:
+                print(f"   ⚠️ Event {event_code} not found in database")
+                #TODO: Send a notification
+                # Return automation response indicating event not found
+                return AutomationExecutedResponse(
+                    message_id=message_id,
+                    thread_id=thread_id,
+                    status="automation_executed",
+                    message=f"Codice evento {event_code} non trovato nel sistema",
+                    result={
+                        "category": category,
+                        "subcategory": subcategory,
+                        "human_response": True,
+                        "mail_summary": mail_summary,
+                        "event_code": event_code,
+                        "action": "event_not_found"
+                    }
+                )
+            
+            event_data = event_response
+            event_automation_id = event_data.get("event_automation_id")
+            service_id = event_data.get("service_id")
+            calendar_event_id = event_data.get("provider_event_id")
+            
+            print(f"   ✅ Event found in database: event_automation_id={event_automation_id}")
+            
+            # Get calendar service data to determine provider and token
+            service_data = get_calendar_service_data(service_id)
+            
+            if not service_data:
+                print(f"   ❌ Calendar service data not found for service_id: {service_id}")
+                return AutomationExecutedResponse(
+                    message_id=message_id,
+                    thread_id=thread_id,
+                    status="automation_executed",
+                    message=f"Servizio calendario non trovato per evento {event_code}",
+                    result={
+                        "category": category,
+                        "subcategory": subcategory,
+                        "human_response": True,
+                        "mail_summary": mail_summary,
+                        "event_code": event_code,
+                        "action": "service_not_found"
+                    }
+                )
+            
+            calendar_provider = service_data.get("calendar_provider")
+            access_token = service_data.get("access_token")
+            
+            # Delete event from calendar based on provider
+            calendar_deleted = False
+            if calendar_event_id:
+                print(f"   🗑️ Deleting event from {calendar_provider} calendar...")
+                if calendar_provider == "google":
+                    calendar_deleted = delete_google_calendar_event(access_token, calendar_event_id)
+                elif calendar_provider == "microsoft":
+                    calendar_deleted = delete_microsoft_calendar_event(access_token, calendar_event_id)
+                else:
+                    print(f"   ⚠️ Unknown calendar provider: {calendar_provider}")
+            else:
+                print(f"   ⚠️ No calendar_event_id found, skipping calendar deletion")
+                calendar_deleted = True  # Consider it successful if there's nothing to delete
+            
+            # Delete event from database
+            print(f"   🗑️ Deleting event from scheduled_events table...")
+            db_delete_response = delete_event_from_db(event_code)
+            
+            if db_delete_response or calendar_deleted:
+                print(f"   ✅ Event {event_code} successfully deleted")
+                return AutomationExecutedResponse(
+                    message_id=message_id,
+                    thread_id=thread_id,
+                    status="automation_executed",
+                    message=f"Appuntamento {event_code} cancellato con successo",
+                    result={
+                        "category": category,
+                        "subcategory": subcategory,
+                        "human_response": False,
+                        "mail_summary": mail_summary,
+                        "event_code": event_code,
+                        "action": "cancelled",
+                        "calendar_deleted": calendar_deleted
+                    }
+                )
+            else:
+                print(f"   ❌ Failed to delete event {event_code}")
+                return AutomationExecutedResponse(
+                    message_id=message_id,
+                    thread_id=thread_id,
+                    status="automation_executed",
+                    message=f"Errore durante la cancellazione dell'appuntamento {event_code}",
+                    result={
+                        "category": category,
+                        "subcategory": subcategory,
+                        "human_response": True,
+                        "mail_summary": mail_summary,
+                        "event_code": event_code,
+                        "action": "deletion_failed"
+                    }
+                )
+                
+        except Exception as e:
+            print(f"   ❌ Error processing cancellation: {e}")
+            return AutomationExecutedResponse(
+                message_id=message_id,
+                thread_id=thread_id,
+                status="automation_executed",
+                message=f"Errore durante la cancellazione: {str(e)}",
+                result={
+                    "category": category,
+                    "subcategory": subcategory,
+                    "human_response": True,
+                    "mail_summary": mail_summary,
+                    "event_code": event_code,
+                    "action": "error",
+                    "error": str(e)
+                }
+            )
+    else:
+        # Event code not present - terminate with AutomationExecutedResponse
+        print(f"   ⚠️ No event code found in email")
+        #TODO: Send to sender
+        return AutomationExecutedResponse(
+            message_id=message_id,
+            thread_id=thread_id,
+            status="automation_executed",
+            message="Richiesta di cancellazione senza codice evento - richiede attenzione",
+            result={
+                "category": category,
+                "subcategory": subcategory,
+                "human_response": True,
+                "mail_summary": mail_summary,
+                "action": "no_event_code"
+            }
+        )
 
 
 def save_and_exit_node(state):

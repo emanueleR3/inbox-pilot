@@ -43,6 +43,7 @@ class NodeNames:
     READER = "reader"
     SCHEDULER = "scheduler"
     RESCHEDULER = "rescheduler"
+    CANCELLATION = "cancellation"
     
     # Subcategory-specific nodes
     HANDLE_OFFER_PROMOTION = "handle_offer_promotion"

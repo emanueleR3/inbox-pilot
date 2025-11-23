@@ -510,6 +510,19 @@ def check_event_code_exists(event_code: str) -> bool:
         print(f"❌ [DB_CLIENT] Error checking event code: {e}")
         return False
 
+def delete_event_from_db(event_code: str):
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("scheduled_events").delete().eq("event_code", event_code).execute()
+        
+        if response.data:
+            return True
+        else:
+            return False
+            
+    except Exception as e:
+        return False
 
 if __name__ == "__main__":
     # Test del modulo
