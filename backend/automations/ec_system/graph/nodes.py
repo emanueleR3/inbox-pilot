@@ -16,12 +16,12 @@ import sys
 from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
-from db_client import get_user_configuration_sync, get_default_configuration, insert_notification_sync, get_email_attachments_sync
+from db_client import get_user_configuration_sync, get_default_configuration, insert_notification_sync, get_email_attachments_sync, get_company_information_sync
 
 # Import attachment extractor service
 from ..services.attachment_extractor import attachment_extractor
 # Import notification client
-from ..services.notification_client import send_low_confidence_notification, send_high_priority_notification, send_event_invite_notification
+from ..services.notification_client import send_low_confidence_notification, send_high_priority_notification, send_event_invite_notification, send_information_not_present_notification
 """ from .utils import (
     get_email_body,
     get_attachments,
@@ -731,6 +731,37 @@ def evaluator_node(state):
             summary_attachments=summary_attachments or "",
             language=language
         )
+
+        if evaluation_response is None:
+            print(f"⚠️ [EVALUATOR] Evaluation response is None, using default evaluation")
+
+            # save in db
+            from db_client import insert_notification_sync
+            # Get extracted info for notifications
+            extracted_info = state.get("extracted_info", {})
+            message_id = extracted_info.get("message_id", "unknown")
+            box_email = extracted_info.get("box_email", "unknown")
+            # Insert notification in database
+            try:
+                notification_success = insert_notification_sync(
+                    email=box_email,
+                    notification_type="LOW_CONFIDENCE_CLASSIFICATION_MAIL",
+                    message_id=message_id,
+                    text=None
+                )
+                
+                if not notification_success:
+                    print(f"❌ [EVALUATOR] Failed to insert notification for {box_email}")
+            except Exception as e:
+                print(f"❌ [EVALUATOR] Error inserting notification: {e}")
+
+            send_low_confidence_notification(
+                sender_email=extracted_info.get("from", "unknown"),
+                box_email=extracted_info.get("box_email", "unknown"),
+                subject=extracted_info.get("subject", "No subject"),
+                body=state.get("email_body", ""),
+                summary_attachment=state.get("summary_attachments")
+            )
         
         # Update state with evaluation results
         state["priority_score"] = evaluation_response.priority_score
@@ -2678,17 +2709,130 @@ def cancellation_node(state):
 
 def extractor_company_info_node(state):
     """
-    Extract company information from email.
+    Estrae le informazioni aziendali rilevanti per rispondere all'email.
     
     Args:
         state: Current workflow state
         
     Returns:
-        Updated state with company information or AutomationExecutedResponse if extraction fails
+        Updated state with chunked_company_informations or AutomationExecutedResponse if info not present
     """
-    ## TODO
-    
-    return state
+    try:
+        print(f"🏢 [EXTRACTOR_COMPANY_INFO] Starting company information extraction")
+        
+        # Retrieve extracted_info per ottenere box_email
+        extracted_info = state.get('extracted_info', {})
+        box_email = extracted_info.get('box_email', 'unknown')
+        message_id = extracted_info.get('message_id', 'unknown')
+        thread_id = extracted_info.get('thread_id', 'unknown')
+        from_email = extracted_info.get('from', 'unknown')
+        subject = extracted_info.get('subject', 'No Subject')
+        
+        print(f"   📧 Box email: {box_email}")
+        
+        # Step 1: Recupera company information dal database
+        company_information = get_company_information_sync(box_email)
+        
+        # Step 2: Gestione caso information vuota o non presente
+        if not company_information:
+            print(f"⚠️ [EXTRACTOR_COMPANY_INFO] Company information not available - sending notification")
+            
+            # Salva notifica nel database
+            insert_notification_sync(
+                email=box_email,
+                notification_type="INFORMATION_NOT_PRESENT",
+                message_id=message_id,
+                text="Company information not available in database"
+            )
+            
+            # Invia notifica via webhook
+            filtered_body = state.get('email_body', '')
+            summary_attachments = state.get('summary_attachments')
+            
+            send_information_not_present_notification(
+                sender_email=from_email,
+                box_email=box_email,
+                subject=subject,
+                body=filtered_body,
+                summary_attachment=summary_attachments
+            )
+            
+            print(f"✅ [EXTRACTOR_COMPANY_INFO] Notification sent - ending workflow with human response required")
+            
+            # Ritorna AutomationExecutedResponse con human_response = True
+            return AutomationExecutedResponse(
+                message_id=message_id,
+                thread_id=thread_id,
+                status="automation_executed",
+                message="Company information not available - human response required",
+                result={
+                    "extended_summary": state.get('extended_summary'),
+                    "human_response": True,
+                    "notification_sent": True,
+                    "notification_type": "INFORMATION_NOT_PRESENT"
+                }
+            )
+        
+        # Step 3: Estrai informazioni rilevanti tramite LLM
+        extended_summary = state.get('extended_summary', '')
+        mail_summary = state.get('mail_summary', '')
+        summary_attachments = state.get('summary_attachments', '')
+        key_entities = state.get('key_entities', {})
+        language = state.get('language', 'ITA')
+        
+        print(f"   📝 Extended summary length: {len(extended_summary)}")
+        print(f"   📝 Mail summary length: {len(mail_summary)}")
+        print(f"   📎 Has attachment summary: {bool(summary_attachments)}")
+        print(f"   🔑 Key entities: {len(key_entities)} items")
+        
+        # Invoca l'LLM per estrarre le informazioni rilevanti
+        extraction_result = llm_client.extract_company_info(
+            extended_summary=extended_summary,
+            mail_summary=mail_summary,
+            summary_attachments=summary_attachments,
+            key_entities=key_entities,
+            company_information=company_information,
+            language=language
+        )
+        
+        # Aggiorna lo stato con le informazioni estratte
+        state['chunked_company_informations'] = extraction_result.chunked_company_informations
+
+        # DEBUG
+        print(f"✅ [EXTRACTOR_COMPANY_INFO] Company information extracted successfully")
+        print(f"   📝 Chunked company informations extracted:\n {extraction_result.chunked_company_informations} ")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [EXTRACTOR_COMPANY_INFO] Error extracting company information: {str(e)}")
+        # In caso di errore, ritorna stato con dizionario vuoto
+        from db_client import insert_notification_sync
+        
+        # Invia notifica via webhook
+        state['chunked_company_informations'] = {}
+        
+        extracted_info = state.get('extracted_info', {})
+        box_email = extracted_info.get('box_email', 'unknown')
+        message_id = extracted_info.get('message_id', 'unknown')
+        thread_id = extracted_info.get('thread_id', 'unknown')
+        
+        # Salva notifica nel database
+        insert_notification_sync(
+            email=box_email,
+            notification_type="INFORMATION_NOT_PRESENT",
+            message_id=message_id,
+            text=f"Error extracting company information: {str(e)}"
+        )
+        
+        send_information_not_present_notification(
+            sender_email=extracted_info.get('from', 'unknown'),
+            box_email=extracted_info.get('box_email', 'unknown'),
+            subject=extracted_info.get('subject', 'No Subject'),
+            body=state.get('email_body', ''),
+            summary_attachment=state.get('summary_attachments', '')
+        )
+        return state
 
 def writer_node(state):
     """

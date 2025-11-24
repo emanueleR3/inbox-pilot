@@ -21,6 +21,7 @@ class NotificationType:
     EVENT_INVITE_RECEIVED = "EVENT_INVITE_RECEIVED"
     APPOINTMENT_NOT_SCHEDULED = "APPOINTMENT_NOT_SCHEDULED"
     EVENT_FOLLOWUP_RECEIVED = "EVENT_FOLLOWUP_RECEIVED"
+    INFORMATION_NOT_PRESENT = "INFORMATION_NOT_PRESENT"
 
 
 def send_notification(
@@ -243,4 +244,34 @@ def send_appointment_not_scheduled_notification(
         body=body,
         summary_attachment=summary_attachment,
         overlap=overlap
+    )
+
+
+def send_information_not_present_notification(
+    sender_email: str,
+    box_email: str,
+    subject: str,
+    body: str,
+    summary_attachment: Optional[str] = None
+) -> bool:
+    """
+    Send a notification when company information is not present in the database.
+    
+    Args:
+        sender_email: Email address of the sender
+        box_email: Email address of the mailbox
+        subject: Email subject
+        body: Email body content
+        summary_attachment: Summary of attachments if present
+        
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    return send_notification(
+        notification_type=NotificationType.INFORMATION_NOT_PRESENT,
+        sender_email=sender_email,
+        box_email=box_email,
+        subject=subject,
+        body=body,
+        summary_attachment=summary_attachment
     )

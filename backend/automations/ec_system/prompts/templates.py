@@ -1351,3 +1351,77 @@ EXTRACT THE FOLLOWING INFORMATION:
 EMAIL SENDER: {sender_email}
 
 Respond in JSON format with all required keys."""
+
+
+# COMPANY INFORMATION EXTRACTOR PROMPTS
+EXTRACTOR_COMPANY_INFO_PROMPT_ITA = """
+Sei un esperto nell'estrazione di informazioni aziendali rilevanti per rispondere a email.
+
+Analizza attentamente il contesto della email e le informazioni aziendali disponibili, quindi estrai SOLO le informazioni che sono rilevanti per rispondere alla richiesta specifica dell'email.
+
+CONTESTO EMAIL:
+- RIASSUNTO CONVERSAZIONE: {extended_summary}
+- RIASSUNTO EMAIL CORRENTE: {mail_summary}
+- ALLEGATI: {summary_attachments}
+- ENTITÀ CHIAVE ESTRATTE: {key_entities}
+
+INFORMAZIONI AZIENDALI DISPONIBILI:
+{company_information}
+
+ISTRUZIONI CRITICHE:
+1. Analizza attentamente cosa viene chiesto nell'email
+2. Identifica SOLO le sezioni delle informazioni aziendali che sono necessarie per rispondere
+3. NON fare inferenze o aggiunte - estrai SOLO testo esistente dalle informazioni aziendali
+4. NON includere informazioni non rilevanti alla richiesta
+5. Se nessuna informazione aziendale è pertinente, restituisci un dizionario vuoto
+6. Organizza le informazioni estratte in un dizionario strutturato per argomento
+
+FORMATO OUTPUT:
+Restituisci un dizionario dove:
+- Chiavi: nomi degli argomenti rilevanti (es. "orari_apertura", "servizi_offerti", "contatti")
+- Valori: testo esatto estratto dalle informazioni aziendali
+
+Esempio:
+{
+    "orari_apertura": "Lunedì-Venerdì: 9:00-18:00, Sabato: 9:00-13:00",
+    "contatti": "Email: info@azienda.it, Tel: +39 123456789"
+}
+
+Estrai solo informazioni pertinenti e necessarie per rispondere alla richiesta.
+"""
+
+EXTRACTOR_COMPANY_INFO_PROMPT_ENG = """
+You are an expert in extracting relevant company information to respond to emails.
+
+Carefully analyze the email context and available company information, then extract ONLY the information that is relevant to answer the specific email request.
+
+EMAIL CONTEXT:
+- CONVERSATION SUMMARY: {extended_summary}
+- CURRENT EMAIL SUMMARY: {mail_summary}
+- ATTACHMENTS: {summary_attachments}
+- EXTRACTED KEY ENTITIES: {key_entities}
+
+AVAILABLE COMPANY INFORMATION:
+{company_information}
+
+CRITICAL INSTRUCTIONS:
+1. Carefully analyze what is being asked in the email
+2. Identify ONLY the sections of company information that are necessary to respond
+3. DO NOT make inferences or additions - extract ONLY existing text from company information
+4. DO NOT include information not relevant to the request
+5. If no company information is pertinent, return an empty dictionary
+6. Organize extracted information in a structured dictionary by topic
+
+OUTPUT FORMAT:
+Return a dictionary where:
+- Keys: names of relevant topics (e.g., "opening_hours", "services_offered", "contacts")
+- Values: exact text extracted from company information
+
+Example:
+{
+    "opening_hours": "Monday-Friday: 9:00-18:00, Saturday: 9:00-13:00",
+    "contacts": "Email: info@company.com, Phone: +39 123456789"
+}
+
+Extract only pertinent and necessary information to answer the request.
+"""
