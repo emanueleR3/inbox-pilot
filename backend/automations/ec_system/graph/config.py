@@ -31,7 +31,6 @@ class NodeNames:
     LANGUAGE_DETECTOR = "language_detector"
     AI_FILTER = "ai_filter"
     GUARDRAIL = "guardrail"
-    AI_FILTER_GUARDRAIL = "ai_filter_guardrail"  # Deprecated, kept for compatibility
     SUMMARIZER = "summarizer"
     CLASSIFIER = "classifier"
     ATTACHMENT_EXTRACTOR = "attachment_extractor"

@@ -3,34 +3,29 @@ Core workflow nodes for email processing.
 """
 
 import os
-from langgraph.graph import END
-from .config import NodeNames
-from ..llm.client import llm_client
-from ..models.llm_responses import DangerousEmailDetected, LowConfidenceClassification, AutomationExecutedResponse
-from db_client import get_supabase_client, get_calendar_service_data, get_scheduled_event_by_code, delete_event_from_db
-from ec_system.utils.utils import delete_google_calendar_event, delete_microsoft_calendar_event
-from datetime import datetime
-
-# Import db_client for user configuration and notifications
+from dotenv import load_dotenv
 import sys
 from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
-from db_client import get_user_configuration_sync, get_default_configuration, insert_notification_sync, get_email_attachments_sync, get_company_information_sync
+load_dotenv()
+
+from .config import NodeNames
+from ..llm.client import llm_client
+from db_client import (
+    get_calendar_service_data, 
+    get_scheduled_event_by_code, 
+    delete_event_from_db, 
+    get_user_configuration_sync, 
+    get_default_configuration, 
+    get_email_attachments_sync, 
+    get_company_information_sync
+) 
+from ec_system.utils.utils import delete_google_calendar_event, delete_microsoft_calendar_event
+from datetime import datetime
 
 # Import attachment extractor service
 from ..services.attachment_extractor import attachment_extractor
-# Import notification client
-from ..services.notification_client import send_low_confidence_notification, send_high_priority_notification, send_event_invite_notification, send_information_not_present_notification
-""" from .utils import (
-    get_email_body,
-    get_attachments,
-    detect_language,
-    validate_content,
-    classify_category,
-    notify_admin
-) """
-
 
 
 def new_mail_node(state):
@@ -210,6 +205,7 @@ def guardrail_node(state):
         # Perform security check using LLM with salt protection
         security_response = llm_client.check_email_security_protected(filtered_body, language)
         
+        state["dangerous_email"] = False
         # Check if email is safe to process
         if not security_response.permitted or security_response.attempted_scam:
             print(f"🚨 [GUARDRAIL] DANGEROUS EMAIL DETECTED!")
@@ -217,37 +213,8 @@ def guardrail_node(state):
             print(f"   Attempted Scam: {security_response.attempted_scam}")
             print(f"   Message: {security_response.message_error}")
             
-            # Extract thread and message IDs from state
-            extracted_info = state.get("extracted_info", {})
-            thread_id = extracted_info.get("thread_id", "unknown")
-            message_id = extracted_info.get("message_id", "unknown")
-            box_email = extracted_info.get("box_email", "unknown")
-            
-            # Insert notification in database
-            try:
-                notification_success = insert_notification_sync(
-                    email=box_email,
-                    notification_type="MAIL_NOT_PERMITTED",
-                    message_id=message_id,
-                    text=None  # No text as requested
-                )
-                
-                if not notification_success:
-                    print(f"❌ [GUARDRAIL] Failed to insert notification for {box_email}")
-                    
-            except Exception as e:
-                print(f"❌ [GUARDRAIL] Error inserting notification: {e}")
-            
-            # Return dangerous email response
-            dangerous_response = DangerousEmailDetected(
-                message_id=message_id,
-                thread_id=thread_id,
-                message=security_response.message_error or "Email contains suspicious or dangerous content",
-                attempted_scam=security_response.attempted_scam
-            )
-            
             # Update state to indicate dangerous email detected
-            state["dangerous_email"] = dangerous_response.dict()
+            state["dangerous_email"] = True
             return state
         
         print(f"✅ [GUARDRAIL] Email passed security checks")
@@ -255,16 +222,8 @@ def guardrail_node(state):
         
     except Exception as e:
         print(f"❌ [GUARDRAIL] Error in security analysis: {e}")
-        # Continue processing on error (safe default)
+        # TODO migliorare gestione errori
         return state
-
-
-def ai_filter_guardrail_node(state):
-    """
-    DEPRECATED: Kept for backward compatibility.
-    Use ai_filter_node and guardrail_node separately.
-    """
-    return NodeNames.CLASSIFIER
 
 
 def summarizer_node(state):
@@ -375,7 +334,8 @@ def classifier_node(state):
         classification_response = llm_client.classify_email_category(
             filtered_body, subject, language, has_attachments
         )
-        
+        state["low_confidence_classification"] = False
+
         # Check confidence against threshold
         if classification_response.confidence_score >= confidence_threshold:
             # High confidence - continue to router
@@ -393,54 +353,9 @@ def classifier_node(state):
             return state
             
         else:
-            # Low confidence - terminate workflow
-            print(f"⚠️ [CLASSIFIER] Low confidence classification detected")
-            print(f"   🏷️ Category: {classification_response.category}")
-            print(f"   📊 Confidence: {classification_response.confidence_score}")
-            print(f"   🎯 Threshold: {confidence_threshold} (FAILED)")
-            print(f"   � Workflow terminated - human review required")
-            
-            # Get extracted info for notifications
-            extracted_info = state.get("extracted_info", {})
-            message_id = extracted_info.get("message_id", "unknown")
-            box_email = extracted_info.get("box_email", "unknown")
-            
-            # Insert notification in database
-            try:
-                notification_success = insert_notification_sync(
-                    email=box_email,
-                    notification_type="LOW_CONFIDENCE_CLASSIFICATION_MAIL",
-                    message_id=message_id,
-                    text=None
-                )
-                
-                if not notification_success:
-                    print(f"❌ [CLASSIFIER] Failed to insert notification for {box_email}")
-                    
-            except Exception as e:
-                print(f"❌ [CLASSIFIER] Error inserting notification: {e}")
-            
-            # Send notification webhook for low confidence classification
-            send_low_confidence_notification(
-                sender_email=extracted_info.get("from", "unknown"),
-                box_email=box_email,
-                subject=extracted_info.get("subject", "No subject"),
-                body=state.get("email_body", ""),
-                summary_attachment=state.get("summary_attachments")
-            )
-            
-            # Return low confidence classification for workflow termination
-            return LowConfidenceClassification(
-                message_id=message_id,
-                thread_id=thread_id,
-                message=f"Classification confidence {classification_response.confidence_score} below threshold {confidence_threshold}",
-                result={
-                    "category": classification_response.category,
-                    "confidence_score": classification_response.confidence_score,
-                    "mail_summary": state.get("mail_summary", ""),
-                    "extended_summary": state.get("extended_summary", "")
-                }
-            )
+            # Update state to indicate low confidence classification
+            state["low_confidence_classification"] = True
+            return state
         
     except Exception as e:
         print(f"❌ [CLASSIFIER] Error in email classification: {e}")
@@ -733,39 +648,14 @@ def evaluator_node(state):
         )
 
         if evaluation_response is None:
-            print(f"⚠️ [EVALUATOR] Evaluation response is None, using default evaluation")
-
-            # save in db
-            from db_client import insert_notification_sync
-            # Get extracted info for notifications
-            extracted_info = state.get("extracted_info", {})
-            message_id = extracted_info.get("message_id", "unknown")
-            box_email = extracted_info.get("box_email", "unknown")
-            # Insert notification in database
-            try:
-                notification_success = insert_notification_sync(
-                    email=box_email,
-                    notification_type="LOW_CONFIDENCE_CLASSIFICATION_MAIL",
-                    message_id=message_id,
-                    text=None
-                )
-                
-                if not notification_success:
-                    print(f"❌ [EVALUATOR] Failed to insert notification for {box_email}")
-            except Exception as e:
-                print(f"❌ [EVALUATOR] Error inserting notification: {e}")
-
-            send_low_confidence_notification(
-                sender_email=extracted_info.get("from", "unknown"),
-                box_email=extracted_info.get("box_email", "unknown"),
-                subject=extracted_info.get("subject", "No subject"),
-                body=state.get("email_body", ""),
-                summary_attachment=state.get("summary_attachments")
-            )
+            # Update state to indicate low confidence classification
+            state["low_confidence_classification"] = True
+            return state
         
         # Update state with evaluation results
         state["priority_score"] = evaluation_response.priority_score
         state["subcategory"] = evaluation_response.subcategory
+        state["low_confidence_classification"] = False
         
         print(f"✅ [EVALUATOR] Email evaluation completed successfully")
         print(f"   📊 Priority Score: {evaluation_response.priority_score}")
@@ -809,62 +699,21 @@ def priority_controller_node(state):
         print(f"📊 [PRIORITY_CONTROLLER] Priority analysis:")
         print(f"   👤 User: {user_email}")
         print(f"   🔥 Priority score: {priority_score}")
-        print(f"   📏 Threshold: {priority_threshold}")
         print(f"   🏷️ Subcategory: {subcategory}")
         
         # Determine routing based on priority
-        if priority_score >= priority_threshold:
-            print(f"🚨 [PRIORITY_CONTROLLER] HIGH PRIORITY EMAIL")
-            print(f"   ⚡ Score {priority_score} >= Threshold {priority_threshold}")
-            
-            """
-            # Get extracted info for notifications
-            extracted_info = state.get("extracted_info", {})
-            message_id = extracted_info.get("message_id", "unknown")
-            box_email = extracted_info.get("box_email", "unknown")
-            # Insert notification in database
-            try:
-                notification_success = insert_notification_sync(
-                    email=box_email,
-                    notification_type="HIGH_PRIORITY_MAIL",
-                    message_id=message_id,
-                    text=None
-                )
-                
-                if not notification_success:
-                    print(f"❌ [PRIORITY_CONTROLLER] Failed to insert notification for {box_email}")
-                    
-            except Exception as e:
-                print(f"❌ [PRIORITY_CONTROLLER] Error inserting notification: {e}")
-            
-            # Send notification webhook for high priority email
-            send_high_priority_notification(
-                sender_email=extracted_info.get("from", "unknown"),
-                box_email=box_email,
-                subject=extracted_info.get("subject", "No subject"),
-                body=state.get("email_body", ""),
-                summary_attachment=state.get("summary_attachments")
-            )
-            """
-
+        if priority_score >= priority_threshold:            
             # Mark for high priority handling
-            state["high_priority_email"] = True
-            state["workflow_decision"] = "END_HIGH_PRIORITY"
+            state["status"] = "END_HIGH_PRIORITY"
             return state
         else:
             print(f"📋 [PRIORITY_CONTROLLER] Normal priority - Routing to subcategory handler")
-            print(f"   📊 Score {priority_score} < Threshold {priority_threshold}")
             # Continue to subcategory routing
-            state["high_priority_email"] = False
-            state["workflow_decision"] = "ROUTE_TO_SUBCATEGORY"
             return state
             
     except Exception as e:
         # TODO Send notification and save to database
         print(f"❌ [PRIORITY_CONTROLLER] Error in priority control: {e}")
-        # Default to normal priority on error
-        state["high_priority_email"] = False
-        state["workflow_decision"] = "ROUTE_TO_SUBCATEGORY"
         return state
 
 
@@ -872,89 +721,15 @@ def priority_controller_node(state):
 def handle_offer_promotion_node(state):
     """Handle OFFER_PROMOTION subcategory emails - automated processing."""
     print(f"🎯 [OFFER_PROMOTION] Processing promotional offer email (automated)")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come promozione")
-    
-    
-    
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Email promozionale archiviata automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": False,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
+    state["automation_executed"] = True
+    return state
 
 
 def handle_newsletter_node(state):
     """Handle NEWSLETTER subcategory emails - automated processing."""
     print(f"📰 [NEWSLETTER] Processing newsletter email (automated)")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come newsletter")
-    
-    
-    
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Newsletter archiviata automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": False,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
+    state["automation_executed"] = True
+    return state
 
 
 def handle_event_invite_node(state):
@@ -962,100 +737,17 @@ def handle_event_invite_node(state):
     print(f"🎉 [EVENT_INVITE] Processing event invitation email")
     
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
     
     # If category is promotion or social_notification, automate
     if category in ["PROMOTION", "SOCIAL_NOTIFICATION"]:
-        print(f"   🤖 Automation: Category {category} - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message=f"Invito evento (categoria {category}) archiviato automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
-    else:
-        # Get message details for notification
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        box_email = extracted_info.get("box_email", "unknown")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        # Insert notification in database
-        try:
-            notification_success = insert_notification_sync(
-                email=box_email,
-                notification_type="EVENT_INVITE_MAIL",
-                message_id=message_id,
-                text=None
-            )
-            
-            if not notification_success:
-                print(f"❌ [EVENT_INVITE] Failed to insert notification for {box_email}")
-                
-        except Exception as e:
-            print(f"❌ [EVENT_INVITE] Error inserting notification: {e}")
-        
-        # Send notification webhook for event invite requiring human response
-        send_event_invite_notification(
-            sender_email=extracted_info.get("from", "unknown"),
-            box_email=box_email,
-            subject=extracted_info.get("subject", "No subject"),
-            body=state.get("email_body", ""),
-            summary_attachment=state.get("summary_attachments")
-        )
+        state["automation_executed"] = True
+        return state
 
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message=f"Invito evento (categoria {category}) archiviato automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": True,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
+    else:
+        state["human_response"] = True
+        state["automation_executed"] = True
+        state["status"] = "EVENT_INVITE_HUMAN_RESPONSE_REQUIRED"
+        return state
 
 
 def handle_product_update_node(state):
@@ -1063,45 +755,11 @@ def handle_product_update_node(state):
     print(f"📦 [PRODUCT_UPDATE] Processing product update email")
     
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
     
     # If category is promotion, automate
     if category == "PROMOTION":
-        print(f"   🤖 Automation: Category PROMOTION - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Aggiornamento prodotto promozionale archiviato automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
+        state["automation_executed"] = True
+        return state
     else:
         return state
 
@@ -1109,150 +767,33 @@ def handle_product_update_node(state):
 def handle_request_quote_node(state):
     """Handle REQUEST_QUOTE subcategory emails."""
     print(f"💰 [REQUEST_QUOTE] Processing quote request email")
-    
+    #TODO andrebbe controllato response_to_quote
+
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
-    
-    # If category is transactional, automate
-    if category == "PROMOTION":
-        print(f"   🤖 Automation: Category PROMOTION - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Documenti inviati (transazionale) archiviato automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
-    else:
-        # TODO ci sarebbe da controllare la configurazione "response_to_quote"
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Documenti inviati (transazionale) archiviato automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": True,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
+
+    if category == "INFO_REQUESTED":
+        state["human_response"] = True
+    state["automation_executed"] = True
+
+    return state
 
 
 def handle_new_message_node(state):
     """Handle NEW_MESSAGE subcategory emails - automated processing."""
     print(f"💬 [NEW_MESSAGE] Processing new message notification (automated)")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come notifica messaggio")
-    
-    
-    
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Notifica nuovo messaggio archiviata automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": False,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
-
+    state["automation_executed"] = True
+    return state
 
 def handle_connection_request_node(state):
     """Handle CONNECTION_REQUEST subcategory emails - conditional processing."""
     print(f"🤝 [CONNECTION_REQUEST] Processing connection request")
     
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
     
     # If category is social_notification, automate
     if category == "SOCIAL_NOTIFICATION":
-        print(f"   🤖 Automation: Category SOCIAL_NOTIFICATION - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Richiesta connessione social archiviata automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
+        state["automation_executed"] = True
+        return state
     else:
         return state
 
@@ -1260,89 +801,15 @@ def handle_connection_request_node(state):
 def handle_system_alert_node(state):
     """Handle SYSTEM_ALERT subcategory emails - automated processing."""
     print(f"⚠️ [SYSTEM_ALERT] Processing system alert (automated)")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come alert di sistema")
-    
-    
-    
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Alert di sistema archiviato automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": False,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
+    state["automation_executed"] = True
+    return state
 
 
 def handle_system_notification_node(state):
     """Handle SYSTEM_NOTIFICATION subcategory emails - automated processing."""
     print(f"🔔 [SYSTEM_NOTIFICATION] Processing system notification (automated)")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come notifica di sistema")
-    
-    
-    
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Notifica di sistema archiviata automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": False,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
+    state["automation_executed"] = True
+    return state
 
 
 def handle_sent_documents_node(state):
@@ -1350,45 +817,11 @@ def handle_sent_documents_node(state):
     print(f"📄 [SENT_DOCUMENTS] Processing document delivery notification")
     
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
     
     # If category is transactional, automate
     if category == "TRANSACTIONAL":
-        print(f"   🤖 Automation: Category TRANSACTIONAL - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Documenti inviati (transazionale) archiviato automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
+        state["automation_executed"] = True
+        return state
     else:
         return state
 
@@ -1398,45 +831,11 @@ def handle_provide_update_node(state):
     print(f"📈 [PROVIDE_UPDATE] Processing status update")
     
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
     
     # If category is transactional, automate
     if category == "TRANSACTIONAL":
-        print(f"   🤖 Automation: Category TRANSACTIONAL - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Aggiornamento stato (transazionale) archiviato automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
+        state["automation_executed"] = True
+        return state
     else:
         return state
 
@@ -1473,50 +872,15 @@ def handle_request_document_node(state):
     print(f"📋 [REQUEST_DOCUMENT] Processing document request")
     
     # TODO ci sarebbe da controllare la configurazione "send_document"
+    state["human_response"] = True
+    state["automation_executed"] = True
 
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come alert di sistema")
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Alert di sistema archiviato automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": True,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
+    return state
 
 
 def handle_event_followup_node(state):
     """Handle EVENT_FOLLOWUP subcategory emails."""
     print(f"🔄 [EVENT_FOLLOWUP] Processing event follow-up")
-    extracted_info = state.get("extracted_info", {})
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    # TODO: Implement specific logic for event follow-ups
     return state
 
 
@@ -1525,45 +889,11 @@ def handle_invoice_or_receipt_node(state):
     print(f"🧾 [INVOICE_OR_RECEIPT] Processing invoice or receipt")
     
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
     
     # If category is transactional, automate
     if category == "TRANSACTIONAL":
-        print(f"   🤖 Automation: Category TRANSACTIONAL - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Fattura/ricevuta (transazionale) archiviata automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
+        state["automation_executed"] = True
+        return state
     else:
         return state
 
@@ -1573,45 +903,11 @@ def handle_status_notification_node(state):
     print(f"📊 [STATUS_NOTIFICATION] Processing status notification")
     
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
     
     # If category is transactional, automate
     if category == "TRANSACTIONAL":
-        print(f"   🤖 Automation: Category TRANSACTIONAL - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Notifica stato (transazionale) archiviata automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
+        state["automation_executed"] = True
+        return state
     else:
         return state
 
@@ -1621,73 +917,27 @@ def handle_ticket_update_node(state):
     print(f"🎫 [TICKET_UPDATE] Processing ticket update")
     
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
     
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
-    
-    # If category is transactional, automate
     if category == "TRANSACTIONAL":
-        print(f"   🤖 Automation: Category TRANSACTIONAL - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Aggiornamento ticket (transazionale) archiviato automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
-    else:
-        return state
+        state["automation_executed"] = True
+    return state
 
 
 def handle_general_greeting_node(state):
     """Handle GENERAL_GREETING subcategory emails."""
     print(f"👋 [GENERAL_GREETING] Processing general greeting")
-    extracted_info = state.get("extracted_info", {})
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    # TODO: Implement specific logic for general greetings
     return state
 
 
 def handle_request_appointment_node(state):
     """Handle REQUEST_APPOINTMENT subcategory emails."""
     print(f"📅 [REQUEST_APPOINTMENT] Processing appointment request")
-    extracted_info = state.get("extracted_info", {})
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    # TODO: Implement specific logic for appointment requests
     return state
 
 
 def handle_request_appointment_change_node(state):
     """Handle REQUEST_APPOINTMENT_CHANGE subcategory emails."""
     print(f"🔄 [REQUEST_APPOINTMENT_CHANGE] Processing appointment change request")
-    extracted_info = state.get("extracted_info", {})
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    # TODO: Implement specific logic for appointment changes
     return state
 
 
@@ -1696,45 +946,11 @@ def handle_request_status_update_node(state):
     print(f"📊 [REQUEST_STATUS_UPDATE] Processing status update request")
     
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
     
     # If category is transactional, automate
     if category == "TRANSACTIONAL":
-        print(f"   🤖 Automation: Category TRANSACTIONAL - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Richiesta aggiornamento stato (transazionale) archiviata automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
+        state["automation_executed"] = True
+        return state
     else:
         return state
 
@@ -1744,346 +960,72 @@ def handle_ask_for_help_node(state):
     print(f"🆘 [ASK_FOR_HELP] Processing help request")
     
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
     
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
-    
-    # If category is transactional, automate
     if category == "TRANSACTIONAL":
-        print(f"   🤖 Automation: Category TRANSACTIONAL - Archiviata automaticamente")
-        
-        message_id = extracted_info.get("message_id")
-        thread_id = extracted_info.get("thread_id")
-        subcategory = state.get("subcategory")
-        mail_summary = state.get("mail_summary", "")
-        summary_attachments = state.get("summary_attachments", "")
-        
-        # Create extended summary
-        extended_parts = []
-        if mail_summary:
-            extended_parts.append(f"Contenuto email: {mail_summary}")
-        if summary_attachments:
-            extended_parts.append(f"Allegati: {summary_attachments}")
-        
-        extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-        
-        
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Richiesta aiuto (transazionale) archiviata automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
-    else:
-        return state
+        state["automation_executed"] = True
+    return state
 
 
 def handle_general_inquiry_node(state):
     """Handle GENERAL_INQUIRY subcategory emails."""
     print(f"❓ [GENERAL_INQUIRY] Processing general inquiry")
-    extracted_info = state.get("extracted_info", {})
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    # TODO: Implement specific logic for general inquiries
     return state
 
 
 def handle_payment_issue_node(state):
     """Handle PAYMENT_ISSUE subcategory emails - conditional processing."""
     print(f"💳 [PAYMENT_ISSUE] Processing payment issue")
-    
+
     category = state.get("category")
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
     
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🏷️ Category: {category}")
-    
-    # Create extended summary
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    # If category is transactional, automate without human response
-    if category == "TRANSACTIONAL":
-        print(f"   🤖 Automation: Category TRANSACTIONAL - Archiviata automaticamente (no human response)")
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Problema pagamento (transazionale) archiviato automaticamente",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": False,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
-    else:
-        # Other categories require human response
-        print(f"   👤 Human Response Required: Category {category} - Requires human attention")
-        
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message=f"Problema pagamento (categoria {category}) richiede attenzione umana",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": True,
-                "mail_summary": mail_summary,
-                "extended_summary": extended_summary
-            }
-        )
+    if category == "INFO_REQUESTED":
+        state["human_response"] = True
+
+    state["automation_executed"] = True
+    return state
 
 def handle_cancel_appointment_node(state):
     """Handle CANCEL_APPOINTMENT subcategory emails."""
     print(f"❌ [CANCEL_APPOINTMENT] Processing appointment cancellation")
-    extracted_info = state.get("extracted_info", {})
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    # TODO: Implement specific logic for appointment requests
     return state
     
 def handle_order_confirmation_node(state):
     """Handle ORDER_CONFIRMATION subcategory emails - automated processing."""
     print(f"🛒 [ORDER_CONFIRMATION] Processing order confirmation (automated)")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come conferma ordine")
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Conferma ordine archiviata automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": False,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
+    state["automation_executed"] = True
+    return state
 
 
 def handle_account_verification_node(state):
     """Handle ACCOUNT_VERIFICATION subcategory emails - automated processing."""
     print(f"🔐 [ACCOUNT_VERIFICATION] Processing account verification (automated)")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come verifica account")
-    
-    
-    
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Verifica account archiviata automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": False,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
+    state["automation_executed"] = True
+    return state
 
 
 def handle_internal_note_node(state):
     """Handle INTERNAL_NOTE subcategory emails - automated processing."""
     print(f"📝 [INTERNAL_NOTE] Processing internal note (automated)")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come nota interna")
-    
-    
-    
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Nota interna archiviata automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": False,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
+    state["automation_executed"] = True
+    return state
 
 
 def handle_spam_or_unknown_node(state):
     """Handle SPAM_OR_UNKNOWN subcategory emails - automated processing."""
     print(f"🚫 [SPAM_OR_UNKNOWN] Processing spam or unknown content (automated)")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come spam/sconosciuto")
-    
-    
-    
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Email spam/sconosciuta archiviata automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": False,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
+    state["automation_executed"] = True
+    return state
 
 
 def handle_unrelated_content_node(state):
     """Handle UNRELATED_CONTENT subcategory emails - automated processing."""
     print(f"🔀 [UNRELATED_CONTENT] Processing unrelated content (automated)")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
-    summary_attachments = state.get("summary_attachments", "")
-    
-    # Create extended summary combining mail summary and attachments
-    extended_parts = []
-    if mail_summary:
-        extended_parts.append(f"Contenuto email: {mail_summary}")
-    if summary_attachments:
-        extended_parts.append(f"Allegati: {summary_attachments}")
-    
-    extended_summary = " | ".join(extended_parts) if extended_parts else mail_summary
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    print(f"   🤖 Automation: Archiviata automaticamente come contenuto non pertinente")
-    
-    
-    
-    
-    # Return automation executed response
-    return AutomationExecutedResponse(
-        message_id=message_id,
-        thread_id=thread_id,
-        status="automation_executed",
-        message="Contenuto non pertinente archiviato automaticamente",
-        result={
-            "category": category,
-            "subcategory": subcategory,
-            "human_response": False,
-            "mail_summary": mail_summary,
-            "extended_summary": extended_summary
-        }
-    )
+    state["automation_executed"] = True
+    return state
 
 
 def subcategory_router_node(state):
     """Router node for subcategory-specific handling."""
-    subcategory = state.get("subcategory", "SPAM_OR_UNKNOWN")
-    print(f"🔀 [SUBCATEGORY_ROUTER] Routing to subcategory handler: {subcategory}")
     return state
 
 
@@ -2134,7 +1076,6 @@ def reader_node(state):
             print(f"📅 [READER] Detected REQUEST_APPOINTMENT - using appointment-specific analysis")
             
             # Get additional data for appointment analysis
-            from datetime import datetime
             extended_summary = state.get("extended_summary", "")
             extracted_info = state.get("extracted_info", {})
             sender_email = extracted_info.get("from", "mail not available")
@@ -2235,8 +1176,6 @@ def reader_node(state):
             # Update state with cancellation details
             state["key_entities"] = cancellation_response.key_entities
             state["cancellation_event_code"] = cancellation_response.event_code
-            # CANCEL_APPOINTMENT needs_response is not used
-            state["needs_response"] = None
             
             print(f"✅ [READER] Cancellation analysis completed successfully")
             print(f"   🔑 Event code: {cancellation_response.event_code}")
@@ -2308,33 +1247,13 @@ def scheduler_node(state):
         # Get user config and extracted info for additional parameters
         user_config = state.get("user_config", {})
         extracted_info = state.get("extracted_info", {})
-        message_id = extracted_info.get("message_id")
         service_id = user_config.get("service_id")
         thread_id = extracted_info.get("thread_id")
         created_by = extracted_info.get("from", "unknown")
         event_type = "APPOINTMENT"  # Default event type
-        category = state.get("category", "")
-        subcategory = state.get("subcategory", "")
-        event_code = state.get("event_code", "")
         
-        if not service_id:
-            # TODO notification and save to db
-            print(f"⚠️ [SCHEDULER] No service_id found in user_config, cannot book appointment")
-            return AutomationExecutedResponse(
-                message_id=message_id,
-                thread_id=thread_id,
-                status="automation_executed",
-                message=f"Servizio calendario non trovato per evento {event_code}",
-                result={
-                    "category": category,
-                    "subcategory": subcategory,
-                    "human_response": True,
-                    "mail_summary": mail_summary,
-                    "action": "service_not_found"
-                }
-            )
-        
-        # Determine if we need to propose slots or book directly TODO migliorare logica -> prompt engineering
+        # Determine if we need to propose slots or book directly 
+        # TODO migliorare logica -> prompt engineering
         propose_slots = False
         if appointment_date is None:
             propose_slots = True
@@ -2357,7 +1276,6 @@ def scheduler_node(state):
         print(f"   👤 Created by: {created_by}")
         
         # Get current timestamp
-        from datetime import datetime
         current_timestamp = datetime.now().isoformat()
         
         # Get appointment details from state (for booking)
@@ -2509,25 +1427,10 @@ def rescheduler_node(state):
         
     except Exception as e:
         print(f"❌ [RESCHEDULER] Error in appointment rescheduling: {e}")
-
         # TODO notification and save to db
+        return state
 
-        return AutomationExecutedResponse(
-            message_id=state.get("message_id"),
-            thread_id=state.get("thread_id"),
-            status="automation_executed",
-            message="Errore durante la modifica dell'appuntamento",
-            result={
-                "category": state.get("category"),
-                "subcategory": state.get("subcategory"),
-                "human_response": True,
-                "mail_summary": state.get("mail_summary"),
-                "extended_summary": state.get("extended_summary"),
-                "event_code": state.get("change_event_code"),
-                "message": "Errore durante la modifica dell'appuntamento"
-            }
-        )
-
+        
 def cancellation_node(state):
     """
     Cancellations for CANCELLATION subcategory.
@@ -2548,30 +1451,13 @@ def cancellation_node(state):
     category = state.get("category")
     subcategory = state.get("subcategory")
     mail_summary = state.get("mail_summary", "")
-    filtered_body = state.get("email_body", "")
-    extended_summary = state.get("extended_summary", "")
-    language = state.get("language", "ITA")
-    sender_email = extracted_info.get("from", "mail not available")
-    
-    print(f"   📧 Subject: {extracted_info.get('subject', 'Unknown')[:50]}...")
-    
-    current_timestamp = datetime.now().isoformat()
-    
-    print(f"   📖 Reading cancellation request for event_code...")
-    cancel_response = llm_client.read_cancellation_request(
-        filtered_body,
-        mail_summary,
-        extended_summary,
-        current_timestamp,
-        sender_email,
-        language
-    )
-    
+
     # Extract event_code from response
-    event_code = cancel_response.event_code
+    event_code = state.get("cancellation_event_code")
 
     if event_code is None or (isinstance(event_code, str) and len(event_code) != 6):
         print(f"⚠️ [CANCELLATION] Invalid event_code: {event_code}")
+        state["status"] = "EVENT_CODE_INVALID"
         return state
     
     # Check if event_code is present
@@ -2584,25 +1470,10 @@ def cancellation_node(state):
             event_response = get_scheduled_event_by_code(event_code)
             
             if not event_response:
-                print(f"   ⚠️ Event {event_code} not found in database")
-                
-                #TODO: Send a notification and save in DB
-
-                # Return automation response indicating event not found
-                return AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message=f"Codice evento {event_code} non trovato nel sistema",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": True,
-                        "mail_summary": mail_summary,
-                        "event_code": event_code,
-                        "action": "event_not_found"
-                    }
-                )
+                state["status"] = "EVENT_CODE_NOT_FOUND"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return state
             
             event_data = event_response
             event_automation_id = event_data.get("event_automation_id")
@@ -2615,23 +1486,10 @@ def cancellation_node(state):
             service_data = get_calendar_service_data(service_id)
             
             if not service_data:
-                #TODO: Send a notification and save in DB
-
-                print(f"   ❌ Calendar service data not found for service_id: {service_id}")
-                return AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message=f"Servizio calendario non trovato per evento {event_code}",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": True,
-                        "mail_summary": mail_summary,
-                        "event_code": event_code,
-                        "action": "service_not_found"
-                    }
-                )
+                state["status"] = "CALENDAR_SERVICE_NOT_FOUND"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return state
             
             calendar_provider = service_data.get("calendar_provider")
             access_token = service_data.get("access_token")
@@ -2655,57 +1513,20 @@ def cancellation_node(state):
                 print(f"   ✅ Event {event_code} successfully deleted")
                 return state
             else:
-                #TODO: Send a notification and save in DB
-                print(f"   ❌ Failed to delete event {event_code}")
-                return AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message=f"Errore durante la cancellazione dell'appuntamento {event_code}",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": True,
-                        "mail_summary": mail_summary,
-                        "event_code": event_code,
-                        "action": "deletion_failed"
-                    }
-                )
+                state["status"] = "EVENT_DELETION_FAILED"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return state
                 
         except Exception as e:
             #TODO: Send a notification and save in DB
             print(f"   ❌ Error processing cancellation: {e}")
-            return AutomationExecutedResponse(
-                message_id=message_id,
-                thread_id=thread_id,
-                status="automation_executed",
-                message=f"Errore durante la cancellazione: {str(e)}",
-                result={
-                    "category": category,
-                    "subcategory": subcategory,
-                    "human_response": True,
-                    "mail_summary": mail_summary,
-                    "event_code": event_code,
-                    "action": "error",
-                    "error": str(e)
-                }
-            )
+            return state
     else:
-        #TODO: Send a notification and save in DB
-        print(f"   ⚠️ No event code found in email")
-        return AutomationExecutedResponse(
-            message_id=message_id,
-            thread_id=thread_id,
-            status="automation_executed",
-            message="Richiesta di cancellazione senza codice evento - richiede attenzione",
-            result={
-                "category": category,
-                "subcategory": subcategory,
-                "human_response": True,
-                "mail_summary": mail_summary,
-                "action": "no_event_code"
-            }
-        )
+        state["status"] = "EVENT_CODE_NOT_FOUND"
+        state["human_response"] = True
+        state["automation_executed"] = True
+        return state
 
 def extractor_company_info_node(state):
     """
@@ -2737,41 +1558,10 @@ def extractor_company_info_node(state):
         if not company_information:
             print(f"⚠️ [EXTRACTOR_COMPANY_INFO] Company information not available - sending notification")
             
-            # Salva notifica nel database
-            insert_notification_sync(
-                email=box_email,
-                notification_type="INFORMATION_NOT_PRESENT",
-                message_id=message_id,
-                text="Company information not available in database"
-            )
-            
-            # Invia notifica via webhook
-            filtered_body = state.get('email_body', '')
-            summary_attachments = state.get('summary_attachments')
-            
-            send_information_not_present_notification(
-                sender_email=from_email,
-                box_email=box_email,
-                subject=subject,
-                body=filtered_body,
-                summary_attachment=summary_attachments
-            )
-            
-            print(f"✅ [EXTRACTOR_COMPANY_INFO] Notification sent - ending workflow with human response required")
-            
-            # Ritorna AutomationExecutedResponse con human_response = True
-            return AutomationExecutedResponse(
-                message_id=message_id,
-                thread_id=thread_id,
-                status="automation_executed",
-                message="Company information not available - human response required",
-                result={
-                    "extended_summary": state.get('extended_summary'),
-                    "human_response": True,
-                    "notification_sent": True,
-                    "notification_type": "INFORMATION_NOT_PRESENT"
-                }
-            )
+            state["human_response"] = True
+            state["automation_executed"] = True
+            state["status"] = "COMPANY_INFO_EXTRACTION_FAILED"
+            return state
         
         # Step 3: Estrai informazioni rilevanti tramite LLM
         extended_summary = state.get('extended_summary', '')
@@ -2806,32 +1596,9 @@ def extractor_company_info_node(state):
         
     except Exception as e:
         print(f"❌ [EXTRACTOR_COMPANY_INFO] Error extracting company information: {str(e)}")
-        # In caso di errore, ritorna stato con dizionario vuoto
-        from db_client import insert_notification_sync
-        
-        # Invia notifica via webhook
-        state['chunked_company_informations'] = {}
-        
-        extracted_info = state.get('extracted_info', {})
-        box_email = extracted_info.get('box_email', 'unknown')
-        message_id = extracted_info.get('message_id', 'unknown')
-        thread_id = extracted_info.get('thread_id', 'unknown')
-        
-        # Salva notifica nel database
-        insert_notification_sync(
-            email=box_email,
-            notification_type="INFORMATION_NOT_PRESENT",
-            message_id=message_id,
-            text=f"Error extracting company information: {str(e)}"
-        )
-        
-        send_information_not_present_notification(
-            sender_email=extracted_info.get('from', 'unknown'),
-            box_email=extracted_info.get('box_email', 'unknown'),
-            subject=extracted_info.get('subject', 'No Subject'),
-            body=state.get('email_body', ''),
-            summary_attachment=state.get('summary_attachments', '')
-        )
+        state["human_response"] = True
+        state["status"] = "COMPANY_INFO_EXTRACTION_FAILED"
+        state["automation_executed"] = True
         return state
 
 def writer_node(state):
@@ -2875,17 +1642,3 @@ def sender_node(state):
     ## TODO
     
     return state
-
-def save_and_exit_node(state):
-    """
-    Final node: saves everything to DB and notifies user.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        END signal
-    """
-    ##
-    
-    return END

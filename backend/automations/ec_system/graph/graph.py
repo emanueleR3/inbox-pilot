@@ -18,19 +18,14 @@ os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "corretto-email
 
 from langgraph.graph import StateGraph, END
 
-from .state import create_initial_state
 from .config import NodeNames
-from ..services.notification_client import send_event_followup_notification, send_appointment_not_scheduled_notification
-from db_client import insert_notification_sync
-from datetime import datetime
-from ..models.llm_responses import AutomationExecutedResponse
+from ..automation_result_management import process_automation_result
 from .nodes import (
     new_mail_node,
     config_loader_node,
     language_detector_node,
     ai_filter_node,
     guardrail_node,
-    ai_filter_guardrail_node,
     summarizer_node,
     classifier_node,
     attachment_extractor_node,
@@ -162,7 +157,7 @@ def create_email_classification_graph():
     # Conditional edge from guardrail: continue if safe, end if dangerous
     def should_continue_after_guardrail(state):
         """Check if workflow should continue after guardrail."""
-        if "dangerous_email" in state:
+        if state.get("dangerous_email"):
             return END
         return NodeNames.SUMMARIZER
     
@@ -185,7 +180,7 @@ def create_email_classification_graph():
         attachments as essential for understanding/responding, go to the extractor.
         Otherwise continue to the router.
         """
-        if "low_confidence_classification" in state:
+        if state.get("low_confidence_classification"):
             return END
 
         # Route to attachment extractor only when classifier determined attachments
@@ -214,17 +209,29 @@ def create_email_classification_graph():
     # Edge from router to evaluator
     graph.add_edge(NodeNames.ROUTER, NodeNames.EVALUATOR)
     
-    # Edge from evaluator to priority controller
-    graph.add_edge(NodeNames.EVALUATOR, NodeNames.PRIORITY_CONTROLLER)
+    def should_continue_after_evaluator(state):
+        """Check if workflow should continue after evaluator."""
+        if state.get("low_confidence_classification"):
+            return END
+        return NodeNames.PRIORITY_CONTROLLER
+    
+    graph.add_conditional_edges(
+        NodeNames.EVALUATOR,
+        should_continue_after_evaluator,
+        {
+            NodeNames.PRIORITY_CONTROLLER: NodeNames.PRIORITY_CONTROLLER,
+            END: END
+        }
+    )
     
     # Conditional edge from priority controller: check priority score
     def should_continue_after_priority_check(state):
         """Check if workflow should end (high priority) or continue to subcategory routing."""
-        workflow_decision = state.get("workflow_decision", "END_HIGH_PRIORITY")
+        status = state.get("status", "")
         
-        if workflow_decision == "END_HIGH_PRIORITY":
+        if status == "END_HIGH_PRIORITY":
             return NodeNames.READER
-        else:  # workflow_decision == "ROUTE_TO_SUBCATEGORY"
+        else:
             return NodeNames.SUBCATEGORY_ROUTER
     
     graph.add_conditional_edges(
@@ -328,8 +335,7 @@ def create_email_classification_graph():
     # These nodes return state (go to READER) or AutomationExecutedResponse (go to END)
     def should_route_to_reader_or_end(state):
         """Check if node returned state (needs Reader) or response (automation executed)."""
-        # If automation_executed is in state, the node returned AutomationExecutedResponse
-        if "automation_executed" in state:
+        if state.get("automation_executed"):
             return END
         # Otherwise, the node returned state and needs Reader processing
         return NodeNames.READER
@@ -345,7 +351,7 @@ def create_email_classification_graph():
         NodeNames.HANDLE_ASK_FOR_HELP,
         NodeNames.HANDLE_INVOICE_OR_RECEIPT,
         NodeNames.HANDLE_STATUS_NOTIFICATION,
-        NodeNames.HANDLE_TICKET_UPDATE,
+        NodeNames.HANDLE_TICKET_UPDATE
     ]
     
     # Add conditional edges for these nodes
@@ -363,15 +369,15 @@ def create_email_classification_graph():
     always_automate_nodes = [
         NodeNames.HANDLE_OFFER_PROMOTION,
         NodeNames.HANDLE_NEWSLETTER,
-        NodeNames.HANDLE_NEW_MESSAGE,
-        NodeNames.HANDLE_SYSTEM_ALERT,
-        NodeNames.HANDLE_SYSTEM_NOTIFICATION,
+        NodeNames.HANDLE_NEW_MESSAGE, 
+        NodeNames.HANDLE_SYSTEM_ALERT, 
+        NodeNames.HANDLE_SYSTEM_NOTIFICATION, 
         NodeNames.HANDLE_ORDER_CONFIRMATION,
         NodeNames.HANDLE_ACCOUNT_VERIFICATION,
         NodeNames.HANDLE_INTERNAL_NOTE,
         NodeNames.HANDLE_SPAM_OR_UNKNOWN,
         NodeNames.HANDLE_UNRELATED_CONTENT,
-        NodeNames.HANDLE_PAYMENT_ISSUE, # human_response could be True or False
+        NodeNames.HANDLE_PAYMENT_ISSUE,
         # momentaneamente anche questi TODO
         NodeNames.HANDLE_REQUEST_QUOTE,
         NodeNames.HANDLE_REQUEST_DOCUMENT
@@ -399,7 +405,6 @@ def create_email_classification_graph():
         graph.add_edge(node_name, NodeNames.READER)
     
     # Conditional logic for Reader node based on needs_response and subcategory
-    # TODO eventualmente inserire un altro nodo che faccia questa logica di controllo
     def should_continue_after_reader(state):
         """
         Check if workflow should end with automation or continue based on needs_response.
@@ -441,115 +446,21 @@ def create_email_classification_graph():
         
         # Special handling for EVENT_FOLLOWUP - always automate but with different human_response values
         if subcategory == "EVENT_FOLLOWUP":
-            from ..models.llm_responses import AutomationExecutedResponse
-            
-            extracted_info = state.get("extracted_info", {})
-            message_id = extracted_info.get("message_id", "unknown")
-            thread_id = extracted_info.get("thread_id", "unknown")
-            category = state.get("category", "OTHER")
-            mail_summary = state.get("mail_summary", "")
-            summary_attachments = state.get("summary_attachments", "")
-            
-            # Get extended_summary from state (not created from parts)
-            extended_summary = state.get("extended_summary", "")
-            
             if needs_response:
-                # Insert notification in database
-                box_email = extracted_info.get("box_email", "unknown")
-                try:
-                    notification_success = insert_notification_sync(
-                        email=box_email,
-                        notification_type="EVENT_FOLLOWUP_MAIL",
-                        message_id=message_id,
-                        text=None
-                    )
-                    
-                    if not notification_success:
-                        print(f"❌ [SCHEDULER] Failed to insert notification for {box_email}")
-                        
-                except Exception as e:
-                    print(f"❌ [SCHEDULER] Error inserting notification: {e}")
-
-                send_event_followup_notification(
-                    sender_email=extracted_info.get("from", "unknown"),
-                    box_email=state.get("box_email", "unknown"),
-                    subject=state.get("subject", ""),
-                    body=state.get("mail_body", ""),
-                    summary_attachment=summary_attachments
-                )
-
-                automation_response = AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    message=f"Email automaticamente processata - subcategory: {subcategory}, human response needed",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "mail_summary": mail_summary,
-                        "extended_summary": extended_summary,
-                        "human_response": True,
-                        "key_entities": state.get("key_entities", {}),
-                        "needs_response": True
-                    }
-                )
-                print(f"🤖 [READER] EVENT_FOLLOWUP automated with needs_response=True - human_response=True")
+                state["human_response"] = True
+                state["status"] = "EVENT_FOLLOWUP_HUMAN_RESPONSE_REQUIRED"
+                state["automation_executed"] = True
             else:
-                automation_response = AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    message=f"Email automaticamente processata - subcategory: {subcategory}, no response needed",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "mail_summary": mail_summary,
-                        "extended_summary": extended_summary,
-                        "human_response": False,
-                        "key_entities": state.get("key_entities", {}),
-                        "needs_response": False
-                    }
-                )
-                print(f"🤖 [READER] EVENT_FOLLOWUP automated with needs_response=False - human_response=False")
+                state["automation_executed"] = True
             
-            # Add automation response to state to signal END
-            state["automation_executed"] = automation_response.model_dump()
             return END
         
         # If subcategory is in the conditional list and doesn't need response, automate
         if subcategory in conditional_automation_subcategories and not needs_response:
-            # Create AutomationExecutedResponse in state to signal automation completion
-            from ..models.llm_responses import AutomationExecutedResponse
-            
-            extracted_info = state.get("extracted_info", {})
-            message_id = extracted_info.get("message_id", "unknown")
-            thread_id = extracted_info.get("thread_id", "unknown")
-            category = state.get("category", "OTHER")
-            mail_summary = state.get("mail_summary", "")
-            
-            # Get extended_summary from state (not created from parts)
-            extended_summary = state.get("extended_summary", "")
-            
-            automation_response = AutomationExecutedResponse(
-                message_id=message_id,
-                thread_id=thread_id,
-                message=f"Email automaticamente processata - subcategory: {subcategory}, no response needed",
-                result={
-                    "category": category,
-                    "subcategory": subcategory,
-                    "mail_summary": mail_summary,
-                    "extended_summary": extended_summary,
-                    "human_response": False,
-                    "key_entities": state.get("key_entities", {}),
-                    "needs_response": False
-                }
-            )
-            
-            # Add automation response to state to signal END
-            state["automation_executed"] = automation_response.model_dump()
-            print(f"🤖 [READER] Automated processing - {subcategory} with needs_response=False")
+            state["automation_executed"] = True
             return END
         
         # For all other cases (needs_response=True or other subcategories), continue manually
-        print(f"👤 [READER] Manual processing needed - {subcategory} with needs_response={needs_response}")
         return NodeNames.EXTRACTOR_COMPANY_INFO
     
     # Add conditional edge from READER
@@ -572,25 +483,10 @@ def create_email_classification_graph():
         Routes based on which tool was called (propose_new_slots vs book_appointment)
         and the results obtained.
         """
-        
-        # Extract state data
-        extracted_info = state.get("extracted_info", {})
-        message_id = extracted_info.get("message_id", "unknown")
-        thread_id = extracted_info.get("thread_id", "unknown")
-        category = state.get("category", "INFO_REQUESTED")
-        subcategory = state.get("subcategory", "REQUEST_APPOINTMENT")
-        mail_summary = state.get("mail_summary", "")
-        
-        # Get extended_summary from state (not created from parts)
-        extended_summary = state.get("extended_summary", "")
-        
         # Get scheduler results
         scheduled = state.get("appointment_scheduled", False)
-        overlap = state.get("appointment_overlap", False)
         event_code = state.get("appointment_event_code")
-        proposed_slots = state.get("appointment_proposed_slots")
-        
-        current_time = datetime.now().isoformat()
+        proposed_slots = state.get("appointment_proposed_slots", None)
         
         # Case 1: propose_new_slots was called (proposed_slots is not None)
         if proposed_slots is not None:
@@ -598,23 +494,10 @@ def create_email_classification_graph():
             
             # Check if array is empty
             if not proposed_slots or len(proposed_slots) == 0:
-                
-                # TODO notification error and save in DB
-
-                print(f"⚠️ [SCHEDULER] propose_new_slots returned empty array - error")
-                automation_response = AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message="Errore nel tool propose_new_slots, l'array è vuoto",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": True,
-                        "mail_summary": mail_summary,
-                        "extended_summary": extended_summary
-                    }
-                )
+                state["status"] = "NO_AVAILABLE_SLOTS"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return END
             else:
                 print(f"✅ [SCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to Extractor Company Info")
                 return NodeNames.EXTRACTOR_COMPANY_INFO
@@ -627,59 +510,10 @@ def create_email_classification_graph():
                 print(f"✅ [SCHEDULER] Appointment successfully scheduled - event_code: {event_code} - Routing to Extractor Company Info")
                 return NodeNames.EXTRACTOR_COMPANY_INFO
             else:
-                # Insert notification in database
-                box_email = extracted_info.get("box_email", "unknown")
-                try:
-                    notification_success = insert_notification_sync(
-                        email=box_email,
-                        notification_type="APPOINTMENT_NOT_SCHEDULED_MAIL",
-                        message_id=message_id,
-                        text=None
-                    )
-                    
-                    if not notification_success:
-                        print(f"❌ [SCHEDULER] Failed to insert notification for {box_email}")
-                        
-                except Exception as e:
-                    print(f"❌ [SCHEDULER] Error inserting notification: {e}")
-
-                # Send notification webhook for appointment not scheduled
-                send_appointment_not_scheduled_notification(
-                    sender_email=extracted_info.get("from", "unknown"),
-                    box_email=box_email,
-                    subject=extracted_info.get("subject", "No subject"),
-                    body=state.get("email_body", ""),
-                    summary_attachment=state.get("summary_attachments"),
-                    overlap=overlap
-                )
-                
-                print(f"⚠️ [SCHEDULER] Appointment not scheduled - overlap: {overlap}")
-                automation_response = AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message="Evento non programmato",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": True,
-                        "mail_summary": mail_summary,
-                        "extended_summary": extended_summary,
-                        "event": {
-                            "scheduled": False,
-                            "overlap": overlap,
-                            "event_code": None,
-                            "message": "Evento non programmato",
-                            "event_type": "APPOINTMENT",
-                            "created_at": current_time
-                        }
-                    }
-                )
-        
-        # Add automation response to state
-        state["automation_executed"] = automation_response.model_dump()
-        print(f"🏁 [SCHEDULER] Workflow completed with automation response")
-        return END
+                state["status"] = "APPOINTMENT_NOT_SCHEDULED"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return END
 
     # Add conditional edge from SCHEDULER
     graph.add_conditional_edges(
@@ -691,7 +525,26 @@ def create_email_classification_graph():
         }
     )
 
-    graph.add_edge(NodeNames.CANCELLATION, NodeNames.EXTRACTOR_COMPANY_INFO)
+    # Conditional logic for Cancellation node based on tool called and results
+    def should_continue_after_cancellation(state):
+        """
+        Check cancellation results and create appropriate AutomationExecutedResponse.
+        Routes based on which tool was called (cancel_appointment)
+        and the results obtained.
+        """
+        if state.get("automation_executed"):
+            return END
+        return NodeNames.EXTRACTOR_COMPANY_INFO
+
+    graph.add_conditional_edges(
+        NodeNames.CANCELLATION, 
+        should_continue_after_cancellation,
+        {
+            NodeNames.EXTRACTOR_COMPANY_INFO: NodeNames.EXTRACTOR_COMPANY_INFO,
+            END: END
+        }
+    )
+
 
     def should_continue_after_extractor_company_info(state):
         """
@@ -699,9 +552,9 @@ def create_email_classification_graph():
         Routes based on which tool was called (propose_new_slots vs reschedule_appointment)
         and the results obtained.
         """
-        # TODO: implement logic
-
-        return END
+        if state.get("status") == "COMPANY_INFO_EXTRACTION_FAILED":
+            return END
+        return NodeNames.WRITER
 
     graph.add_conditional_edges(
         NodeNames.EXTRACTOR_COMPANY_INFO,
@@ -744,24 +597,10 @@ def create_email_classification_graph():
         and the results obtained.
         """
         
-        # Extract state data
-        extracted_info = state.get("extracted_info", {})
-        message_id = extracted_info.get("message_id", "unknown")
-        thread_id = extracted_info.get("thread_id", "unknown")
-        category = state.get("category", "INFO_REQUESTED")
-        subcategory = state.get("subcategory", "REQUEST_APPOINTMENT_CHANGE")
-        mail_summary = state.get("mail_summary", "")
-        
-        # Get extended_summary from state (not created from parts)
-        extended_summary = state.get("extended_summary", "")
-        
         # Get rescheduler results
         scheduled = state.get("appointment_scheduled", False)
-        overlap = state.get("appointment_overlap", False)
         event_code = state.get("appointment_event_code")
         proposed_slots = state.get("appointment_proposed_slots")
-        
-        current_time = datetime.now().isoformat()
         
         # Case 1: propose_new_slots was called (proposed_slots is not None)
         if proposed_slots is not None:
@@ -769,89 +608,26 @@ def create_email_classification_graph():
             
             # Check if array is empty
             if not proposed_slots or len(proposed_slots) == 0:
-
-                # TODO notification error and save in DB
-
-                print(f"⚠️ [RESCHEDULER] propose_new_slots returned empty array - error")
-                automation_response = AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message="Errore nel tool propose_new_slots, l'array è vuoto",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": True,
-                        "mail_summary": mail_summary,
-                        "extended_summary": extended_summary
-                    }
-                )
+                state["status"] = "NO_AVAILABLE_SLOTS"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return END
             else:
-                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots")
+                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to Extractor Company Info")
                 return NodeNames.EXTRACTOR_COMPANY_INFO
-        
-        # Case 2: reschedule_appointment was called (scheduled is not None and proposed_slots is None)
+            
+        # Case 2: book_appointment was called (scheduled is not None and proposed_slots is None)
         else:
             print(f"📅 [RESCHEDULER] Tool reschedule_appointment called - checking scheduled status")
             
             if scheduled:
-                # Appointment successfully rescheduled
-                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code}")
+                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code} - Routing to Extractor Company Info")
                 return NodeNames.EXTRACTOR_COMPANY_INFO
             else:
-                # Insert notification in database
-                box_email = extracted_info.get("box_email", "unknown")
-                try:
-                    notification_success = insert_notification_sync(
-                        email=box_email,
-                        notification_type="APPOINTMENT_NOT_SCHEDULED_MAIL",
-                        message_id=message_id,
-                        text=None
-                    )
-                    
-                    if not notification_success:
-                        print(f"❌ [RESCHEDULER] Failed to insert notification for {box_email}")
-                        
-                except Exception as e:
-                    print(f"❌ [RESCHEDULER] Error inserting notification: {e}")
-
-                # Send notification webhook for appointment not rescheduled
-                send_appointment_not_scheduled_notification(
-                    sender_email=extracted_info.get("from", "unknown"),
-                    box_email=box_email,
-                    subject=extracted_info.get("subject", "No subject"),
-                    body=state.get("email_body", ""),
-                    summary_attachment=state.get("summary_attachments"),
-                    overlap=overlap
-                )
-                
-                print(f"⚠️ [RESCHEDULER] Appointment not rescheduled - overlap: {overlap}")
-                automation_response = AutomationExecutedResponse(
-                    message_id=message_id,
-                    thread_id=thread_id,
-                    status="automation_executed",
-                    message="Evento non riprogrammato",
-                    result={
-                        "category": category,
-                        "subcategory": subcategory,
-                        "human_response": True,
-                        "mail_summary": mail_summary,
-                        "extended_summary": extended_summary,
-                        "event": {
-                            "scheduled": False,
-                            "overlap": overlap,
-                            "event_code": event_code,
-                            "message": "Evento non riprogrammato",
-                            "event_type": "APPOINTMENT_CHANGE",
-                            "created_at": current_time
-                        }
-                    }
-                )
-        
-        # Add automation response to state
-        state["automation_executed"] = automation_response.model_dump()
-        print(f"🏁 [RESCHEDULER] Workflow completed with automation response")
-        return END
+                state["status"] = "APPOINTMENT_NOT_SCHEDULED"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return END
     
     # Add conditional edge from RESCHEDULER
     graph.add_conditional_edges(
@@ -866,9 +642,6 @@ def create_email_classification_graph():
     return graph
 
 
-# Create the graph instance
-graph = create_email_classification_graph()
-
 
 def run_workflow(email_data: dict = None):
     """
@@ -882,10 +655,11 @@ def run_workflow(email_data: dict = None):
         Dict with workflow execution result
     """
 
+    result = {"status": "AUTOMATION_DISABLED"}
+    
     if not AUTOMATION_ENABLED:
         print("⚠️ [WORKFLOW] Automation is disabled. Exiting workflow execution.")
-        return {"status": "automation_disabled"}
-    
+        return result
 
     try:
         # Create initial state with email data if provided
@@ -912,11 +686,14 @@ def run_workflow(email_data: dict = None):
                 },
                 "notification": None,
                 "user_config": None,
-                "attachments_too_large": False
+                "attachments_too_large": False,
+                "human_response": False,
+                "automation_executed": False
             }
         else:
-            initial_state = create_initial_state()
-        
+            # Create default initial state
+            return {"status": "FAILED"}
+            
         print(f"🎯 [WORKFLOW] Starting with initial state:")
         print(f"   📧 Body: {initial_state.get('email_body', 'None')[:100]}...")
         print(f"   📎 Attachments: {len(initial_state.get('attachments', []))}")
@@ -927,32 +704,23 @@ def run_workflow(email_data: dict = None):
         compiled_graph = graph.compile()
         result = compiled_graph.invoke(initial_state)
         
-        # Check if dangerous email was detected
-        if "dangerous_email" in result:
-            print(f"🚨 [WORKFLOW] DANGEROUS EMAIL DETECTED!")
-            return result["dangerous_email"]
-        
-        # Check if low confidence classification was detected
-        if "low_confidence_classification" in result:
-            print(f"⚠️ [WORKFLOW] LOW CONFIDENCE CLASSIFICATION DETECTED!")
-            return result["low_confidence_classification"]
-        
-        # Check if automation was executed
-        if "automation_executed" in result:
-            print(f"✅ [WORKFLOW] AUTOMATION EXECUTED SUCCESSFULLY!")
-            return result["automation_executed"]
-        
-        if "high_priority_email" in result and result["high_priority_email"]:
-            print(f"🔥 [WORKFLOW] HIGH PRIORITY EMAIL DETECTED!")
-            return result["high_priority_email"]
-        
         print(f"🏁 [WORKFLOW] Completed with result: {result}")
         return result
         
     except Exception as e:
         print(f"❌ [WORKFLOW] Error executing workflow: {e}")
         return {"error": str(e), "status": "failed"}
+    
+    finally:
+        print(f"==== Processing result for automation management...")
+        try:
+            process_automation_result(result)
+        except Exception as e:
+            print(f"❌ [WORKFLOW] Error processing automation result: {e}")
 
+
+# Create the graph instance
+graph = create_email_classification_graph()
 
 if __name__ == "__main__":
     run_workflow()

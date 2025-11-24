@@ -15,6 +15,8 @@ class EmailState(TypedDict):
     extracted_info: Optional[Dict]
     notification: Optional[str]
     user_config: Optional[Dict]  # User configuration with thresholds
+    status: Optional[str] # State of the execution flow
+    dangerous_email: Optional[bool]  # Flag indicating if email is dangerous
     # NEW: Separated workflow fields
     mail_summary: Optional[str]  # Summary of current email
     extended_summary: Optional[str]  # Extended conversation summary
@@ -24,10 +26,9 @@ class EmailState(TypedDict):
     must_see_attachments: Optional[bool]  # Flag indicating if attachments are essential for understanding/responding
     summary_attachments: Optional[str]  # Discursive summary of all attachment contents
     priority_score: Optional[float]  # Category-specific priority score (0.0-1.0)
-    high_priority_email: Optional[bool]  # Flag indicating if email exceeded priority threshold
-    workflow_decision: Optional[str]  # Decision for workflow routing (END_HIGH_PRIORITY or ROUTE_TO_SUBCATEGORY)
     key_entities: Optional[dict]  # Key entities extracted by Reader node (dates, locations, requests, etc.)
     needs_response: Optional[bool]  # Flag indicating if email requires a response
+    automation_executed: bool  # Flag indicating if automation was executed
     # Appointment-specific fields (for REQUEST_APPOINTMENT subcategory)
     appointment_title: Optional[str]  # Title of the appointment
     appointment_date: Optional[str]  # Date and time of the appointment (YYYY-MM-DDThh:mm:ss)
@@ -54,6 +55,7 @@ class EmailState(TypedDict):
     chunked_company_informations: Optional[dict]  # Filtered company information  TODO decidere se dict, list o string
     correctness_score: Optional[float]  # Correctness score of the email
     needs_review: Optional[bool]  # Flag indicating if email needs review
+    low_confidence_classification: Optional[bool]  # Flag for low confidence classification
 
 
 def create_initial_state() -> EmailState:

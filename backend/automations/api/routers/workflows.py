@@ -39,8 +39,6 @@ class EmailWorkflowPayload(BaseModel):
 class WorkflowResponse(BaseModel):
     """Response from workflow processing"""
     status: str = Field(..., description="Processing status")
-    thread_id: str = Field(..., description="Thread ID that was processed")
-    action_taken: Optional[str] = Field(None, description="Action taken by workflow")
     message: Optional[str] = Field(None, description="Additional information")
 
 
@@ -57,14 +55,7 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
     - Action dispatching based on category
     """
     try:
-        print(f"📧 [WORKFLOW] Received email workflow request")
-        #print(f"🧵 Thread ID: {payload.thread_id}")
-        #print(f"📨 From: {payload.from_}")
-        #print(f"📬 Box: {payload.box_email}")
-        #print(f"📎 Attachments: {len(payload.attachment_ids)}")
-        #print(f"🏷️ Category: {payload.category}")
-        #print(f"🏷️ Subcategory: {payload.subcategory}")
-        
+        print(f"📧 [NEW WORKFLOW] Received email workflow request")
         # Convert payload to dict for workflow
         email_data = {
             "thread_id": payload.thread_id,
@@ -92,8 +83,6 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
         
         return WorkflowResponse(
             status="processed",
-            thread_id=payload.thread_id,
-            action_taken="workflow_executed",
             message="Email workflow processed successfully"
         )
         
