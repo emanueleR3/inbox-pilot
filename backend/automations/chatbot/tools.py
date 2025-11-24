@@ -1,7 +1,7 @@
 from langchain.tools import tool
 from typing import Optional, List
-from services import email_service
-from db.db import get_supabase_client
+from automations.chatbot.services import email_service
+from automations.chatbot.db.db import get_supabase_client
 import os
 from cryptography.fernet import Fernet
 import base64
