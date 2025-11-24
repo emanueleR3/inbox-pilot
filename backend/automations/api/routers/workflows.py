@@ -77,9 +77,7 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
         }
         
         # Execute the email classification workflow
-        print(f"🚀 [WORKFLOW] Starting email classification workflow...")
-        workflow_result = run_workflow(email_data)
-        print(f"✅ [WORKFLOW] Workflow completed: {workflow_result}")
+        run_workflow(email_data)
         
         return WorkflowResponse(
             status="processed",

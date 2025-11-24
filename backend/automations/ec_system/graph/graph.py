@@ -657,11 +657,9 @@ def run_workflow(email_data: dict = None):
 
     result = {"status": "AUTOMATION_DISABLED"}
     
-    if not AUTOMATION_ENABLED:
-        print("⚠️ [WORKFLOW] Automation is disabled. Exiting workflow execution.")
-        return result
-
     try:
+        if not AUTOMATION_ENABLED: return result
+        
         # Create initial state with email data if provided
         if email_data:
             initial_state = {
