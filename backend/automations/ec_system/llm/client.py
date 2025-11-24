@@ -17,7 +17,6 @@ from ..models.llm_responses import (
     LanguageDetectionResponse, 
     EmailFilterResponse, 
     GuardrailResponse,
-    EmailClassificationResponse,
     EmailSummaryResponse,
     EmailCategoryResponse,
     AttachmentSummaryResponse,
@@ -41,8 +40,6 @@ from ..prompts.templates import (
     EMAIL_FILTER_PROMPT_ENG,
     EMAIL_GUARDRAIL_PROMPT_ITA,
     EMAIL_GUARDRAIL_PROMPT_ENG,
-    EMAIL_CLASSIFICATION_PROMPT_ITA,
-    EMAIL_CLASSIFICATION_PROMPT_ENG,
     EMAIL_SUMMARIZATION_PROMPT_ITA,
     EMAIL_SUMMARIZATION_PROMPT_ENG,
     EMAIL_CATEGORY_PROMPT_ITA,
@@ -491,71 +488,6 @@ class LLMClient:
                 must_see_attachments=False
             )
 
-    def classify_email(self, filtered_body: str, subject: str, language: str, extended_summary: str = "") -> EmailClassificationResponse:
-        """
-        DEPRECATED: Classify email into categories with confidence score and summaries.
-        Use summarize_email() and classify_email_category() separately for better precision.
-        
-        Args:
-            filtered_body: The filtered email body to analyze
-            subject: Email subject line
-            language: Language of the email ("ITA" or "ENG")
-            extended_summary: Existing conversation summary (can be empty)
-            
-        Returns:
-            EmailClassificationResponse with category, confidence, and summaries
-        """
-        try:
-            # Choose prompt based on language
-            if language == "ENG":
-                prompt_template = EMAIL_CLASSIFICATION_PROMPT_ENG
-            else:
-                prompt_template = EMAIL_CLASSIFICATION_PROMPT_ITA
-            
-            # Create output parser
-            parser = PydanticOutputParser(pydantic_object=EmailClassificationResponse)
-            
-            # Default message based on language
-            if language == "ENG":
-                default_summary = "No previous summary - this is the first email in the thread."
-            else:
-                default_summary = "Nessun riassunto precedente - questa è la prima email del thread."
-            
-            # Format prompt
-            prompt_text = prompt_template.format(
-                subject=subject,
-                filtered_body=filtered_body,
-                extended_summary=extended_summary or default_summary
-            )
-            
-            # Add format instructions
-            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
-            
-            # Create message
-            message = HumanMessage(content=prompt_with_format)
-            
-            # Get response from LLM
-            response = self.llm.invoke([message])
-            
-            # Parse response
-            parsed_response = parser.parse(response.content)
-            
-            # Round confidence score to first decimal place
-            parsed_response.confidence_score = round(parsed_response.confidence_score, 1)
-            
-            print(f"🏷️ [LLM] Email classified ({language}): category={parsed_response.category}, confidence={parsed_response.confidence_score}")
-            return parsed_response
-            
-        except Exception as e:
-            print(f"❌ [LLM] Error in email classification: {e}")
-            # Return default classification on error
-            return EmailClassificationResponse(
-                category="OTHER",
-                confidence_score=0.0,
-                mail_summary="Classification failed - using default",
-                extended_summary=extended_summary or "Classification failed for this email."
-            )
-    
     def structured_completion(self, prompt: str, response_model: Type[T]) -> T:
         """
         Generic method for structured completions with Pydantic models.

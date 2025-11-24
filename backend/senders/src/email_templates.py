@@ -45,6 +45,31 @@ def get_base_template(content: str, notification_type: str) -> str:
             "primary": "#F59E0B",  # Amber
             "secondary": "#FEF3C7",
             "accent": "#D97706"
+        },
+        "NO_AVAILABLE_SLOTS": {
+            "primary": "#EF4444",  # Red
+            "secondary": "#FEE2E2",
+            "accent": "#B91C1C"
+        },
+        "APPOINTMENT_NOT_RESCHEDULED": {
+            "primary": "#8B5CF6",  # Purple
+            "secondary": "#EDE9FE",
+            "accent": "#6D28D9"
+        },
+        "EVENT_CODE_NOT_FOUND": {
+            "primary": "#F59E0B",  # Amber
+            "secondary": "#FEF3C7",
+            "accent": "#D97706"
+        },
+        "CALENDAR_SERVICE_NOT_FOUND": {
+            "primary": "#DC2626",  # Red
+            "secondary": "#FEE2E2",
+            "accent": "#991B1B"
+        },
+        "EVENT_DELETION_FAILED": {
+            "primary": "#DC2626",  # Red
+            "secondary": "#FEE2E2",
+            "accent": "#991B1B"
         }
     }
     
@@ -633,6 +658,435 @@ def create_information_not_present_email(
     
     return get_base_template(content, "INFORMATION_NOT_PRESENT")
 
+
+def create_no_available_slots_email(
+    sender_email: str,
+    subject: str,
+    body: str,
+    timestamp: str,
+    summary_attachment: Optional[str] = None
+) -> str:
+    """Create HTML email for no available slots notifications."""
+    
+    attachment_html = ""
+    if summary_attachment:
+        attachment_html = f"""
+        <div style="margin-top: 20px; padding: 15px; background-color: #fee2e2; border-left: 4px solid #ef4444; border-radius: 6px;">
+            <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 600; color: #991b1b;">
+                📎 Dettagli
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #7f1d1d;">
+                {summary_attachment}
+            </p>
+        </div>
+        """
+    
+    content = f"""
+    <div style="background-color: #fee2e2; border-left: 4px solid #ef4444; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+        <p style="margin: 0; font-size: 16px; font-weight: 700; color: #991b1b;">
+            📅 Nessuno Slot Disponibile
+        </p>
+    </div>
+    
+    <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+        Il sistema ha ricevuto una <strong>richiesta di appuntamento</strong> ma <strong>non ci sono slot disponibili</strong> nel periodo richiesto. 
+        È necessaria la tua revisione manuale per proporre alternative.
+    </p>
+    
+    <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DA</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{sender_email}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">OGGETTO</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827; font-weight: 600;">{subject}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DATA</p>
+                </td>
+                <td style="padding: 8px 0; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{timestamp}</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+            Richiesta Originale
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.8; white-space: pre-wrap;">
+            {body[:500]}{'...' if len(body) > 500 else ''}
+        </p>
+    </div>
+    
+    {attachment_html}
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 13px; color: #6b7280; text-align: center;">
+            💡 <em>Contatta il cliente per proporre orari alternativi</em>
+        </p>
+    </div>
+    """
+    
+    return get_base_template(content, "NO_AVAILABLE_SLOTS")
+
+
+def create_appointment_not_rescheduled_email(
+    sender_email: str,
+    subject: str,
+    body: str,
+    timestamp: str,
+    summary_attachment: Optional[str] = None
+) -> str:
+    """Create HTML email for appointment not rescheduled notifications."""
+    
+    attachment_html = ""
+    if summary_attachment:
+        attachment_html = f"""
+        <div style="margin-top: 20px; padding: 15px; background-color: #ede9fe; border-left: 4px solid #8b5cf6; border-radius: 6px;">
+            <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 600; color: #6d28d9;">
+                📎 Dettagli
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #5b21b6;">
+                {summary_attachment}
+            </p>
+        </div>
+        """
+    
+    content = f"""
+    <div style="background-color: #ede9fe; border-left: 4px solid #8b5cf6; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+        <p style="margin: 0; font-size: 16px; font-weight: 700; color: #6d28d9;">
+            🔄 Appuntamento Non Riprogrammato
+        </p>
+    </div>
+    
+    <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+        Il sistema ha ricevuto una <strong>richiesta di riprogrammazione</strong> ma non è stato possibile riprogrammare l'appuntamento automaticamente. 
+        È necessaria la tua revisione manuale.
+    </p>
+    
+    <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DA</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{sender_email}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">OGGETTO</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827; font-weight: 600;">{subject}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DATA</p>
+                </td>
+                <td style="padding: 8px 0; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{timestamp}</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+            Richiesta Originale
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.8; white-space: pre-wrap;">
+            {body[:500]}{'...' if len(body) > 500 else ''}
+        </p>
+    </div>
+    
+    {attachment_html}
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 13px; color: #6b7280; text-align: center;">
+            💡 <em>Rivedi la richiesta e riprogramma manualmente l'appuntamento se necessario</em>
+        </p>
+    </div>
+    """
+    
+    return get_base_template(content, "APPOINTMENT_NOT_RESCHEDULED")
+
+
+def create_event_code_not_found_email(
+    sender_email: str,
+    subject: str,
+    body: str,
+    timestamp: str,
+    summary_attachment: Optional[str] = None
+) -> str:
+    """Create HTML email for event code not found notifications."""
+    
+    attachment_html = ""
+    if summary_attachment:
+        attachment_html = f"""
+        <div style="margin-top: 20px; padding: 15px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;">
+            <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 600; color: #92400e;">
+                📎 Dettagli
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #78350f;">
+                {summary_attachment}
+            </p>
+        </div>
+        """
+    
+    content = f"""
+    <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+        <p style="margin: 0; font-size: 16px; font-weight: 700; color: #92400e;">
+            🔍 Codice Evento Non Trovato
+        </p>
+    </div>
+    
+    <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+        Il sistema ha ricevuto una richiesta che fa riferimento a un evento, ma <strong>il codice evento non è stato trovato</strong> nel database. 
+        È necessaria la tua revisione manuale per identificare l'evento corretto.
+    </p>
+    
+    <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DA</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{sender_email}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">OGGETTO</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827; font-weight: 600;">{subject}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DATA</p>
+                </td>
+                <td style="padding: 8px 0; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{timestamp}</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+            Richiesta Originale
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.8; white-space: pre-wrap;">
+            {body[:500]}{'...' if len(body) > 500 else ''}
+        </p>
+    </div>
+    
+    {attachment_html}
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 13px; color: #6b7280; text-align: center;">
+            💡 <em>Verifica manualmente il codice evento e gestisci la richiesta</em>
+        </p>
+    </div>
+    """
+    
+    return get_base_template(content, "EVENT_CODE_NOT_FOUND")
+
+
+def create_calendar_service_not_found_email(
+    sender_email: str,
+    subject: str,
+    body: str,
+    timestamp: str,
+    summary_attachment: Optional[str] = None
+) -> str:
+    """Create HTML email for calendar service not found notifications."""
+    
+    attachment_html = ""
+    if summary_attachment:
+        attachment_html = f"""
+        <div style="margin-top: 20px; padding: 15px; background-color: #fee2e2; border-left: 4px solid #dc2626; border-radius: 6px;">
+            <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 600; color: #991b1b;">
+                📎 Dettagli
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #7f1d1d;">
+                {summary_attachment}
+            </p>
+        </div>
+        """
+    
+    content = f"""
+    <div style="background-color: #fee2e2; border-left: 4px solid #dc2626; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+        <p style="margin: 0; font-size: 16px; font-weight: 700; color: #991b1b;">
+            ⚙️ Servizio Calendario Non Configurato
+        </p>
+    </div>
+    
+    <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+        Il sistema ha ricevuto una richiesta relativa al calendario, ma <strong>il servizio calendario non è configurato</strong> per questo utente. 
+        È necessario configurare l'integrazione del calendario prima di poter gestire automaticamente gli appuntamenti.
+    </p>
+    
+    <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DA</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{sender_email}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">OGGETTO</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827; font-weight: 600;">{subject}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DATA</p>
+                </td>
+                <td style="padding: 8px 0; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{timestamp}</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+            Richiesta Originale
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.8; white-space: pre-wrap;">
+            {body[:500]}{'...' if len(body) > 500 else ''}
+        </p>
+    </div>
+    
+    {attachment_html}
+    
+    <div style="background-color: #fee2e2; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #991b1b;">
+            💡 Azione Richiesta
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #7f1d1d; line-height: 1.6;">
+            Configura l'integrazione del calendario (Google Calendar o Microsoft Calendar) nelle impostazioni per abilitare la gestione automatica degli appuntamenti.
+        </p>
+    </div>
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 13px; color: #6b7280; text-align: center;">
+            💡 <em>Gestisci manualmente questa richiesta e configura il servizio calendario</em>
+        </p>
+    </div>
+    """
+    
+    return get_base_template(content, "CALENDAR_SERVICE_NOT_FOUND")
+
+
+def create_event_deletion_failed_email(
+    sender_email: str,
+    subject: str,
+    body: str,
+    timestamp: str,
+    summary_attachment: Optional[str] = None
+) -> str:
+    """Create HTML email for event deletion failed notifications."""
+    
+    attachment_html = ""
+    if summary_attachment:
+        attachment_html = f"""
+        <div style="margin-top: 20px; padding: 15px; background-color: #fee2e2; border-left: 4px solid #dc2626; border-radius: 6px;">
+            <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 600; color: #991b1b;">
+                📎 Dettagli
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #7f1d1d;">
+                {summary_attachment}
+            </p>
+        </div>
+        """
+    
+    content = f"""
+    <div style="background-color: #fee2e2; border-left: 4px solid #dc2626; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+        <p style="margin: 0; font-size: 16px; font-weight: 700; color: #991b1b;">
+            ❌ Cancellazione Evento Fallita
+        </p>
+    </div>
+    
+    <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+        Il sistema ha ricevuto una <strong>richiesta di cancellazione evento</strong> ma non è riuscito a completare l'operazione. 
+        È necessaria la tua revisione manuale per cancellare l'evento dal calendario.
+    </p>
+    
+    <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DA</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{sender_email}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">OGGETTO</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827; font-weight: 600;">{subject}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DATA</p>
+                </td>
+                <td style="padding: 8px 0; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{timestamp}</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+            Richiesta Originale
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.8; white-space: pre-wrap;">
+            {body[:500]}{'...' if len(body) > 500 else ''}
+        </p>
+    </div>
+    
+    {attachment_html}
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 13px; color: #6b7280; text-align: center;">
+            💡 <em>Verifica e cancella manualmente l'evento dal calendario</em>
+        </p>
+    </div>
+    """
+    
+    return get_base_template(content, "EVENT_DELETION_FAILED")
+
 def get_email_template(
     notification_type: str,
     sender_email: str,
@@ -669,6 +1123,16 @@ def get_email_template(
         return create_event_followup_email(sender_email, subject, body, timestamp, summary_attachment)
     elif notification_type == "INFORMATION_NOT_PRESENT":
         return create_information_not_present_email(sender_email, subject, body, timestamp, summary_attachment)
+    elif notification_type == "NO_AVAILABLE_SLOTS":
+        return create_no_available_slots_email(sender_email, subject, body, timestamp, summary_attachment)
+    elif notification_type == "APPOINTMENT_NOT_RESCHEDULED":
+        return create_appointment_not_rescheduled_email(sender_email, subject, body, timestamp, summary_attachment)
+    elif notification_type == "EVENT_CODE_NOT_FOUND":
+        return create_event_code_not_found_email(sender_email, subject, body, timestamp, summary_attachment)
+    elif notification_type == "CALENDAR_SERVICE_NOT_FOUND":
+        return create_calendar_service_not_found_email(sender_email, subject, body, timestamp, summary_attachment)
+    elif notification_type == "EVENT_DELETION_FAILED":
+        return create_event_deletion_failed_email(sender_email, subject, body, timestamp, summary_attachment)
     else:
         # Fallback to low confidence template
         return create_low_confidence_email(sender_email, subject, body, timestamp, summary_attachment)
