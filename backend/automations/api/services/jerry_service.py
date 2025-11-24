@@ -1,73 +1,29 @@
-"""Service layer for Jerry chatbot system."""
+"""Service layer for Jerry chatbot system - delegates to jerry.py core logic."""
 
-import os
+import sys
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 from uuid import uuid4
-from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.graph import StateGraph, START, END
-from langchain.agents import create_agent
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, BaseMessage
-from langgraph.graph.message import add_messages
-from typing import TypedDict, Annotated
-from langchain_core.runnables import RunnableConfig
 
-# Import tools
+# Add parent directories to path to import jerry
+project_root = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+# Import core Jerry logic and components
+from automations.chatbot import jerry
 from automations.chatbot.tools import send_email
-
-
-# Agent prompt
-AGENT_PROMPT = """
-You are Jerry, a helpful customer support chatbot that assists the customer and uses its tools to address their requests. 
-Use the tools as needed to execute what the customer asks for.
-"""
-
-
-class GraphState(TypedDict):
-    """State schema for the chatbot graph."""
-    messages: Annotated[list, add_messages]
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 
 
 class JerryService:
-    """Service to manage Jerry chatbot interactions."""
+    """Service to manage Jerry chatbot interactions - wraps jerry.py functionality."""
     
     def __init__(self):
-        """Initialize the Jerry service with database connection and graph."""
-        supabase_project_id = os.getenv("SUPABASE_PROJECT_ID")
-        supabase_password = os.getenv("SUPABASE_PASSWORD")
-        
-        self.db_uri = f"postgresql://postgres:{supabase_password}@db.{supabase_project_id}.supabase.co:5432/postgres?sslmode=disable"
-        
-        # Initialize checkpointer
-        checkpointer_cm = PostgresSaver.from_conn_string(self.db_uri)
-        self.checkpointer = checkpointer_cm.__enter__()
-        self.checkpointer.setup()
-        
-        # Build the graph
-        self.graph = self._build_graph()
-    
-    def _create_chatbot_agent(self, state: GraphState):
-        """Initialize and return the chatbot agent with tools."""
-        model = ChatOpenAI(
-            model="gpt-4o-mini", 
-            temperature=0, 
-            api_key=os.getenv("OPENAI_API_KEY")
-        )
-        
-        tools = [
-            send_email,
-        ]
-        
-        agent = create_agent(model, tools=tools)
-        return agent
-    
-    def _build_graph(self):
-        """Build the LangGraph StateGraph for the chatbot."""
-        builder = StateGraph(GraphState)
-        builder.add_node("chatbot", self._create_chatbot_agent)
-        builder.add_edge(START, "chatbot")
-        builder.add_edge("chatbot", END)
-        return builder.compile(checkpointer=self.checkpointer)
+        """Initialize the Jerry service using the existing jerry.py graph."""
+        # Use the already initialized graph from jerry.py
+        self.graph = jerry.graph
+        self.checkpointer = jerry.checkpointer
+        self.agent_prompt = jerry.agent_prompt
     
     def create_thread(self, user_id: str) -> str:
         """
@@ -84,7 +40,7 @@ class JerryService:
         # Initialize the thread with system message
         config = {"configurable": {"thread_id": thread_id}}
         self.graph.invoke(
-            {"messages": [SystemMessage(content=AGENT_PROMPT)]},
+            {"messages": [SystemMessage(content=self.agent_prompt)]},
             config=config,
         )
         
@@ -98,6 +54,7 @@ class JerryService:
     ) -> Dict[str, Any]:
         """
         Send a message to Jerry and get a response.
+        Uses the handle_user_message function from jerry.py
         
         Args:
             user_id: The user identifier
@@ -107,23 +64,11 @@ class JerryService:
         Returns:
             Dictionary with thread_id and response
         """
-        # Create new thread if not provided
-        if thread_id is None:
-            thread_id = self.create_thread(user_id)
-        
-        config = {"configurable": {"thread_id": thread_id}}
-        
-        # Invoke the graph
-        result = self.graph.invoke(
-            {"messages": [HumanMessage(content=message)]},
-            config=config,
-        )
-        
-        # Extract the response
-        answer = result["messages"][-1]
+        # Delegate to jerry.py's handle_user_message function
+        result_thread_id, answer = jerry.handle_user_message(user_id, thread_id, message)
         
         return {
-            "thread_id": thread_id,
+            "thread_id": result_thread_id,
             "response": answer.content if hasattr(answer, 'content') else str(answer),
             "message_type": answer.__class__.__name__
         }
@@ -147,11 +92,11 @@ class JerryService:
         """
         # Create new thread if not provided
         if thread_id is None:
-            thread_id = self.create_thread(user_id)
+            thread_id = f"user{user_id}:conv{uuid4()}"
         
         config = {"configurable": {"thread_id": thread_id}}
         
-        # Stream the graph execution
+        # Stream the graph execution using jerry's graph
         for chunk in self.graph.stream(
             {"messages": [HumanMessage(content=message)]},
             config=config,
@@ -181,7 +126,7 @@ class JerryService:
         config = {"configurable": {"thread_id": thread_id}}
         
         try:
-            # Get the state from checkpointer
+            # Get the state from checkpointer using jerry's graph
             state = self.graph.get_state(config)
             
             if not state or not state.values:
@@ -217,7 +162,7 @@ class JerryService:
         try:
             config = {"configurable": {"thread_id": thread_id}}
             
-            # Update state to empty messages
+            # Update state to empty messages using jerry's graph
             self.graph.update_state(
                 config,
                 {"messages": []},

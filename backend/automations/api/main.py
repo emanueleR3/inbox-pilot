@@ -38,7 +38,7 @@ async def log_requests(request: Request, call_next):
     print(f"✅ [RESPONSE] Status: {response.status_code}")
     return response
 
-app.include_router(chatbot_router, prefix="/chatbot")
+app.include_router(chatbot_router, prefix="/jerry")
 app.include_router(quiz_router, prefix="/internal-quiz")
 app.include_router(workflows_router, prefix="/workflows")
 

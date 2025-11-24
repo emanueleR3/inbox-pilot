@@ -8,6 +8,7 @@ from automations.api.controllers.jerry_controller import JerryController
 router = APIRouter(tags=["jerry"])
 controller = JerryController()
 
+#TODO: API to retrieve all threads for a user
 
 class CreateThreadRequest(BaseModel):
     """Request model for creating a new thread."""

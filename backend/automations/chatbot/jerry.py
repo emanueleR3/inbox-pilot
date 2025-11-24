@@ -6,7 +6,7 @@ from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
 from uuid import uuid4
-from tools import send_email
+from automations.chatbot.tools import send_email
 from langchain_core.runnables import RunnableConfig
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -39,6 +39,7 @@ class GraphState(TypedDict):
 
 
 def handle_user_message(user_id: str, thread_id: str | None, text: str):
+    # Nel caso non esista thread_id, ne crea uno nuovo. Tuttavia, dovrebbe essere sempre gia' presente, perche' gestito a livello di API.
     if thread_id is None:
         messages = [
             SystemMessage(agent_prompt),

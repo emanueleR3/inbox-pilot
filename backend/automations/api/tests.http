@@ -35,19 +35,150 @@ GET {{baseUrl}}/agents/emails/
 Accept: application/json
 
 ###############################################################################
-### Chatbot Routes
+### Jerry Routes
 ###############################################################################
 
-### GET Chat History - Session 1
-GET {{baseUrl}}/chatbot/history/test-session-123
+### GET Available Tools
+GET {{baseUrl}}/jerry/tools
 Accept: application/json
 
-### GET Chat History - Session 2
-GET {{baseUrl}}/chatbot/history/user-456-session
+### POST Create New Thread
+POST {{baseUrl}}/jerry/thread/create
+Content-Type: application/json
+
+{
+	"user_id": "test_user_123"
+}
+
+### POST Send Message (New Thread)
+POST {{baseUrl}}/jerry/message
+Content-Type: application/json
+
+{
+	"user_id": "test_user_123",
+	"message": "Hello Jerry! Can you introduce yourself and tell me what you can do?"
+}
+
+### POST Send Message (Existing Thread)
+# Note: Replace thread_id with actual value from previous response
+POST {{baseUrl}}/jerry/message
+Content-Type: application/json
+
+{
+	"user_id": "test_user_123",
+	"message": "What tools do you have access to?",
+	"thread_id": "usertest_user_123:conv22d3ac87-effe-45fe-b3ca-be32a8c01516"
+}
+
+### POST Stream Message (New Thread)
+POST {{baseUrl}}/jerry/message/stream
+Content-Type: application/json
+
+{
+	"user_id": "test_user_123",
+	"message": "Tell me a detailed story about AI assistants helping humans"
+}
+
+### POST Stream Message (Existing Thread)
+# Note: Replace thread_id with actual value
+POST {{baseUrl}}/jerry/message/stream
+Content-Type: application/json
+
+{
+	"user_id": "test_user_123",
+	"message": "Continue that story",
+	"thread_id": "usertest_user_123:conv22d3ac87-effe-45fe-b3ca-be32a8c01516"
+}
+
+### GET Thread History
+# Note: Replace thread_id with actual value
+GET {{baseUrl}}/jerry/thread/usertest_user_123:conv22d3ac87-effe-45fe-b3ca-be32a8c01516/history
 Accept: application/json
 
-### GET Chat History - Session 3
-GET {{baseUrl}}/chatbot/history/abc-xyz-789
+### DELETE Thread
+# Note: Replace thread_id with actual value
+DELETE {{baseUrl}}/jerry/thread/usertest_user_123:conv22d3ac87-effe-45fe-b3ca-be32a8c01516
+Accept: application/json
+
+### POST Execute Tool - Send Email
+POST {{baseUrl}}/jerry/tool/execute
+Content-Type: application/json
+
+{
+	"tool_name": "send_email",
+	"tool_params": {
+		"sender_address": "dev4@example.com",
+		"receiver_address": "customer@example.com",
+		"subject": "Test Email from Jerry API",
+		"body": "This is a test email sent via the Jerry chatbot API tool execution endpoint.",
+		"provider": "google",
+		"body_type": "text"
+	},
+	"user_id": "test_user_123"
+}
+
+### POST Send Email via Natural Language
+POST {{baseUrl}}/jerry/message
+Content-Type: application/json
+
+{
+	"user_id": "test_user_123",
+	"message": "Send an email from dev4@example.com to customer@example.com with subject 'Meeting Reminder' and body 'Don't forget our meeting tomorrow at 10 AM.'"
+}
+
+### POST Complex Task - Multiple Emails
+POST {{baseUrl}}/jerry/message
+Content-Type: application/json
+
+{
+	"user_id": "test_user_123",
+	"message": "I need to send two emails: First, send an email from dev4@example.com to customer@example.com with subject 'Update 1' and body 'This is the first update.' Then explain what you did."
+}
+
+### Jerry Error Handling Tests
+
+### POST Message - Missing user_id
+POST {{baseUrl}}/jerry/message
+Content-Type: application/json
+
+{
+	"message": "Hello"
+}
+
+### POST Message - Missing message
+POST {{baseUrl}}/jerry/message
+Content-Type: application/json
+
+{
+	"user_id": "test_user_123"
+}
+
+### POST Execute Tool - Invalid Tool Name
+POST {{baseUrl}}/jerry/tool/execute
+Content-Type: application/json
+
+{
+	"tool_name": "non_existent_tool",
+	"tool_params": {}
+}
+
+### POST Execute Tool - Missing Required Parameters
+POST {{baseUrl}}/jerry/tool/execute
+Content-Type: application/json
+
+{
+	"tool_name": "send_email",
+	"tool_params": {
+		"sender_address": "test@example.com"
+	}
+}
+
+### GET History - Invalid Thread ID
+GET {{baseUrl}}/jerry/thread/invalid_thread_id/history
+Accept: application/json
+
+### DELETE Thread - Invalid Thread ID
+DELETE {{baseUrl}}/jerry/thread/invalid_thread_id
 Accept: application/json
 
 ###############################################################################
