@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from .routers import notification_router
+from .routers import notification_router, send_email_router
 
 # Configure logging
 logging.basicConfig(
@@ -29,6 +29,7 @@ app = FastAPI(
 
 # Include routers
 app.include_router(notification_router)
+app.include_router(send_email_router)
 
 
 @app.get("/health")
