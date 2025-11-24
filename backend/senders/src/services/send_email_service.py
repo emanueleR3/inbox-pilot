@@ -1,0 +1,278 @@
+"""
+Email sending service for Gmail, Microsoft, and SMTP providers.
+Handles authentication, token decryption, and email sending logic.
+"""
+
+import os
+import logging
+import base64
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from typing import Optional
+from dotenv import load_dotenv
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+import requests
+import ssl
+
+from ..utils.utils import decrypt
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+
+class SendEmailService:
+    """Service for sending emails via Gmail, Microsoft, and SMTP."""
+    
+    def __init__(self):
+        """Initialize the email service."""
+        pass
+
+    
+    def send_email_gmail(
+        self, 
+        email: str, 
+        subject: str, 
+        body: str, 
+        hashed_access_token: str
+    ) -> dict:
+        """
+        Send an email using Gmail API.
+        
+        Args:
+            email: Recipient email address
+            subject: Email subject
+            body: Email body content (HTML or plain text)
+            hashed_access_token: Encrypted access token for Gmail API
+            
+        Returns:
+            dict: Response with success status and message
+        """
+        try:
+            logger.info(f"📤 Sending email via Gmail to {email}")
+            
+            # Decrypt the access token
+            access_token = decrypt(hashed_access_token, "token")
+            if not access_token:
+                raise ValueError("Failed to decrypt access token")
+            
+            # Create credentials
+            scopes_env = os.getenv("GOOGLE_SCOPES", "")
+            if scopes_env:
+                scopes = [scope.strip() for scope in scopes_env.split() if scope.strip()]
+            else:
+                scopes = [
+                    "https://www.googleapis.com/auth/gmail.send",
+                    "https://www.googleapis.com/auth/gmail.modify"
+                ]
+            
+            creds = Credentials(
+                token=access_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=os.getenv("GOOGLE_CLIENT_ID"),
+                client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+                scopes=scopes
+            )
+            
+            # Build Gmail service
+            service = build('gmail', 'v1', credentials=creds)
+            
+            # Create the email message
+            message = MIMEMultipart('alternative')
+            message['To'] = email
+            message['Subject'] = subject
+            
+            # Determine if body is HTML or plain text
+            if body.strip().startswith('<') and body.strip().endswith('>'):
+                # Likely HTML
+                html_part = MIMEText(body, 'html', 'utf-8')
+                message.attach(html_part)
+            else:
+                # Plain text
+                text_part = MIMEText(body, 'plain', 'utf-8')
+                message.attach(text_part)
+            
+            # Encode the message
+            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+            
+            # Send the email
+            send_result = service.users().messages().send(
+                userId='me',
+                body={'raw': raw_message}
+            ).execute()
+            
+            logger.info(f"✅ Email sent successfully via Gmail. Message ID: {send_result.get('id')}")
+            
+            return {
+                "success": True,
+                "message": f"Email sent successfully via Gmail to {email}",
+                "notification_id": send_result.get('id')
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to send email via Gmail: {str(e)}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"Failed to send email via Gmail: {str(e)}",
+                "notification_id": None
+            }
+    
+    def send_email_microsoft(
+        self, 
+        email: str, 
+        subject: str, 
+        body: str, 
+        hashed_access_token: str
+    ) -> dict:
+        """
+        Send an email using Microsoft Graph API.
+        
+        Args:
+            email: Recipient email address
+            subject: Email subject
+            body: Email body content (HTML or plain text)
+            hashed_access_token: Encrypted access token for Microsoft Graph API
+            
+        Returns:
+            dict: Response with success status and message
+        """
+        try:
+            logger.info(f"📤 Sending email via Microsoft Graph to {email}")
+            
+            # Decrypt the access token
+            access_token = decrypt(hashed_access_token, "token")
+            if not access_token:
+                raise ValueError("Failed to decrypt access token")
+            
+            # Determine content type
+            content_type = "HTML" if body.strip().startswith('<') and body.strip().endswith('>') else "Text"
+            
+            # Prepare the email message for Microsoft Graph API
+            email_message = {
+                "message": {
+                    "subject": subject,
+                    "body": {
+                        "contentType": content_type,
+                        "content": body
+                    },
+                    "toRecipients": [
+                        {
+                            "emailAddress": {
+                                "address": email
+                            }
+                        }
+                    ]
+                },
+                "saveToSentItems": "true"
+            }
+            
+            # Send the email via Microsoft Graph API
+            graph_url = "https://graph.microsoft.com/v1.0/me/sendMail"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            response = requests.post(graph_url, json=email_message, headers=headers)
+            
+            if response.status_code == 202:
+                logger.info(f"✅ Email sent successfully via Microsoft Graph to {email}")
+                return {
+                    "success": True,
+                    "message": f"Email sent successfully via Microsoft to {email}",
+                    "notification_id": None  # Microsoft Graph doesn't return message ID on send
+                }
+            else:
+                error_msg = f"Microsoft Graph API error: {response.status_code} - {response.text}"
+                logger.error(f"❌ {error_msg}")
+                return {
+                    "success": False,
+                    "message": error_msg,
+                    "notification_id": None
+                }
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to send email via Microsoft: {str(e)}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"Failed to send email via Microsoft: {str(e)}",
+                "notification_id": None
+            }
+
+    def send_email_smtp(
+        self,
+        email: str,
+        subject: str,
+        body: str,
+        smtp_port: int,
+        smtp_server: str,
+        smtp_email: str,
+        smtp_password: str
+    ) -> dict:
+        try:
+            sender_email = smtp_email
+
+            message = MIMEMultipart("alternative")
+            message["From"] = sender_email
+            message["To"] = email
+            message["Subject"] = subject
+
+            if body.strip().startswith("<"):
+                message.attach(MIMEText(body, "html", "utf-8"))
+            else:
+                message.attach(MIMEText(body, "plain", "utf-8"))
+
+            context = ssl.create_default_context()
+
+            password = decrypt(smtp_password, "pass")
+            if not password:
+                raise ValueError("Failed to decrypt hashed password")
+
+            if smtp_port == 465:
+                with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
+                    server.ehlo()
+                    server.login(sender_email, password)
+                    server.send_message(message)
+
+            elif smtp_port == 587:
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    server.ehlo()
+                    server.starttls(context=context)
+                    server.ehlo()  
+                    server.login(sender_email, password)
+                    server.send_message(message)
+
+            elif smtp_port == 25:
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    server.ehlo()
+                    try:
+                        server.starttls(context=context)
+                        server.ehlo()
+                    except:
+                        pass
+
+                    try:
+                        server.login(sender_email, password)
+                    except:
+                        pass
+
+                    server.send_message(message)
+
+            else:
+                return {
+                    "success": False,
+                    "message": f"Unsupported SMTP port {smtp_port}. Use 465 / 587 / 25."
+                }
+
+            return {
+                "success": True,
+                "message": "Email sent"
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "message": str(e)
+            }
