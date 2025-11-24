@@ -1,0 +1,273 @@
+### Jerry Chatbot API Tests
+### Base URL
+@baseUrl = http://localhost:8000
+@userId = test_user_123
+
+###############################################
+# 1. Get Available Tools
+###############################################
+GET {{baseUrl}}/chatbot/tools HTTP/1.1
+Content-Type: application/json
+
+###############################################
+# 2. Create a New Thread
+###############################################
+POST {{baseUrl}}/chatbot/thread/create HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}"
+}
+
+###############################################
+# 3. Send a Message (New Thread)
+###############################################
+POST {{baseUrl}}/chatbot/message HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "message": "Hello Jerry! Can you help me?"
+}
+
+###############################################
+# 4. Send a Message (Existing Thread)
+# Note: Replace thread_id with actual thread ID from previous response
+###############################################
+POST {{baseUrl}}/chatbot/message HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "message": "What can you do for me?",
+    "thread_id": "user_test_user_123:conv123"
+}
+
+###############################################
+# 5. Stream a Message (New Thread)
+###############################################
+POST {{baseUrl}}/chatbot/message/stream HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "message": "Tell me a long story about AI assistants"
+}
+
+###############################################
+# 6. Stream a Message (Existing Thread)
+# Note: Replace thread_id with actual thread ID
+###############################################
+POST {{baseUrl}}/chatbot/message/stream HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "message": "Continue the story",
+    "thread_id": "user_test_user_123:conv123"
+}
+
+###############################################
+# 7. Get Thread History
+# Note: Replace thread_id with actual thread ID
+###############################################
+GET {{baseUrl}}/chatbot/thread/user_test_user_123:conv123/history HTTP/1.1
+Content-Type: application/json
+
+###############################################
+# 8. Execute Tool Directly - Send Email
+###############################################
+POST {{baseUrl}}/chatbot/tool/execute HTTP/1.1
+Content-Type: application/json
+
+{
+    "tool_name": "send_email",
+    "tool_params": {
+        "sender_address": "dev4@example.com",
+        "receiver_address": "customer@example.com",
+        "subject": "Test Email from Jerry API",
+        "body": "This is a test email sent directly via the Jerry chatbot API tool execution endpoint.",
+        "provider": "google",
+        "body_type": "text"
+    },
+    "user_id": "{{userId}}"
+}
+
+###############################################
+# 9. Execute Tool via Natural Language
+###############################################
+POST {{baseUrl}}/chatbot/message HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "message": "Send an email from dev4@example.com to customer@example.com with subject 'Test from Jerry' and body 'This email was sent through natural language!'"
+}
+
+###############################################
+# 10. Complex Conversation Test
+###############################################
+POST {{baseUrl}}/chatbot/message HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "message": "I need to send multiple emails. First, send an email from dev4@example.com to customer@example.com with subject 'Meeting Reminder' and body 'Don't forget our meeting tomorrow at 10 AM.'"
+}
+
+###############################################
+# 11. Follow-up in Same Thread
+# Note: Use thread_id from previous response
+###############################################
+POST {{baseUrl}}/chatbot/message HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "message": "Now send another email to the same person with subject 'Additional Info' and body 'Here is the meeting link: https://meet.example.com/123'",
+    "thread_id": "REPLACE_WITH_THREAD_ID"
+}
+
+###############################################
+# 12. Delete/Reset Thread
+# Note: Replace thread_id with actual thread ID
+###############################################
+DELETE {{baseUrl}}/chatbot/thread/user_test_user_123:conv123 HTTP/1.1
+Content-Type: application/json
+
+###############################################
+# 13. Test Error Handling - Missing Required Field
+###############################################
+POST {{baseUrl}}/chatbot/message HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}"
+}
+
+###############################################
+# 14. Test Error Handling - Invalid Tool Name
+###############################################
+POST {{baseUrl}}/chatbot/tool/execute HTTP/1.1
+Content-Type: application/json
+
+{
+    "tool_name": "invalid_tool",
+    "tool_params": {}
+}
+
+###############################################
+# 15. Test Error Handling - Missing Tool Parameters
+###############################################
+POST {{baseUrl}}/chatbot/tool/execute HTTP/1.1
+Content-Type: application/json
+
+{
+    "tool_name": "send_email",
+    "tool_params": {
+        "sender_address": "test@example.com"
+    }
+}
+
+###############################################
+# 16. Full Workflow Test
+###############################################
+
+# Step 1: Create thread
+POST {{baseUrl}}/chatbot/thread/create HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "workflow_test_user"
+}
+
+###
+
+# Step 2: Send greeting (use thread_id from Step 1)
+POST {{baseUrl}}/chatbot/message HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "workflow_test_user",
+    "message": "Hi Jerry, I'm testing the workflow",
+    "thread_id": "REPLACE_WITH_THREAD_ID"
+}
+
+###
+
+# Step 3: Get history
+GET {{baseUrl}}/chatbot/thread/REPLACE_WITH_THREAD_ID/history HTTP/1.1
+Content-Type: application/json
+
+###
+
+# Step 4: Delete thread
+DELETE {{baseUrl}}/chatbot/thread/REPLACE_WITH_THREAD_ID HTTP/1.1
+Content-Type: application/json
+
+###############################################
+# 17. Test with Email CC and BCC
+###############################################
+POST {{baseUrl}}/chatbot/tool/execute HTTP/1.1
+Content-Type: application/json
+
+{
+    "tool_name": "send_email",
+    "tool_params": {
+        "sender_address": "dev4@example.com",
+        "receiver_address": "customer@example.com",
+        "subject": "Test with CC/BCC",
+        "body": "Testing email with CC and BCC recipients",
+        "provider": "google",
+        "body_type": "text",
+        "cc_recipients": ["cc@example.com"],
+        "bcc_recipients": ["bcc@example.com"]
+    }
+}
+
+###############################################
+# 18. Test HTML Email
+###############################################
+POST {{baseUrl}}/chatbot/tool/execute HTTP/1.1
+Content-Type: application/json
+
+{
+    "tool_name": "send_email",
+    "tool_params": {
+        "sender_address": "dev4@example.com",
+        "receiver_address": "customer@example.com",
+        "subject": "HTML Test Email",
+        "body": "<h1>Hello!</h1><p>This is an <strong>HTML</strong> email.</p>",
+        "provider": "google",
+        "body_type": "html"
+    }
+}
+
+###############################################
+# 19. Multi-turn Conversation
+###############################################
+POST {{baseUrl}}/chatbot/message HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "multi_turn_user",
+    "message": "Remember this: my favorite color is blue"
+}
+
+###
+
+# Follow-up (use thread_id from previous response)
+POST {{baseUrl}}/chatbot/message HTTP/1.1
+Content-Type: application/json
+
+{
+    "user_id": "multi_turn_user",
+    "message": "What is my favorite color?",
+    "thread_id": "REPLACE_WITH_THREAD_ID"
+}
+
+###############################################
+# 20. Health Check - Verify API is Running
+###############################################
+GET {{baseUrl}}/chatbot/tools HTTP/1.1
+Content-Type: application/json
