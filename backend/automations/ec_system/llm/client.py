@@ -32,7 +32,8 @@ from ..models.llm_responses import (
     ReaderAppointmentResponse,
     ReaderAppointmentChangeResponse,
     ReaderCancellationResponse,
-    SchedulerResponse
+    SchedulerResponse,
+    ExtractorCompanyInfoResponse
 )
 from ..prompts.templates import (
     LANGUAGE_DETECTION_PROMPT,
@@ -73,7 +74,9 @@ from ..prompts.templates import (
     SCHEDULER_PROMPT_ITA,
     SCHEDULER_PROMPT_ENG,
     RESCHEDULER_PROMPT_ITA,
-    RESCHEDULER_PROMPT_ENG
+    RESCHEDULER_PROMPT_ENG,
+    EXTRACTOR_COMPANY_INFO_PROMPT_ITA,
+    EXTRACTOR_COMPANY_INFO_PROMPT_ENG
 )
 
 # Import utils and db_client for calendar operations
@@ -695,18 +698,7 @@ class LLMClient:
             
         except Exception as e:
             print(f"❌ [LLM] Error in email evaluation: {e}")
-            # Return default evaluation based on category
-            default_response_mapping = {
-                "PROMOTION": PromotionEvaluatorResponse(priority_score=0.3, subcategory="OFFERTA_GENERALE"),
-                "SOCIAL_NOTIFICATION": SocialNotificationEvaluatorResponse(priority_score=0.2, subcategory="POST_GENERICO"),
-                "INFO_PROVIDED": InfoProvidedEvaluatorResponse(priority_score=0.5, subcategory="INFORMAZIONE_GENERALE"),
-                "INFO_REQUESTED": InfoRequestedEvaluatorResponse(priority_score=0.7, subcategory="RICHIESTA_GENERALE"),
-                "CALENDAR_EVENT": CalendarEventEvaluatorResponse(priority_score=0.8, subcategory="MEETING_GENERICO"),
-                "TRANSACTIONAL": TransactionalEvaluatorResponse(priority_score=0.9, subcategory="CONFERMA_GENERICA"),
-                "OTHER": OtherEvaluatorResponse(priority_score=0.4, subcategory="GENERICO")
-            }
-            
-            return default_response_mapping.get(category, OtherEvaluatorResponse(priority_score=0.4, subcategory="GENERICO"))
+            return None
 
     def summarize_attachments(self, attachment_contents: list, language: str) -> AttachmentSummaryResponse:
         """
@@ -1842,6 +1834,66 @@ class LLMClient:
             'invalid_event_code': False
         }
     
+    def extract_company_info(
+        self,
+        extended_summary: str,
+        mail_summary: str,
+        summary_attachments: str,
+        key_entities: dict,
+        company_information: str,
+        language: str = "ITA"
+    ) -> ExtractorCompanyInfoResponse:
+        """
+        Estrae le informazioni aziendali rilevanti per rispondere all'email.
+        
+        Args:
+            extended_summary: Riassunto esteso della conversazione
+            mail_summary: Riassunto della email corrente
+            summary_attachments: Riassunto degli allegati
+            key_entities: Entità chiave estratte dalla email
+            company_information: Informazioni aziendali complete dal database
+            language: Lingua (ITA o ENG)
+            
+        Returns:
+            ExtractorCompanyInfoResponse con chunked_company_informations
+        """
+        try:
+            # Seleziona il prompt in base alla lingua
+            prompt_template = EXTRACTOR_COMPANY_INFO_PROMPT_ITA if language == "ITA" else EXTRACTOR_COMPANY_INFO_PROMPT_ENG
+            
+            # Prepara il summary degli attachments
+            attachments_text = summary_attachments if summary_attachments else (
+                "Nessun allegato presente" if language == "ITA" else "No attachment in this email"
+            )
+            
+            # Formatta le key entities
+            key_entities_text = str(key_entities) if key_entities else "{}"
+            
+            # Costruisci il prompt
+            prompt = prompt_template.format(
+                extended_summary=extended_summary or "",
+                mail_summary=mail_summary or "",
+                summary_attachments=attachments_text,
+                key_entities=key_entities_text,
+                company_information=company_information
+            )
+            
+            print(f"🔍 [LLM_CLIENT] Extracting company information...")
+            print(f"   📊 Company info length: {len(company_information)} chars")
+            print(f"   🗣️ Language: {language}")
+            
+            # Invoca l'LLM con structured output
+            response = self.structured_completion(prompt, ExtractorCompanyInfoResponse)
+            
+            print(f"✅ [LLM_CLIENT] Company information extracted successfully")
+            print(f"   📦 Extracted chunks: {len(response.chunked_company_informations)} categories")
+            
+            return response
+            
+        except Exception as e:
+            print(f"❌ [LLM_CLIENT] Error extracting company information: {str(e)}")
+            # Return empty dict in case of error
+            return ExtractorCompanyInfoResponse(chunked_company_informations={})
 
         
 

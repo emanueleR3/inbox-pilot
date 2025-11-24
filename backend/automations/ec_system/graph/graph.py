@@ -448,6 +448,7 @@ def create_email_classification_graph():
             thread_id = extracted_info.get("thread_id", "unknown")
             category = state.get("category", "OTHER")
             mail_summary = state.get("mail_summary", "")
+            summary_attachments = state.get("summary_attachments", "")
             
             # Get extended_summary from state (not created from parts)
             extended_summary = state.get("extended_summary", "")

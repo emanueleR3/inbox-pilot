@@ -554,6 +554,46 @@ def update_scheduled_event_provider_id(event_code: str, new_provider_event_id: s
         return False
 
 
+def get_company_information_sync(box_email: str) -> Optional[str]:
+    """
+    Recupera le informazioni aziendali (campo 'information') dalla tabella subscription_services.
+    Versione sincrona per i nodi del workflow.
+    
+    Args:
+        box_email (str): Email della casella di posta
+        
+    Returns:
+        str: Informazioni aziendali in formato markdown, None se non trovate o vuote
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Query per recuperare il campo information
+        response = supabase.table("subscription_services") \
+            .select("information") \
+            .eq("email", box_email) \
+            .eq("activated", True) \
+            .execute()
+        
+        if not response.data or len(response.data) == 0:
+            print(f"⚠️ [DB_CLIENT] No subscription found for box_email: {box_email}")
+            return None
+        
+        company_info = response.data[0].get("information")
+        
+        # Verifica se information è vuoto o None
+        if not company_info or company_info.strip() == "":
+            print(f"⚠️ [DB_CLIENT] Company information is empty for box_email: {box_email}")
+            return None
+        
+        print(f"✅ [DB_CLIENT] Company information retrieved successfully (length: {len(company_info)} chars)")
+        return company_info
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving company information: {str(e)}")
+        return None
+
+
 if __name__ == "__main__":
     # Test del modulo
     import asyncio

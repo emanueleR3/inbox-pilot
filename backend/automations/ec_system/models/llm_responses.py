@@ -440,6 +440,22 @@ class TransactionalEvaluatorResponse(BaseModel):
 
 
 class OtherEvaluatorResponse(BaseModel):
+    """Response model for OTHER category evaluation."""
+    subcategory: OtherSubcategory = Field(..., description="Sottocategoria specifica")
+    priority_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Punteggio di priorità della email (0.0-1.0)"
+    )
+
+
+class ExtractorCompanyInfoResponse(BaseModel):
+    """Response model for company information extraction."""
+    chunked_company_informations: dict = Field(
+        ...,
+        description="Dizionario contenente le informazioni aziendali rilevanti estratte per rispondere alla email"
+    )
     """Response model for OTHER email evaluation."""
     priority_score: float = Field(
         ..., 
