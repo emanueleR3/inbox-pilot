@@ -7,7 +7,7 @@ from langgraph.graph import END
 from .config import NodeNames
 from ..llm.client import llm_client
 from ..models.llm_responses import DangerousEmailDetected, LowConfidenceClassification, AutomationExecutedResponse
-from db_client import get_supabase_client, get_calendar_service_data, get_scheduled_event_by_code
+from db_client import get_supabase_client, get_calendar_service_data, get_scheduled_event_by_code, delete_event_from_db
 from ec_system.utils.utils import delete_google_calendar_event, delete_microsoft_calendar_event
 from datetime import datetime
 
@@ -2651,7 +2651,7 @@ def cancellation_node(state):
             print(f"   🗑️ Deleting event from scheduled_events table...")
             db_delete_response = delete_event_from_db(event_code)
             
-            if db_delete_response:
+            if db_delete_response and calendar_deleted:
                 print(f"   ✅ Event {event_code} successfully deleted")
                 return state
             else:
