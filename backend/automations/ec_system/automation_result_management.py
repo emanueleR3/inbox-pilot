@@ -25,7 +25,7 @@ def process_automation_result(workflow_result: dict):
         print(f"⚠️ [WORKFLOW] Automation is disabled. No processing to be done.")
         return
     elif status == "FAILED":
-        print(f"❌ [WORKFLOW] Workflow execution failed. No processing to be done.")
+        print(f"❌ [WORKFLOW] Workflow execution failed - Details: {workflow_result.get('error', 'No details provided')}")
         return
     
     # ======= DANGEROUS EMAIL CHECK =======

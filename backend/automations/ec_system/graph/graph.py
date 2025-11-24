@@ -655,10 +655,10 @@ def run_workflow(email_data: dict = None):
         Dict with workflow execution result
     """
 
-    result = {"status": "AUTOMATION_DISABLED"}
+    result = None
     
     try:
-        if not AUTOMATION_ENABLED: return result
+        if not AUTOMATION_ENABLED: return {"status": "AUTOMATION_DISABLED", "error": "Automation is disabled via configuration."}
         
         # Create initial state with email data if provided
         if email_data:
@@ -690,7 +690,7 @@ def run_workflow(email_data: dict = None):
             }
         else:
             # Create default initial state
-            return {"status": "FAILED"}
+            return {"status": "FAILED", "error": "No email data provided"}
             
         print(f"🎯 [WORKFLOW] Starting with initial state:")
         print(f"   📧 Body: {initial_state.get('email_body', 'None')[:100]}...")
@@ -707,7 +707,7 @@ def run_workflow(email_data: dict = None):
         
     except Exception as e:
         print(f"❌ [WORKFLOW] Error executing workflow: {e}")
-        return {"error": str(e), "status": "failed"}
+        return {"status": "FAILED", "error": str(e)}
     
     finally:
         print(f"==== Processing result for automation management...")
