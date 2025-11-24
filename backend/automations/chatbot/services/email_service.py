@@ -15,7 +15,7 @@ import json
 class EmailProvider:
     """Base class for email providers."""
     
-    async def send_email(
+    def send_email(
         self,
         sender_address: str,
         receiver_address: str,
@@ -29,7 +29,7 @@ class EmailProvider:
     ) -> str:
         raise NotImplementedError
     
-    async def create_draft(
+    def create_draft(
         self,
         sender_address: str,
         receiver_address: str,
@@ -105,7 +105,7 @@ class GoogleEmailProvider(EmailProvider):
         encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         return encoded_message
     
-    async def send_email(
+    def send_email(
         self,
         sender_address: str,
         receiver_address: str,
@@ -123,8 +123,8 @@ class GoogleEmailProvider(EmailProvider):
             body_type, cc_recipients, bcc_recipients, attachments
         )
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
+        with httpx.Client() as client:
+            response = client.post(
                 f"{self.base_url}/users/me/messages/send",
                 headers={
                     "Authorization": f"Bearer {self.access_token}",
@@ -139,7 +139,7 @@ class GoogleEmailProvider(EmailProvider):
             else:
                 raise Exception(f"Failed to send email: {response.text}")
     
-    async def create_draft(
+    def create_draft(
         self,
         sender_address: str,
         receiver_address: str,
@@ -157,8 +157,8 @@ class GoogleEmailProvider(EmailProvider):
             body_type, cc_recipients, bcc_recipients, attachments
         )
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
+        with httpx.Client() as client:
+            response = client.post(
                 f"{self.base_url}/users/me/drafts",
                 headers={
                     "Authorization": f"Bearer {self.access_token}",
@@ -221,7 +221,7 @@ class MicrosoftEmailProvider(EmailProvider):
         
         return message
     
-    async def send_email(
+    def send_email(
         self,
         sender_address: str,
         receiver_address: str,
@@ -239,9 +239,9 @@ class MicrosoftEmailProvider(EmailProvider):
             body_type, cc_recipients, bcc_recipients, attachments
         )
         
-        async with httpx.AsyncClient() as client:
+        with httpx.Client() as client:
             # Send mail directly
-            response = await client.post(
+            response = client.post(
                 f"{self.base_url}/me/sendMail",
                 headers={
                     "Authorization": f"Bearer {self.access_token}",
@@ -255,7 +255,7 @@ class MicrosoftEmailProvider(EmailProvider):
             else:
                 raise Exception(f"Failed to send email: {response.text}")
     
-    async def create_draft(
+    def create_draft(
         self,
         sender_address: str,
         receiver_address: str,
@@ -273,8 +273,8 @@ class MicrosoftEmailProvider(EmailProvider):
             body_type, cc_recipients, bcc_recipients, attachments
         )
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
+        with httpx.Client() as client:
+            response = client.post(
                 f"{self.base_url}/me/messages",
                 headers={
                     "Authorization": f"Bearer {self.access_token}",
@@ -352,7 +352,7 @@ class SMTPEmailProvider(EmailProvider):
         
         return msg
     
-    async def send_email(
+    def send_email(
         self,
         sender_address: str,
         receiver_address: str,
@@ -385,7 +385,7 @@ class SMTPEmailProvider(EmailProvider):
         
         return f"Email sent to {receiver_address} with subject '{subject}'."
     
-    async def create_draft(
+    def create_draft(
         self,
         sender_address: str,
         receiver_address: str,
@@ -403,7 +403,7 @@ class SMTPEmailProvider(EmailProvider):
 
 # Main interface functions
 
-async def send_email(
+def send_email(
     sender_address: str,
     password: str,
     receiver_address: str,
@@ -450,13 +450,13 @@ async def send_email(
     else:
         raise ValueError(f"Unsupported provider: {provider}")
     
-    return await email_provider.send_email(
+    return email_provider.send_email(
         sender_address, receiver_address, subject, body,
         body_type, cc_recipients, bcc_recipients, attachments
     )
 
 
-async def create_draft(
+def create_draft(
     sender_address: str,
     receiver_address: str,
     subject: str,
@@ -490,13 +490,13 @@ async def create_draft(
     else:
         raise ValueError(f"Provider {provider} doesn't support drafts")
     
-    return await email_provider.create_draft(
+    return email_provider.create_draft(
         sender_address, receiver_address, subject, body,
         body_type, cc_recipients, bcc_recipients, attachments
     )
 
 
-async def retrieve_last_n_emails(
+def retrieve_last_n_emails(
     n: int,
     provider: str,
     access_token: Optional[str] = None,
@@ -523,26 +523,26 @@ async def retrieve_last_n_emails(
     if provider == 'google':
         if not access_token:
             raise ValueError("access_token is required for Google provider")
-        return await _retrieve_gmail_emails(access_token, n)
+        return _retrieve_gmail_emails(access_token, n)
     elif provider == 'microsoft':
         if not access_token:
             raise ValueError("access_token is required for Microsoft provider")
-        return await _retrieve_microsoft_emails(access_token, n)
+        return _retrieve_microsoft_emails(access_token, n)
     elif provider == 'imap':
         if not host or not username or not password:
             raise ValueError("host, username, and password are required for IMAP provider")
-        return await _retrieve_imap_emails(host, port, username, password, n)
+        return _retrieve_imap_emails(host, port, username, password, n)
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
 
-async def _retrieve_gmail_emails(access_token: str, n: int) -> str:
+def _retrieve_gmail_emails(access_token: str, n: int) -> str:
     """Retrieve emails from Gmail API."""
     base_url = "https://gmail.googleapis.com/gmail/v1"
     
-    async with httpx.AsyncClient() as client:
+    with httpx.Client() as client:
         # Get list of message IDs from INBOX
-        list_response = await client.get(
+        list_response = client.get(
             f"{base_url}/users/me/messages",
             headers={"Authorization": f"Bearer {access_token}"},
             params={
@@ -563,7 +563,7 @@ async def _retrieve_gmail_emails(access_token: str, n: int) -> str:
         
         # Fetch each message with format=full to get complete content
         for msg in messages[:n]:
-            msg_response = await client.get(
+            msg_response = client.get(
                 f"{base_url}/users/me/messages/{msg['id']}",
                 headers={"Authorization": f"Bearer {access_token}"},
                 params={"format": "full"}
@@ -576,12 +576,12 @@ async def _retrieve_gmail_emails(access_token: str, n: int) -> str:
         return _format_emails_for_llm(emails_data)
 
 
-async def _retrieve_microsoft_emails(access_token: str, n: int) -> str:
+def _retrieve_microsoft_emails(access_token: str, n: int) -> str:
     """Retrieve emails from Microsoft Graph API."""
     base_url = "https://graph.microsoft.com/v1.0"
     
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
+    with httpx.Client() as client:
+        response = client.get(
             f"{base_url}/me/messages",
             headers={"Authorization": f"Bearer {access_token}"},
             params={
@@ -621,7 +621,7 @@ async def _retrieve_microsoft_emails(access_token: str, n: int) -> str:
         return _format_emails_for_llm(emails_data)
 
 
-async def _retrieve_imap_emails(host: str, port: int, username: str, password: str, n: int) -> str:
+def _retrieve_imap_emails(host: str, port: int, username: str, password: str, n: int) -> str:
     """Retrieve emails from IMAP server."""
     import imaplib
     import email

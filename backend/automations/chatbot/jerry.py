@@ -23,31 +23,19 @@ os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
 os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "default")
 
-supabase_project_id = os.getenv("SUPABASE_PROJECT_ID").strip()
-supabase_password = os.getenv("SUPABASE_PASSWORD").strip()
+supabase_project_id = os.getenv("SUPABASE_PROJECT_ID")
+supabase_password = os.getenv("SUPABASE_PASSWORD")
 
-# Validate environment variables
-if not supabase_project_id:
-    raise ValueError("SUPABASE_PROJECT_ID environment variable is not set")
-if not supabase_password:
-    raise ValueError("SUPABASE_PASSWORD environment variable is not set")
+DB_URI = f"postgresql://postgres:{supabase_password}@db.{supabase_project_id}.supabase.co:5432/postgres?sslmode=disable"
 
-DB_URI = (
-    f"postgresql://postgres:{supabase_password}"
-    f"@db.{supabase_project_id}.supabase.co:5432/postgres?sslmode=require"
-)
-#print(f"Connecting to database: postgresql://postgres:***@db.{supabase_project_id}.supabase.co:5432/postgres")
+agent_prompt = """
+You are Jerry, a helpful customer support chatbot that assists the customer and uses its tools to address their requests. 
+Use the tools as needed to execute what the customer asks for.
+"""
 
-
-# Define the state schema for the graph
 class GraphState(TypedDict):
     """State schema for the chatbot graph."""
     messages: Annotated[list, add_messages]
-
-agent_prompt = """
-You are a helpful customer support chatbot that assists the customer and uses its tools to address their requests. 
-Use the tools as needed to execute what the customer asks for.
-"""
 
 
 def handle_user_message(user_id: str, thread_id: str | None, text: str):
@@ -55,8 +43,7 @@ def handle_user_message(user_id: str, thread_id: str | None, text: str):
         messages = [
             SystemMessage(agent_prompt),
         ]
-        SystemMessage("You are a helpful assistant")
-        thread_id = f"u{user_id}c{uuid4()}" #u->user c->conversation
+        thread_id = f"user{user_id}:conv{uuid4()}"
 
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -72,7 +59,6 @@ def handle_user_message(user_id: str, thread_id: str | None, text: str):
 def create_chatbot_agent(state: GraphState):
     """Initialize and return the chatbot agent with tools."""
     
-    # Create ChatOpenAI model instance
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
 
     tools = [
@@ -86,17 +72,18 @@ def create_chatbot_agent(state: GraphState):
     
     return agent
 
-with PostgresSaver.from_conn_string(DB_URI) as checkpointer:  
-        checkpointer.setup()
-        
-        builder = StateGraph(GraphState)
-        
-        builder.add_node("chatbot", create_chatbot_agent)
-        
-        builder.add_edge(START, "chatbot")
-        builder.add_edge("chatbot", END)
-        
-        graph = builder.compile(checkpointer=checkpointer)
+checkpointer_cm = PostgresSaver.from_conn_string(DB_URI)
+checkpointer = checkpointer_cm.__enter__()
+checkpointer.setup()
+
+builder = StateGraph(GraphState)
+
+builder.add_node("chatbot", create_chatbot_agent)
+
+builder.add_edge(START, "chatbot")
+builder.add_edge("chatbot", END)
+
+graph = builder.compile(checkpointer=checkpointer)
 
 
 
@@ -107,4 +94,7 @@ if __name__ == "__main__":
         thread_id=None,
         text="Send an email from dev4@example.com to customer@example.com with subject 'Test' and body 'This is a test email to verify the functionality!'"
     )
-    print("Chatbot response:", result[1])
+    
+    print("\nChatbot response:", result[1].content)
+    print("\nThread ID:", result[0])
+    print("\nWhole result:", result)

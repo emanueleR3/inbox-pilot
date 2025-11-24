@@ -27,7 +27,7 @@ def _decrypt_token(encrypted_token: str) -> str:
     cipher = _get_cipher()
     return cipher.decrypt(encrypted_token.encode()).decode()
 
-async def _get_access_token_for_email(email: str) -> Optional[str]:
+def _get_access_token_for_email(email: str) -> Optional[str]:
     """Retrieve and decrypt access token for a given email address. Refreshes if expired."""
     try:
         supabase = get_supabase_client()
@@ -65,7 +65,7 @@ async def _get_access_token_for_email(email: str) -> Optional[str]:
         return None
 
 @tool
-async def send_email(
+def send_email(
     sender_address: str,
     receiver_address: str,
     subject: str,
@@ -105,11 +105,11 @@ async def send_email(
     # Auto-fetch access token for Google/Microsoft if not provided
     if provider in ['google', 'microsoft'] and not access_token:
         print(f"Fetching access token for {sender_address}...")
-        access_token = await _get_access_token_for_email(sender_address)
+        access_token = _get_access_token_for_email(sender_address)
         if not access_token:
             return f"Error: Could not retrieve access token for {sender_address}. Please ensure the email is configured in the system."
 
-    return await email_service.send_email(
+    return email_service.send_email(
         sender_address=sender_address,
         password=password or "",
         receiver_address=receiver_address,
