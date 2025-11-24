@@ -12,6 +12,12 @@ from langchain_core.runnables import RunnableConfig
 
 dotenv.load_dotenv()
 
+# Configure LangSmith tracing
+os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "true")
+os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
+os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "default")
+
 supabase_project_id = os.getenv("SUPABASE_PROJECT_ID")
 supabase_password = os.getenv("SUPABASE_PASSWORD")
 DB_URI = f"postgresql://postgres:{supabase_password}@db.{supabase_project_id}.supabase.co:5432/postgres?sslmode=disable"
@@ -61,7 +67,7 @@ async def main():
         # Compile the graph
         graph = builder.compile(checkpointer=checkpointer)
 
-        thread_id = "1"
+        thread_id = "6"
         config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
         result = await graph.ainvoke(
