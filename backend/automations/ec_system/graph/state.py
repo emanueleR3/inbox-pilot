@@ -50,7 +50,7 @@ class EmailState(TypedDict):
     change_new_place: Optional[str]  # New location
     change_additional_notes: Optional[str]  # Additional notes
     # Extract info and write email
-    guidelines: Optional[List[str, str]]  # Guidelines for writing the email
+    guidelines: Optional[List[str]]  # Guidelines for writing the email
     written_email_body: Optional[str]  # Body of the email to write
     chunked_company_informations: Optional[dict]  # Filtered company information  TODO decidere se dict, list o string
     correctness_score: Optional[float]  # Correctness score of the email
