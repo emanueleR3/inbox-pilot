@@ -19,7 +19,7 @@ from .services.notification_client import (
     send_event_deletion_failed_notification,
     send_email_not_sent_notification
 )
-from ..models import ThreadStatus, EmailOutcome
+from models import ThreadStatus, EmailOutcome
 from datetime import datetime, timezone
 
 def process_automation_result(workflow_result: dict):
