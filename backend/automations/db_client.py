@@ -524,6 +524,59 @@ def delete_event_from_db(event_code: str):
     except Exception as e:
         return False
 
+
+def save_ai_generated_email(email_data: Dict) -> bool:
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("ai_generated_emails").insert(email_data).execute()
+        
+        if response.data:
+            print(f"✅ [DB_CLIENT] Email saved")
+            return True
+        else:
+            print(f"❌ [DB_CLIENT] Failed to save email")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error saving email: {e}")
+        return False
+
+
+def get_subscription_service_id_by_email(email: str) -> Optional[str]:
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select("service_id").eq("email", email).execute()
+        
+        if response.data:
+            return response.data[0].get("service_id")
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error getting service_id by email: {e}")
+        return None
+
+
+def update_thread(thread_id: str, thread_data: Dict) -> bool:
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("threads").update(thread_data).eq("thread_id", thread_id).execute()
+        
+        if response.data:
+            print(f"✅ [DB_CLIENT] Thread updated for thread_id: {thread_id}")
+            return True
+        else:
+            print(f"❌ [DB_CLIENT] Failed to update thread for thread_id: {thread_id}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error updating thread for thread_id: {e}")
+        return False
+
+
 def update_scheduled_event_provider_id(event_code: str, new_provider_event_id: str) -> bool:
     """
     Aggiorna il provider_event_id di un evento nella tabella scheduled_events.

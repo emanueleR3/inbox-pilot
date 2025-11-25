@@ -328,7 +328,8 @@ class AdvancedEmailFilter:
                 subcategory=None,  # Default null for external threads
                 human_response=False,  # External user initiated, no human response yet
                 last_sender_email=sender_email,
-                box_email=email_data.get("user_email")  # Email of the monitored mailbox
+                box_email=email_data.get("user_email"),  # Email of the monitored mailbox
+                status="TO_PROCESS"  # TODO gestire i vari casi
             )
             
             return thread_data
@@ -373,7 +374,8 @@ class AdvancedEmailFilter:
                 subcategory=None,  # Default null for human-initiated threads
                 human_response=True,  # User initiated, so it's a human response
                 last_sender_email=self._extract_email_address(email_data.get("user_email")),
-                box_email=email_data.get("user_email")  # Email of the monitored mailbox
+                box_email=email_data.get("user_email"),  # Email of the monitored mailbox
+                status="TO_PROCESS"  # TODO gestire i vari casi
             )
             
             return thread_data

@@ -1,4 +1,9 @@
-from db_client import insert_notification_sync
+from db_client import (
+    insert_notification_sync,
+    save_ai_generated_email,
+    get_subscription_service_id_by_email,
+    update_thread
+)
 from .services.notification_client import (
     send_high_priority_notification, 
     send_low_confidence_notification,
@@ -12,6 +17,7 @@ from .services.notification_client import (
     send_calendar_service_not_found_notification,
     send_event_deletion_failed_notification
 )
+from models.email_state import EmailStatus, EmailOutcome
 
 def process_automation_result(workflow_result: dict):
     """
@@ -28,7 +34,7 @@ def process_automation_result(workflow_result: dict):
         print(f"❌ [WORKFLOW] Workflow execution failed - Details: {workflow_result.get('error', 'No details provided')}")
         return
     
-    # ======= DANGEROUS EMAIL CHECK =======
+    # ======= DANGEROUS EMAIL CHECK ======= 
     if workflow_result.get("dangerous_email", False):
         print(f"🚨 [WORKFLOW] DANGEROUS EMAIL DETECTED!")
         # Extract thread and message IDs from state
@@ -59,7 +65,22 @@ def process_automation_result(workflow_result: dict):
         extracted_info = workflow_result.get("extracted_info", {})
         message_id = extracted_info.get("message_id", "unknown")
         box_email = extracted_info.get("box_email", "unknown")
+        thread_id = extracted_info.get("thread_id", "unknown")
         # Insert notification in database
+        
+        thread_data = {
+            "human_response": True,
+            "summary": workflow_result.get("mail_summary", ""),
+            "extended_summary": workflow_result.get("extended_summary", ""),
+            "category": workflow_result.get("category", ""),
+            # TODO bisogna aggiungere che è low classificatione error ma senza inserirlo in ai_generated_email
+        }
+
+        try:
+            update_thread(thread_id, thread_data)
+        except Exception as e:
+            print(f"❌ [WORKFLOW] Error updating thread: {e}")
+        
         try:
             notification_success = insert_notification_sync(
                 email=box_email,
@@ -82,13 +103,49 @@ def process_automation_result(workflow_result: dict):
         )
         return
     
-    # ======= HIGH PRIORITY EMAIL CHECK =======
+    # ======= HIGH PRIORITY EMAIL CHECK ======= ✅
     if status == "END_HIGH_PRIORITY":
         print(f"🔥 [WORKFLOW] HIGH PRIORITY EMAIL DETECTED!")
+
         # Get extracted info for notifications
         extracted_info = workflow_result.get("extracted_info", {})
         message_id = extracted_info.get("message_id", "unknown")
         box_email = extracted_info.get("box_email", "unknown")
+        thread_id = extracted_info.get("thread_id", "unknown")
+        now_tz = datetime.now(timezone.utc)
+        
+        service_id = None
+        try:
+            service_id = get_subscription_service_id_by_email(box_email)
+        except Exception as e:
+            print(f"❌ [WORKFLOW] Error getting service_id: {e}")
+
+        ai_email_data = {
+            "thread_id": thread_id,
+            "response_at_id": message_id,
+            "processed_at": now_tz,
+            "duration": 0 #TODO calculate duration
+            "priority_score": workflow_result.get("priority_score", 0),
+            "body": workflow_result.get("written_email_body", ""),
+            "service_id": service_id,
+            "status": EmailStatus.HIGH_PRIORITY.value,
+            "outcome": EmailOutcome.PENDING.value
+        }
+
+        thread_data = {
+            "human_response": True,
+            "summary": workflow_result.get("mail_summary", ""),
+            "extended_summary": workflow_result.get("extended_summary", ""),
+            "category": workflow_result.get("category", "")
+            # TODO bisogna aggiungere che è high_priority
+        }
+
+        try:
+            save_ai_generated_email(ai_email_data)
+            update_thread(thread_id, thread_data)
+        except Exception as e:
+            print(f"❌ [WORKFLOW] Error saving AI generated email: {e}")
+
         # Insert notification in database
         try:
             notification_success = insert_notification_sync(
@@ -105,13 +162,17 @@ def process_automation_result(workflow_result: dict):
             print(f"❌ [PRIORITY_CONTROLLER] Error inserting notification: {e}")
         
         # Send notification webhook for high priority email
-        send_high_priority_notification(
-            sender_email=extracted_info.get("from", "unknown"),
-            box_email=box_email,
-            subject=extracted_info.get("subject", "No subject"),
-            body=workflow_result.get("email_body", ""),
-            summary_attachment=workflow_result.get("summary_attachments")
-        )
+        try:
+            send_high_priority_notification(
+                sender_email=extracted_info.get("from", "unknown"),
+                box_email=box_email,
+                subject=extracted_info.get("subject", "No subject"),
+                body=workflow_result.get("email_body", ""),
+                summary_attachment=workflow_result.get("summary_attachments")
+            )
+        except Exception as e:
+            print(f"❌ [PRIORITY_CONTROLLER] Error sending high priority notification: {e}")
+        
         return
     
     # ======= AUTOMATION EXECUTED CHECK =======
