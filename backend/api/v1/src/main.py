@@ -15,11 +15,7 @@ from src.modules.jerry.src.routes import router as jerry_router
 logger = setup_logger()
 app = FastAPI(title="AI Mail Automation API", version="1.0.0")
 
-app.include_router(auth_router, prefix="/auth")
-app.include_router(subscription_service_router, prefix="/subscriptionServiceRouter")
-app.include_router(jerry_router, prefix="/jerry")
-
-# CORS (puoi restringerlo in produzione)
+# CORS (puoi restringerlo in produzione) - must be added before routers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://corretto.pro", "http://localhost:3000"],  
@@ -27,6 +23,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router, prefix="/auth")
+app.include_router(subscription_service_router, prefix="/subscriptionServiceRouter")
+app.include_router(jerry_router, prefix="/jerry")
 
 @app.get("/health")
 async def health_check():
