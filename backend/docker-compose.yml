@@ -36,8 +36,7 @@ services:
     volumes:
       - ./data/attachments:/app/attachments
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      - rabbitmq
     deploy:
       restart_policy:
         condition: on-failure
@@ -58,8 +57,7 @@ services:
       - ./listeners/service-account-key.json:/app/credentials/service-account-key.json:ro
       - ./data/attachments:/app/attachments
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      - rabbitmq
     ports:
       - "8001:8001" # Microsoft webhook
     networks:
