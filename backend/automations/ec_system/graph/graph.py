@@ -654,12 +654,14 @@ def run_workflow(email_data: dict = None):
     Returns:
         Dict with workflow execution result
     """
-
-    result = None
     
     try:
-        if not AUTOMATION_ENABLED: return {"status": "AUTOMATION_DISABLED", "error": "Automation is disabled via configuration."}
-        
+        result = None
+
+        if not AUTOMATION_ENABLED: 
+            result = {"status": "AUTOMATION_DISABLED", "error": "Automation is disabled via configuration."}
+            return result
+            
         # Create initial state with email data if provided
         if email_data:
             initial_state = {
