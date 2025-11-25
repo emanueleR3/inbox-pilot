@@ -26,7 +26,7 @@ os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "default")
 supabase_project_id = os.getenv("SUPABASE_PROJECT_ID")
 supabase_password = os.getenv("SUPABASE_PASSWORD")
 
-DB_URI = f"postgresql://postgres:{supabase_password}@db.{supabase_project_id}.supabase.co:5432/postgres?sslmode=disable"
+DB_URI = f"postgresql://postgres:{supabase_password}@db.{supabase_project_id}.supabase.co:5432/postgres?sslmode=require"
 
 agent_prompt = """
 You are Jerry, a helpful customer support chatbot that assists the customer and uses its tools to address their requests. 
