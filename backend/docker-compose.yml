@@ -116,6 +116,5 @@ volumes:
 networks:
   broker_net:
     driver: bridge
-    enable_ipv6: true
 
 
