@@ -372,6 +372,228 @@ def get_email_attachments_sync(message_id: str) -> list:
         return []
 
 
+def get_calendar_service_data(service_id: str) -> Optional[Dict]:
+    """
+    Recupera dati del servizio calendario e subscription dal DB.
+    
+    Args:
+        service_id: Service ID from subscription_services
+        
+    Returns:
+        Dict con calendar_provider, access_token (decrypted), opening_hrs, working_days, appointment_duration
+        None se non trovato
+    """
+    try:
+        from ec_system.utils.utils import decrypt
+        
+        supabase = get_supabase_client()
+        
+        # Fetch subscription service data
+        response_sub_ser = supabase.table("subscription_services").select(
+            "subscription_id, calendar_provider, hashed_access_token"
+        ).eq("service_id", service_id).execute()
+        
+        if not response_sub_ser.data:
+            print(f"❌ [DB_CLIENT] No subscription service data found for service_id: {service_id}")
+            return None
+        
+        data = response_sub_ser.data[0]
+        calendar_provider = data.get("calendar_provider")
+        hashed_access_token = data.get("hashed_access_token")
+        subscription_id = data.get("subscription_id")
+        
+        if not hashed_access_token:
+            print(f"❌ [DB_CLIENT] No hashed access token found")
+            return None
+        
+        # Decrypt token
+        access_token = decrypt(hashed_access_token, "token")
+        if not access_token:
+            print(f"❌ [DB_CLIENT] Failed to decrypt token")
+            return None
+        
+        # Fetch subscription data
+        response_sub = supabase.table("subscriptions").select(
+            "business_hours, appointment_duration"
+        ).eq("subscription_id", subscription_id).execute()
+        
+        if not response_sub.data:
+            print(f"❌ [DB_CLIENT] No subscription data found for subscription_id: {subscription_id}")
+            return None
+        
+        sub_data = response_sub.data[0]
+        
+        result = {
+            "subscription_id": subscription_id,
+            "calendar_provider": calendar_provider,
+            "access_token": access_token,
+            "business_hours": sub_data.get("business_hours"),
+            "appointment_duration": sub_data.get("appointment_duration")
+        }
+        
+        print(f"✅ [DB_CLIENT] Calendar service data retrieved for service_id: {service_id}")
+        return result
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving calendar service data: {str(e)}")
+        return None
+
+
+def insert_scheduled_event(event_data: Dict) -> bool:
+    """
+    Inserisce un evento nella tabella scheduled_events.
+    
+    Args:
+        event_data: Dizionario con i dati dell'evento (title, service_id, thread_id, event_type, event_code, created_by, created_at)
+        
+    Returns:
+        bool: True se inserimento riuscito, False altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("scheduled_events").insert(event_data).execute()
+        
+        if response.data:
+            print(f"✅ [DB_CLIENT] Event inserted with code: {event_data.get('event_code')}")
+            return True
+        else:
+            print(f"❌ [DB_CLIENT] Failed to insert event")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error inserting event: {e}")
+        return False
+
+def get_scheduled_event_by_code(event_code: str) -> Optional[Dict]:
+    """
+    Recupera un evento dalla tabella scheduled_events per un event_code specifico.
+    
+    Args:
+        event_code: Event code per cui recuperare l'evento
+        
+    Returns:
+        Dict: Dizionario con i dati dell'evento se trovato, None altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("scheduled_events").select("*").eq("event_code", event_code).execute()
+        
+        if response.data:
+            return response.data[0]
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving event by code: {e}")
+        return None
+
+def check_event_code_exists(event_code: str) -> bool:
+    """
+    Verifica se un event_code esiste già nel database.
+    
+    Args:
+        event_code: Event code da verificare
+        
+    Returns:
+        bool: True se esiste, False altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("scheduled_events").select("event_code").eq("event_code", event_code).execute()
+        
+        return bool(response.data)
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error checking event code: {e}")
+        return False
+
+def delete_event_from_db(event_code: str):
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("scheduled_events").delete().eq("event_code", event_code).execute()
+        
+        if response.data:
+            return True
+        else:
+            return False
+            
+    except Exception as e:
+        return False
+
+def update_scheduled_event_provider_id(event_code: str, new_provider_event_id: str) -> bool:
+    """
+    Aggiorna il provider_event_id di un evento nella tabella scheduled_events.
+    
+    Args:
+        event_code: Event code dell'evento da aggiornare
+        new_provider_event_id: Nuovo provider event ID da salvare
+        
+    Returns:
+        bool: True se aggiornamento riuscito, False altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("scheduled_events").update({
+            "provider_event_id": new_provider_event_id
+        }).eq("event_code", event_code).execute()
+        
+        if response.data:
+            print(f"✅ [DB_CLIENT] Updated provider_event_id for event code: {event_code}")
+            return True
+        else:
+            print(f"❌ [DB_CLIENT] Failed to update provider_event_id for event code: {event_code}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error updating provider_event_id: {e}")
+        return False
+
+
+def get_company_information_sync(box_email: str) -> Optional[str]:
+    """
+    Recupera le informazioni aziendali (campo 'information') dalla tabella subscription_services.
+    Versione sincrona per i nodi del workflow.
+    
+    Args:
+        box_email (str): Email della casella di posta
+        
+    Returns:
+        str: Informazioni aziendali in formato markdown, None se non trovate o vuote
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Query per recuperare il campo information
+        response = supabase.table("subscription_services") \
+            .select("information") \
+            .eq("email", box_email) \
+            .eq("activated", True) \
+            .execute()
+        
+        if not response.data or len(response.data) == 0:
+            print(f"⚠️ [DB_CLIENT] No subscription found for box_email: {box_email}")
+            return None
+        
+        company_info = response.data[0].get("information")
+        
+        # Verifica se information è vuoto o None
+        if not company_info or company_info.strip() == "":
+            print(f"⚠️ [DB_CLIENT] Company information is empty for box_email: {box_email}")
+            return None
+        
+        print(f"✅ [DB_CLIENT] Company information retrieved successfully (length: {len(company_info)} chars)")
+        return company_info
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving company information: {str(e)}")
+        return None
+
+
 if __name__ == "__main__":
     # Test del modulo
     import asyncio

@@ -18,12 +18,12 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/app/rabbitmq/rabbitmq.conf
       - ./rabbitmq/definitions.json:/app/rabbitmq/definitions.json
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+    #healthcheck:
+    #  test: ["CMD", "rabbitmq-diagnostics", "ping"]
+    #  interval: 10s
+    #  timeout: 5s
+    #  retries: 10
+    #  start_period: 30s
     networks:
       - broker_net
 
@@ -36,8 +36,7 @@ services:
     volumes:
       - ./data/attachments:/app/attachments
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      - rabbitmq
     deploy:
       restart_policy:
         condition: on-failure
@@ -58,8 +57,7 @@ services:
       - ./listeners/service-account-key.json:/app/credentials/service-account-key.json:ro
       - ./data/attachments:/app/attachments
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      - rabbitmq
     ports:
       - "8001:8001" # Microsoft webhook
     networks:
@@ -96,6 +94,19 @@ services:
       - .env
     ports:
       - "8010:8010"
+    networks:
+      - broker_net
+    depends_on:
+      - senders
+
+  senders:
+    image: ghcr.io/correttoai/backend/senders:latest
+    container_name: senders
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8020:8020"
     networks:
       - broker_net
 

@@ -59,6 +59,12 @@ jobs:
           else
             echo "automations_changed=false" >> $GITHUB_OUTPUT
           fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^senders/"; then
+            echo "senders_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "senders_changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -118,6 +124,17 @@ jobs:
           docker push ${AUTOMATIONS_IMAGE}:latest
           docker push ${AUTOMATIONS_IMAGE}:${SHA_TAG}
 
+      - name: Build and push Docker image (senders)
+        if: steps.changes.outputs.senders_changed == 'true'
+        run: |
+          set -e
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          SHA_TAG=${{ github.sha }}
+          SENDERS_IMAGE=ghcr.io/${REPO_LOWER}/senders
+          docker build --no-cache -t ${SENDERS_IMAGE}:latest -t ${SENDERS_IMAGE}:${SHA_TAG} senders
+          docker push ${SENDERS_IMAGE}:latest
+          docker push ${SENDERS_IMAGE}:${SHA_TAG}
+
       - name: Ensure remote directory exists
         uses: appleboy/ssh-action@v1.1.0
         with:
@@ -155,6 +172,7 @@ jobs:
             ${{ steps.changes.outputs.listeners_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/listeners:latest' || 'echo "Skipping listeners pull - no changes"' }}
             ${{ steps.changes.outputs.refreshers_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/refreshers:latest' || 'echo "Skipping refreshers pull - no changes"' }}
             ${{ steps.changes.outputs.automations_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/automations:latest' || 'echo "Skipping automations pull - no changes"' }}
+            ${{ steps.changes.outputs.senders_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/senders:latest' || 'echo "Skipping senders pull - no changes"' }}
             
             docker image prune -a -f --filter "until=24h" || true
             docker compose -f /home/deploy/corretto/docker-compose.yml down || true

@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# TODO configurare RABBITMQ
 RABBITMQ_URL = os.getenv("RABBITMQ_URL")
 
 async def get_connection():

@@ -31,7 +31,6 @@ class NodeNames:
     LANGUAGE_DETECTOR = "language_detector"
     AI_FILTER = "ai_filter"
     GUARDRAIL = "guardrail"
-    AI_FILTER_GUARDRAIL = "ai_filter_guardrail"  # Deprecated, kept for compatibility
     SUMMARIZER = "summarizer"
     CLASSIFIER = "classifier"
     ATTACHMENT_EXTRACTOR = "attachment_extractor"
@@ -41,6 +40,13 @@ class NodeNames:
     ROUTER = "router"
     SUBCATEGORY_ROUTER = "subcategory_router"
     READER = "reader"
+    SCHEDULER = "scheduler"
+    RESCHEDULER = "rescheduler"
+    CANCELLATION = "cancellation"
+    EXTRACTOR_COMPANY_INFO = "extractor_company_info"
+    WRITER = "writer"
+    REVIEWER = "reviewer"
+    SENDER = "sender"
     
     # Subcategory-specific nodes
     HANDLE_OFFER_PROMOTION = "handle_offer_promotion"

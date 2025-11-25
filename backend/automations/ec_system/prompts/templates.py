@@ -303,69 +303,6 @@ FUNDAMENTAL INSTRUCTIONS:
 Analyze only this single email for classification.
 """
 
-# DEPRECATED - COMBINED EMAIL CLASSIFICATION PROMPTS (kept for backward compatibility)
-EMAIL_CLASSIFICATION_PROMPT_ITA = """
-Sei un esperto classificatore di email che deve categorizzare le email in arrivo.
-
-Analizza attentamente la seguente email e classificala nella categoria più appropriata.
-
-OGGETTO: {subject}
-CORPO EMAIL FILTRATO: {filtered_body}
-
-CATEGORIE DISPONIBILI:
-1. PROMOTION: Email promozionali, offerte commerciali, sconti, marketing, newsletter pubblicitarie
-2. SOCIAL_NOTIFICATION: Notifiche da social media, LinkedIn, Facebook, Instagram, Twitter
-3. INFO_PROVIDED: Email che forniscono informazioni utili, aggiornamenti, report, documenti
-4. INFO_REQUESTED: Email che richiedono informazioni, documenti, chiarimenti, risposte
-5. CALENDAR_EVENT: Inviti a eventi, meeting, appuntamenti, riunioni, convegni
-6. TRANSACTIONAL: Mail automatiche riguardo a ricevute, fatture, conferme d'ordine, transazioni finanziarie
-7. OTHER: Tutto ciò che non rientra nelle categorie precedenti
-
-RIASSUNTO CONVERSAZIONE ESISTENTE (per context, NON usare per classificazione):
-{extended_summary}
-
-ISTRUZIONI:
-- Classifica UNICAMENTE basandoti sul corpo email filtrato e sull'oggetto
-- NON usare il riassunto della conversazione (l'extended_summary) per la classificazione
-- Assegna un punteggio di confidenza nella classificazione da 0.0 a 1.0 (precisione prima cifra decimale)
-- Scrivi un riassunto conciso della email corrente (max 100 parole)
-- Aggiorna l'extended_summary aggiungendo un riassunto esaustivo e dettagliato di questa email al contesto esistente
-
-Se l'extended_summary è vuoto (prima email del thread), crea un riassunto dettagliato di questa email.
-Se l'extended_summary esiste, aggiungi il riassunto dettagliato di questa email mantenendo intatto il contesto della conversazione.
-"""
-
-EMAIL_CLASSIFICATION_PROMPT_ENG = """
-You are an expert email classifier who must categorize incoming emails.
-
-Carefully analyze the following email and classify it into the most appropriate category.
-
-SUBJECT: {subject}
-FILTERED EMAIL BODY: {filtered_body}
-
-AVAILABLE CATEGORIES:
-1. PROMOTION: Promotional emails, commercial offers, discounts, marketing, advertising newsletters
-2. SOCIAL_NOTIFICATION: Notifications from social media, LinkedIn, Facebook, Instagram, Twitter
-3. INFO_PROVIDED: Emails providing useful information, updates, reports, documents
-4. INFO_REQUESTED: Emails requesting information, documents, clarifications, responses
-5. CALENDAR_EVENT: Event invitations, meetings, appointments, conferences
-6. TRANSACTIONAL: Automatic mails about receipts, invoices, order confirmations, financial transactions
-7. OTHER: Everything that doesn't fit in the previous categories
-
-EXISTING CONVERSATION SUMMARY (for context, DO NOT use for classification):
-{extended_summary}
-
-INSTRUCTIONS:
-- Classify ONLY based on the filtered email body and subject
-- DO NOT use the existing conversation history (extended_summary) for classification
-- Assign a confidence score in classification from 0.0 to 1.0 (precision to first decimal place)
-- Write a concise summary of the current email (max 100 words)
-- Update the extended_summary by adding this email's exaustive and detailed summary to the existing context
-
-If extended_summary is empty (first email in thread), create a exaustive and detailed summary of this email.
-If extended_summary exists, add this email's exaustive and detailed summary while maintaining conversation context.
-"""
-
 # ATTACHMENT SUMMARY PROMPTS
 ATTACHMENT_SUMMARY_PROMPT_ITA = """
 Sei un esperto nel riassumere contenuti di documenti allegati in modo discorsivo e comprensibile.
@@ -891,3 +828,537 @@ ATTACHMENTS:
 {summary_attachments}
 
 Respond in JSON format with keys "key_entities" and "needs_response"."""
+
+# REQUEST_APPOINTMENT READER PROMPTS
+READER_APPOINTMENT_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email per richieste di appuntamento.
+
+Analizza attentamente la seguente email con richiesta di appuntamento ed estrai tutte le informazioni necessarie.
+
+TIMESTAMP ATTUALE: {current_timestamp}
+
+CORPO EMAIL:
+{filtered_body}
+
+RIASSUNTO CONVERSAZIONE:
+{extended_summary}
+
+ESTRAI LE SEGUENTI INFORMAZIONI:
+
+1. **key_entities**: Dizionario JSON con le entità chiave:
+   - "dates": Date/orari menzionati
+   - "locations": Luoghi menzionati
+   - "people": Nomi di persone
+   - "organizations": Aziende/organizzazioni
+   - "requests": Richieste esplicite
+   - "actions": Azioni richieste
+   - "amounts": Importi monetari
+   - "documents": Documenti menzionati
+   - "other_info": Altre informazioni rilevanti
+
+2. **title_of_event**: Titolo dell'appuntamento nel formato "[AI] APPUNTAMENTO {sender_email}"
+   Esempio: "[AI] APPUNTAMENTO mario.rossi@example.com"
+
+3. **date**: Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss
+   - Se menzionato "domani", calcola rispetto al timestamp attuale
+   - Se menzionato "prossimo lunedì", "tra tre giorni", ecc., calcola rispetto al timestamp attuale
+   - Se non viene specificata data e orario, imposta a None
+   - Se specificato solo un giorno senza orario, imposta a None
+
+4. **duration**: Durata in minuti (default: 60 se non specificato)
+
+5. **attendees**: Array di email degli invitati
+   - Se non specificati, imposta a None
+   - Estrai eventuali email menzionate nel testo
+
+6. **place**: Luogo dell'evento
+   - Se non specificato, imposta a None
+   - Può essere un indirizzo fisico o "online", "Teams", "Zoom", ecc.
+
+7. **additional_notes**: Note aggiuntive sull'evento
+   - Informazioni rilevanti che non rientrano negli altri campi
+   - Se non ci sono note particolari, imposta a None
+
+MITTENTE EMAIL: {sender_email}
+
+Rispondi in formato JSON con tutte le chiavi richieste."""
+
+READER_APPOINTMENT_PROMPT_ENG = """You are an expert assistant in analyzing emails for appointment requests.
+
+Carefully analyze the following appointment request email and extract all necessary information.
+
+CURRENT TIMESTAMP: {current_timestamp}
+
+EMAIL BODY:
+{filtered_body}
+
+CONVERSATION SUMMARY:
+{extended_summary}
+
+EXTRACT THE FOLLOWING INFORMATION:
+
+1. **key_entities**: JSON dictionary with key entities:
+   - "dates": Dates/times mentioned
+   - "locations": Places mentioned
+   - "people": People's names
+   - "organizations": Companies/organizations
+   - "requests": Explicit requests
+   - "actions": Requested actions
+   - "amounts": Monetary amounts
+   - "documents": Documents mentioned
+   - "other_info": Other relevant information
+
+2. **title_of_event**: Appointment title in format "[AI] APPOINTMENT {sender_email}"
+   Example: "[AI] APPOINTMENT mario.rossi@example.com"
+
+3. **date**: Appointment date and time in format YYYY-MM-DDThh:mm:ss
+   - If mentioned "tomorrow", calculate relative to current timestamp
+   - If mentioned "next Monday", "in three days", etc., calculate relative to current timestamp
+   - If date AND time are NOT specified, set to None
+   - If only day is specified without time, set to None
+
+4. **duration**: Duration in minutes (default: 60 if not specified)
+
+5. **attendees**: Array of attendee emails
+   - If not specified, set to None
+   - Extract any emails mentioned in the text
+
+6. **place**: Event location
+   - If not specified, set to None
+   - Can be a physical address or "online", "Teams", "Zoom", etc.
+
+7. **additional_notes**: Additional event notes
+   - Relevant information that doesn't fit in other fields
+   - If no particular notes, set to None
+
+EMAIL SENDER: {sender_email}
+
+Respond in JSON format with all required keys."""
+
+# SCHEDULER PROMPTS FOR REQUEST_APPOINTMENT
+SCHEDULER_PROMPT_ITA = """Sei un assistente esperto nella gestione di appuntamenti.
+
+Analizza la conversazione e determina l'azione appropriata per gestire la richiesta di appuntamento.
+
+TIMESTAMP ATTUALE: {current_timestamp}
+
+RIASSUNTO MAIL CORRENTE:
+{mail_summary}
+
+RIASSUNTO CONVERSAZIONE:
+{extended_summary}
+
+PROPOSE_SLOTS: {propose_slots}
+
+ISTRUZIONI:
+
+1. Se PROPOSE_SLOTS è True:
+   - Il cliente ha richiesto un appuntamento SENZA specificare una data precisa
+   - Devi chiamare il tool "propose_new_slots" per proporre nuove date disponibili
+   - Analizza i riassunti per estrarre:
+     * favorite_day: giorno preferito dal mittente (formato YYYY-MM-DD), se menzionato
+     * not_available_dates: array di date precedentemente proposte ma rifiutate (formato ["YYYY-MM-DD", ...])
+   - Se non trovi favorite_day, passa None
+   - Se non trovi date rifiutate, passa array vuoto []
+
+2. Se PROPOSE_SLOTS è False:
+   - Il cliente ha fornito tutte le informazioni necessarie per prenotare
+   - Devi chiamare il tool "book_appointment" con i parametri forniti
+   - I parametri sono già disponibili nello stato del sistema
+
+3. Dopo la chiamata al tool:
+   - Se hai chiamato "book_appointment" e scheduled=True: imposta scheduled=True, event_code=<codice>, proposed_slots=None
+   - Se hai chiamato "book_appointment" e scheduled=False: imposta scheduled=False, event_code=None, proposed_slots=None
+   - Se hai chiamato "propose_new_slots" con successo: imposta scheduled=False, event_code=None, proposed_slots=<array>
+   - Gestisci il campo overlap in base alla risposta del tool book_appointment
+
+Rispondi sempre in formato JSON con i campi: scheduled, overlap, event_code, proposed_slots."""
+
+SCHEDULER_PROMPT_ENG = """You are an expert assistant in appointment management.
+
+Analyze the conversation and determine the appropriate action to handle the appointment request.
+
+CURRENT TIMESTAMP: {current_timestamp}
+
+CURRENT MAIL SUMMARY:
+{mail_summary}
+
+CONVERSATION SUMMARY:
+{extended_summary}
+
+PROPOSE_SLOTS: {propose_slots}
+
+INSTRUCTIONS:
+
+1. If PROPOSE_SLOTS is True:
+   - The client requested an appointment WITHOUT specifying a precise date
+   - You must call the "propose_new_slots" tool to propose new available dates
+   - Analyze the summaries to extract:
+     * favorite_day: preferred day from the sender (format YYYY-MM-DD), if mentioned
+     * not_available_dates: array of previously proposed but rejected dates (format ["YYYY-MM-DD", ...])
+   - If you don't find favorite_day, pass None
+   - If you don't find rejected dates, pass empty array []
+
+2. If PROPOSE_SLOTS is False:
+   - The client provided all necessary information to book
+   - You must call the "book_appointment" tool with the provided parameters
+   - The parameters are already available in the system state
+
+3. After the tool call:
+   - If you called "book_appointment" and scheduled=True: set scheduled=True, event_code=<code>, proposed_slots=None
+   - If you called "book_appointment" and scheduled=False: set scheduled=False, event_code=None, proposed_slots=None
+   - If you called "propose_new_slots" successfully: set scheduled=False, event_code=None, proposed_slots=<array>
+   - Handle the overlap field based on the book_appointment tool response
+
+Always respond in JSON format with fields: scheduled, overlap, event_code, proposed_slots."""
+
+# READER PROMPTS FOR REQUEST_APPOINTMENT_CHANGE
+READER_APPOINTMENT_CHANGE_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email per richieste di modifica appuntamenti.
+
+Analizza attentamente la seguente email di richiesta modifica appuntamento ed estrai tutte le informazioni necessarie.
+
+TIMESTAMP ATTUALE: {current_timestamp}
+
+CORPO EMAIL:
+{filtered_body}
+
+RIASSUNTO MAIL CORRENTE:
+{mail_summary}
+
+RIASSUNTO CONVERSAZIONE:
+{extended_summary}
+
+ESTRAI LE SEGUENTI INFORMAZIONI:
+
+1. **key_entities**: Dizionario JSON con le entità chiave:
+   - "dates": Date/orari menzionati
+   - "locations": Luoghi menzionati
+   - "people": Nomi di persone
+   - "organizations": Aziende/organizzazioni
+   - "requests": Richieste esplicite
+   - "actions": Azioni richieste
+   - "amounts": Importi monetari
+   - "documents": Documenti menzionati
+   - "other_info": Altre informazioni rilevanti
+
+2. **event_code**: Codice alfanumerico a 6 cifre dell'evento da modificare
+   - Cerca nel riassunto conversazione o nella mail corrente
+   - Formato: 6 caratteri alfanumerici (es. "A1B2C3", "123456")
+   - Se NON trovato, imposta a None
+
+3. **new_title_of_event**: Nuovo titolo appuntamento in formato "[AI] APPUNTAMENTO {sender_email}"
+   Esempio: "[AI] APPUNTAMENTO mario.rossi@example.com"
+
+4. **new_date**: Nuova data e ora appuntamento in formato YYYY-MM-DDThh:mm:ss
+   - Se menzionato "domani", calcola relativo al timestamp attuale
+   - Se menzionato "prossimo lunedì", "tra tre giorni", ecc., calcola relativo al timestamp attuale
+   - Se NON sono specificati sia data CHE orario, imposta a None
+   - Se solo il giorno è specificato senza orario, imposta a None
+
+5. **new_duration**: Nuova durata in minuti
+   - Se NON specificata, imposta a None
+
+6. **new_attendees**: Nuovi invitati da aggiungere (array di email)
+   - Se NON specificati, imposta a None
+   - Estrai eventuali email menzionate nel testo
+
+7. **new_place**: Nuovo luogo evento
+   - Se NON specificato, imposta a None
+   - Può essere un indirizzo fisico o "online", "Teams", "Zoom", ecc.
+
+8. **additional_notes**: Note aggiuntive evento
+   - Informazioni rilevanti che non rientrano negli altri campi
+   - Se nessuna nota particolare, imposta a None
+
+EMAIL MITTENTE: {sender_email}
+
+Rispondi in formato JSON con tutte le chiavi richieste."""
+
+READER_APPOINTMENT_CHANGE_PROMPT_ENG = """You are an expert assistant in analyzing emails for appointment change requests.
+
+Carefully analyze the following appointment change request email and extract all necessary information.
+
+CURRENT TIMESTAMP: {current_timestamp}
+
+EMAIL BODY:
+{filtered_body}
+
+CURRENT MAIL SUMMARY:
+{mail_summary}
+
+CONVERSATION SUMMARY:
+{extended_summary}
+
+EXTRACT THE FOLLOWING INFORMATION:
+
+1. **key_entities**: JSON dictionary with key entities:
+   - "dates": Dates/times mentioned
+   - "locations": Places mentioned
+   - "people": People's names
+   - "organizations": Companies/organizations
+   - "requests": Explicit requests
+   - "actions": Requested actions
+   - "amounts": Monetary amounts
+   - "documents": Documents mentioned
+   - "other_info": Other relevant information
+
+2. **event_code**: 6-character alphanumeric code of the event to modify
+   - Search in conversation summary or current mail
+   - Format: 6 alphanumeric characters (e.g., "A1B2C3", "123456")
+   - If NOT found, set to None
+
+3. **new_title_of_event**: New appointment title in format "[AI] APPOINTMENT {sender_email}"
+   Example: "[AI] APPOINTMENT mario.rossi@example.com"
+
+4. **new_date**: New appointment date and time in format YYYY-MM-DDThh:mm:ss
+   - If mentioned "tomorrow", calculate relative to current timestamp
+   - If mentioned "next Monday", "in three days", etc., calculate relative to current timestamp
+   - If date AND time are NOT both specified, set to None
+   - If only day is specified without time, set to None
+
+5. **new_duration**: New duration in minutes
+   - If NOT specified, set to None
+
+6. **new_attendees**: New attendees to add (array of emails)
+   - If NOT specified, set to None
+   - Extract any emails mentioned in the text
+
+7. **new_place**: New event location
+   - If NOT specified, set to None
+   - Can be a physical address or "online", "Teams", "Zoom", etc.
+
+8. **additional_notes**: Additional event notes
+   - Relevant information that doesn't fit in other fields
+   - If no particular notes, set to None
+
+EMAIL SENDER: {sender_email}
+
+Respond in JSON format with all required keys."""
+# RESCHEDULER PROMPTS FOR REQUEST_APPOINTMENT_CHANGE
+RESCHEDULER_PROMPT_ITA = """Sei un assistente esperto nella gestione di modifiche appuntamenti.
+
+Analizza la conversazione e determina l'azione appropriata per gestire la richiesta di modifica appuntamento.
+
+TIMESTAMP ATTUALE: {current_timestamp}
+
+RIASSUNTO MAIL CORRENTE:
+{mail_summary}
+
+RIASSUNTO ESTESO:
+{extended_summary}
+
+EVENT_CODE: {event_code}
+
+PROPOSE_SLOTS: {propose_slots}
+
+ISTRUZIONI:
+
+1. Se PROPOSE_SLOTS è True:
+   - Il cliente vuole riprogrammare l'appuntamento ma SENZA specificare una data precisa
+   - Devi chiamare il tool "propose_new_slots" per proporre nuove date disponibili
+   - Analizza i riassunti per estrarre:
+     * favorite_day: giorno preferito dal mittente (formato YYYY-MM-DD), se menzionato
+     * not_available_dates: array di date precedentemente proposte ma rifiutate (formato ["YYYY-MM-DD", ...])
+   - Se non trovi favorite_day, passa None
+   - Se non trovi date rifiutate, passa array vuoto []
+
+2. Se PROPOSE_SLOTS è False:
+   - Il cliente ha fornito tutte le informazioni necessarie per riprogrammare
+   - Devi chiamare il tool "reschedule_appointment" con i parametri forniti
+   - Usa l'event_code fornito e i nuovi parametri già estratti dal reader
+
+3. Dopo la chiamata al tool:
+   - Se hai chiamato "reschedule_appointment" e scheduled=True: imposta scheduled=True, event_code=<codice>, proposed_slots=None
+   - Se hai chiamato "reschedule_appointment" e scheduled=False: imposta scheduled=False, event_code=<codice>, proposed_slots=None
+   - Se hai chiamato "propose_new_slots" con successo: imposta scheduled=False, event_code=<codice>, proposed_slots=<array>
+   - Gestisci il campo overlap in base alla risposta del tool reschedule_appointment
+
+Rispondi sempre in formato JSON con i campi: scheduled, overlap, event_code, proposed_slots."""
+
+RESCHEDULER_PROMPT_ENG = """You are an expert assistant in managing appointment changes.
+
+Analyze the conversation and determine the appropriate action to handle the appointment change request.
+
+CURRENT TIMESTAMP: {current_timestamp}
+
+CURRENT MAIL SUMMARY:
+{mail_summary}
+
+EXTENDED SUMMARY:
+{extended_summary}
+
+EVENT_CODE: {event_code}
+
+PROPOSE_SLOTS: {propose_slots}
+
+INSTRUCTIONS:
+
+1. If PROPOSE_SLOTS is True:
+   - The client wants to reschedule the appointment WITHOUT specifying a precise date
+   - You must call the "propose_new_slots" tool to propose new available dates
+   - Analyze the summaries to extract:
+     * favorite_day: preferred day from the sender (format YYYY-MM-DD), if mentioned
+     * not_available_dates: array of previously proposed but rejected dates (format ["YYYY-MM-DD", ...])
+   - If you don't find favorite_day, pass None
+   - If you don't find rejected dates, pass empty array []
+
+2. If PROPOSE_SLOTS is False:
+   - The client provided all necessary information to reschedule
+   - You must call the "reschedule_appointment" tool with the provided parameters
+   - Use the provided event_code and the new parameters already extracted by the reader
+
+3. After the tool call:
+   - If you called "reschedule_appointment" and scheduled=True: set scheduled=True, event_code=<code>, proposed_slots=None
+   - If you called "reschedule_appointment" and scheduled=False: set scheduled=False, event_code=<code>, proposed_slots=None
+   - If you called "propose_new_slots" successfully: set scheduled=False, event_code=<code>, proposed_slots=<array>
+   - Handle the overlap field based on the reschedule_appointment tool response
+
+Always respond in JSON format with fields: scheduled, overlap, event_code, proposed_slots."""
+
+# READER PROMPTS FOR CANCEL_APPOINTMENT
+READER_CANCELLATION_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email per richieste di cancellazione appuntamenti.
+
+Analizza attentamente la seguente email di richiesta cancellazione appuntamento ed estrai tutte le informazioni necessarie.
+
+TIMESTAMP ATTUALE: {current_timestamp}
+
+CORPO EMAIL:
+{filtered_body}
+
+RIASSUNTO MAIL CORRENTE:
+{mail_summary}
+
+RIASSUNTO CONVERSAZIONE:
+{extended_summary}
+
+ESTRAI LE SEGUENTI INFORMAZIONI:
+
+1. **key_entities**: Dizionario JSON con le entità chiave:
+   - "dates": Date/orari menzionati
+   - "locations": Luoghi menzionati
+   - "people": Nomi di persone
+   - "organizations": Aziende/organizzazioni
+   - "requests": Richieste esplicite
+   - "actions": Azioni richieste
+   - "amounts": Importi monetari
+   - "documents": Documenti menzionati
+   - "other_info": Altre informazioni rilevanti
+
+2. **event_code**: Codice alfanumerico a 6 cifre dell'evento da cancellare
+   - Cerca nel riassunto conversazione o nella mail corrente
+   - Formato: 6 caratteri alfanumerici (es. "A1B2C3", "123456")
+   - Se NON trovato, imposta a None
+
+EMAIL MITTENTE: {sender_email}
+
+Rispondi in formato JSON con tutte le chiavi richieste."""
+
+READER_CANCELLATION_PROMPT_ENG = """You are an expert assistant in analyzing emails for appointment cancellation requests.
+
+Carefully analyze the following appointment cancellation request email and extract all necessary information.
+
+CURRENT TIMESTAMP: {current_timestamp}
+
+EMAIL BODY:
+{filtered_body}
+
+CURRENT MAIL SUMMARY:
+{mail_summary}
+
+CONVERSATION SUMMARY:
+{extended_summary}
+
+EXTRACT THE FOLLOWING INFORMATION:
+
+1. **key_entities**: JSON dictionary with key entities:
+   - "dates": Dates/times mentioned
+   - "locations": Places mentioned
+   - "people": People's names
+   - "organizations": Companies/organizations
+   - "requests": Explicit requests
+   - "actions": Requested actions
+   - "amounts": Monetary amounts
+   - "documents": Documents mentioned
+   - "other_info": Other relevant information
+
+2. **event_code**: 6-character alphanumeric code of the event to cancel
+   - Search in conversation summary or current mail
+   - Format: 6 alphanumeric characters (e.g., "A1B2C3", "123456")
+   - If NOT found, set to None
+
+EMAIL SENDER: {sender_email}
+
+Respond in JSON format with all required keys."""
+
+
+# COMPANY INFORMATION EXTRACTOR PROMPTS
+EXTRACTOR_COMPANY_INFO_PROMPT_ITA = """
+Sei un esperto nell'estrazione di informazioni aziendali rilevanti per rispondere a email.
+
+Analizza attentamente il contesto della email e le informazioni aziendali disponibili, quindi estrai SOLO le informazioni che sono rilevanti per rispondere alla richiesta specifica dell'email.
+
+CONTESTO EMAIL:
+- RIASSUNTO CONVERSAZIONE: {extended_summary}
+- RIASSUNTO EMAIL CORRENTE: {mail_summary}
+- ALLEGATI: {summary_attachments}
+- ENTITÀ CHIAVE ESTRATTE: {key_entities}
+
+INFORMAZIONI AZIENDALI DISPONIBILI:
+{company_information}
+
+ISTRUZIONI CRITICHE:
+1. Analizza attentamente cosa viene chiesto nell'email
+2. Identifica SOLO le sezioni delle informazioni aziendali che sono necessarie per rispondere
+3. NON fare inferenze o aggiunte - estrai SOLO testo esistente dalle informazioni aziendali
+4. NON includere informazioni non rilevanti alla richiesta
+5. Se nessuna informazione aziendale è pertinente, restituisci un dizionario vuoto
+6. Organizza le informazioni estratte in un dizionario strutturato per argomento
+
+FORMATO OUTPUT:
+Restituisci un dizionario dove:
+- Chiavi: nomi degli argomenti rilevanti (es. "orari_apertura", "servizi_offerti", "contatti")
+- Valori: testo esatto estratto dalle informazioni aziendali
+
+Esempio:
+{
+    "orari_apertura": "Lunedì-Venerdì: 9:00-18:00, Sabato: 9:00-13:00",
+    "contatti": "Email: info@azienda.it, Tel: +39 123456789"
+}
+
+Estrai solo informazioni pertinenti e necessarie per rispondere alla richiesta.
+"""
+
+EXTRACTOR_COMPANY_INFO_PROMPT_ENG = """
+You are an expert in extracting relevant company information to respond to emails.
+
+Carefully analyze the email context and available company information, then extract ONLY the information that is relevant to answer the specific email request.
+
+EMAIL CONTEXT:
+- CONVERSATION SUMMARY: {extended_summary}
+- CURRENT EMAIL SUMMARY: {mail_summary}
+- ATTACHMENTS: {summary_attachments}
+- EXTRACTED KEY ENTITIES: {key_entities}
+
+AVAILABLE COMPANY INFORMATION:
+{company_information}
+
+CRITICAL INSTRUCTIONS:
+1. Carefully analyze what is being asked in the email
+2. Identify ONLY the sections of company information that are necessary to respond
+3. DO NOT make inferences or additions - extract ONLY existing text from company information
+4. DO NOT include information not relevant to the request
+5. If no company information is pertinent, return an empty dictionary
+6. Organize extracted information in a structured dictionary by topic
+
+OUTPUT FORMAT:
+Return a dictionary where:
+- Keys: names of relevant topics (e.g., "opening_hours", "services_offered", "contacts")
+- Values: exact text extracted from company information
+
+Example:
+{
+    "opening_hours": "Monday-Friday: 9:00-18:00, Saturday: 9:00-13:00",
+    "contacts": "Email: info@company.com, Phone: +39 123456789"
+}
+
+Extract only pertinent and necessary information to answer the request.
+"""
