@@ -2,10 +2,6 @@ import logging
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, status
 
-from ..models import NotificationRequest, NotificationResponse
-from ..db_client import get_user_email_from_box_email
-from ..smtp_client import get_smtp_client
-from ..email_templates import get_email_template
 from ..controllers.send_email_controller import SendEmailController
 
 logger = logging.getLogger(__name__)
