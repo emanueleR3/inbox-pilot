@@ -577,6 +577,36 @@ def update_thread(thread_id: str, thread_data: Dict) -> bool:
         return False
 
 
+def update_ai_generated_email_outcome(thread_id: str, outcome: str) -> bool:
+    """
+    Aggiorna l'outcome di un'email AI generata nella tabella ai_generated_emails.
+    
+    Args:
+        thread_id (str): Thread ID dell'email da aggiornare
+        outcome (str): Nuovo outcome (es. FAILED_TO_SEND, SENT, etc.)
+        
+    Returns:
+        bool: True se aggiornamento riuscito, False altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("ai_generated_emails").update({
+            "outcome": outcome
+        }).eq("thread_id", thread_id).execute()
+        
+        if response.data:
+            print(f"✅ [DB_CLIENT] AI generated email outcome updated to '{outcome}' for thread_id: {thread_id}")
+            return True
+        else:
+            print(f"❌ [DB_CLIENT] Failed to update AI generated email outcome for thread_id: {thread_id}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error updating AI generated email outcome: {e}")
+        return False
+
+
 def update_scheduled_event_provider_id(event_code: str, new_provider_event_id: str) -> bool:
     """
     Aggiorna il provider_event_id di un evento nella tabella scheduled_events.

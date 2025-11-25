@@ -70,6 +70,11 @@ def get_base_template(content: str, notification_type: str) -> str:
             "primary": "#DC2626",  # Red
             "secondary": "#FEE2E2",
             "accent": "#991B1B"
+        },
+        "EMAIL_NOT_SENT": {
+            "primary": "#EF4444",  # Red
+            "secondary": "#FEE2E2",
+            "accent": "#B91C1C"
         }
     }
     
@@ -1087,6 +1092,100 @@ def create_event_deletion_failed_email(
     
     return get_base_template(content, "EVENT_DELETION_FAILED")
 
+
+def create_email_not_sent_email(
+    sender_email: str,
+    subject: str,
+    body: str,
+    timestamp: str,
+    summary_attachment: Optional[str] = None
+) -> str:
+    """Create HTML email for email not sent notifications."""
+    
+    attachment_html = ""
+    if summary_attachment:
+        attachment_html = f"""
+        <div style="margin-top: 20px; padding: 15px; background-color: #FEE2E2; border-left: 4px solid #EF4444; border-radius: 6px;">
+            <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 600; color: #B91C1C;">
+                📎 Dettagli
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #7f1d1d;">
+                {summary_attachment}
+            </p>
+        </div>
+        """
+    
+    content = f"""
+    <div style="background-color: #FEE2E2; border-left: 4px solid #EF4444; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+        <p style="margin: 0; font-size: 16px; font-weight: 700; color: #B91C1C;">
+            📧 Invio Email Fallito
+        </p>
+    </div>
+    
+    <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+        Il sistema ha tentato di <strong>inviare un'email di risposta automatica</strong> ma l'operazione non è andata a buon fine. 
+        È necessaria la tua revisione manuale per inviare la risposta.
+    </p>
+    
+    <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DESTINATARIO PREVISTO</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{sender_email}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">OGGETTO</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827; font-weight: 600;">{subject}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DATA TENTATIVO</p>
+                </td>
+                <td style="padding: 8px 0; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{timestamp}</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+            Anteprima Risposta Non Inviata
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.8; white-space: pre-wrap;">
+            {body[:500]}{'...' if len(body) > 500 else ''}
+        </p>
+    </div>
+    
+    {attachment_html}
+    
+    <div style="background-color: #FEE2E2; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #B91C1C;">
+            💡 Azione Richiesta
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #7f1d1d; line-height: 1.6;">
+            Accedi alla tua casella email per inviare manualmente la risposta al destinatario o verificare eventuali problemi di configurazione SMTP.
+        </p>
+    </div>
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 13px; color: #6b7280; text-align: center;">
+            💡 <em>Verifica la configurazione email e invia manualmente la risposta</em>
+        </p>
+    </div>
+    """
+    
+    return get_base_template(content, "EMAIL_NOT_SENT")
+
+
 def get_email_template(
     notification_type: str,
     sender_email: str,
@@ -1133,6 +1232,8 @@ def get_email_template(
         return create_calendar_service_not_found_email(sender_email, subject, body, timestamp, summary_attachment)
     elif notification_type == "EVENT_DELETION_FAILED":
         return create_event_deletion_failed_email(sender_email, subject, body, timestamp, summary_attachment)
+    elif notification_type == "EMAIL_NOT_SENT":
+        return create_email_not_sent_email(sender_email, subject, body, timestamp, summary_attachment)
     else:
         # Fallback to low confidence template
         return create_low_confidence_email(sender_email, subject, body, timestamp, summary_attachment)

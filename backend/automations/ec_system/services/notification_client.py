@@ -27,6 +27,7 @@ class NotificationType:
     EVENT_CODE_NOT_FOUND = "EVENT_CODE_NOT_FOUND"
     CALENDAR_SERVICE_NOT_FOUND = "CALENDAR_SERVICE_NOT_FOUND"
     EVENT_DELETION_FAILED = "EVENT_DELETION_FAILED"
+    EMAIL_NOT_SENT = "EMAIL_NOT_SENT"
 
 
 def send_notification(
@@ -424,6 +425,36 @@ def send_event_deletion_failed_notification(
     """
     return send_notification(
         notification_type=NotificationType.EVENT_DELETION_FAILED,
+        sender_email=sender_email,
+        box_email=box_email,
+        subject=subject,
+        body=body,
+        summary_attachment=summary_attachment
+    )
+
+
+def send_email_not_sent_notification(
+    sender_email: str,
+    box_email: str,
+    subject: str,
+    body: str,
+    summary_attachment: Optional[str] = None
+) -> bool:
+    """
+    Send a notification when an email could not be sent.
+    
+    Args:
+        sender_email: Email address of the sender
+        box_email: Email address of the mailbox
+        subject: Email subject
+        body: Email body content
+        summary_attachment: Summary of attachments if present
+        
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    return send_notification(
+        notification_type=NotificationType.EMAIL_NOT_SENT,
         sender_email=sender_email,
         box_email=box_email,
         subject=subject,
