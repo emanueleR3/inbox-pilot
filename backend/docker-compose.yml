@@ -18,12 +18,12 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/app/rabbitmq/rabbitmq.conf
       - ./rabbitmq/definitions.json:/app/rabbitmq/definitions.json
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+    #healthcheck:
+    #  test: ["CMD", "rabbitmq-diagnostics", "ping"]
+    #  interval: 10s
+    #  timeout: 5s
+    #  retries: 10
+    #  start_period: 30s
     networks:
       - broker_net
 
