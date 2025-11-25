@@ -354,6 +354,7 @@ def classifier_node(state):
             
         else:
             # Update state to indicate low confidence classification
+            state["category"] = classification_response.category
             state["low_confidence_classification"] = True
             return state
         

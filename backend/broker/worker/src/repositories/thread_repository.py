@@ -35,7 +35,8 @@ class ThreadRepository:
         subcategory: str = None,
         human_response: bool = None,
         last_sender_email: str = None,
-        box_email: str = None
+        box_email: str = None,
+        status: str = "TO_PROCESS"
     ) -> dict:
         """
         Creates a new thread in the database.
@@ -85,7 +86,8 @@ class ThreadRepository:
                 "subcategory": subcategory,  # Can be None (default null in DB)
                 "human_response": human_response if human_response is not None else False,
                 "last_sender_email": last_sender_email,
-                "box_email": box_email
+                "box_email": box_email,
+                "status": status  # TODO verificare i vari casi
             }
             
             # Remove keys with None values to allow database defaults
@@ -521,7 +523,8 @@ class ThreadRepository:
                 subcategory=None,  # Default null for cross-mailbox threads
                 human_response=False,
                 last_sender_email=sender_email,
-                box_email=box_email
+                box_email=box_email,
+                status="TO_PROCESS" # TODO gestire i vari casi
             )
             
             if new_thread and new_thread.get("thread_id"):
