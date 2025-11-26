@@ -626,7 +626,7 @@ def create_email_classification_graph():
         If loop conditions are not met, continue to sender.
         """
         # TODO momentaneo
-        print(f"📝 [REVIEWER] Checking review results: {state.get("written_email_body")}")
+        print(f"📝 [REVIEWER] Checking review results: {state.get('written_email_body')}")
         return END
         # ===============
 
