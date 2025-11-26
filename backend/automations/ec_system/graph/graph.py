@@ -725,7 +725,7 @@ def create_email_classification_graph():
             return END
         return NodeNames.WRITER
 
-    graph.add_conditional_edge(
+    graph.add_conditional_edges(
         NodeNames.EXTRACTOR_COMPANY_INFO,
         should_continue_after_extractor_company_info,
         {
