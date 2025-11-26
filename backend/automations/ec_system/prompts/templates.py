@@ -1363,384 +1363,269 @@ Example:
 Extract only pertinent and necessary information to answer the request.
 """
 
-# WRITER PROMPTS - EMAIL RESPONSE GENERATION
-# REQUEST_APPOINTMENT WRITER PROMPTS
-WRITER_REQUEST_APPOINTMENT_PROMPT_ITA = """
-Sei un assistente esperto nella scrittura di risposte email professionali per richieste di appuntamento.
+# ============================================
+# WRITER PROMPTS
+# ============================================
 
-Scrivi una risposta email professionale basandoti sul contesto fornito e sulle informazioni aziendali.
+# WRITER PROMPT - REQUEST_APPOINTMENT SUBCATEGORY
+WRITER_REQUEST_APPOINTMENT_PROMPT_ITA = """
+Sei un assistente AI professionale che scrive risposte email per conto di un'azienda.
 
 CONTESTO EMAIL:
 - RIASSUNTO CONVERSAZIONE: {extended_summary}
 - RIASSUNTO EMAIL CORRENTE: {mail_summary}
-- ALLEGATI: {attachment_summary}
 - INFORMAZIONI AZIENDALI RILEVANTI: {chunked_company_info}
+- RIASSUNTO ALLEGATI: {attachment_summary}
 
-STATO APPUNTAMENTO:
-- APPUNTAMENTO GIÀ PRENOTATO: {scheduled}
-{event_info}
+STATO SCHEDULAZIONE APPUNTAMENTO:
+- APPUNTAMENTO SCHEDULATO: {scheduled}
+- CODICE EVENTO: {event_code}
+- SLOT PROPOSTI: {proposed_slots}
 
-LINEE GUIDA DA SEGUIRE:
-{guidelines}
+{guidelines_section}
 
-ISTRUZIONI:
-1. Se SCHEDULED è True:
-   - Conferma che l'appuntamento è stato prenotato con successo
-   - Fornisci i dettagli dell'appuntamento (data, ora, luogo se disponibili)
-   - Includi l'event code se disponibile
-   
-2. Se SCHEDULED è False:
-   - Se ci sono slot proposti: presenta le date disponibili in modo chiaro
-   - Se non ci sono slot: spiega gentilmente la situazione e proponi alternative
-   
-3. Gestisci eventuali altre richieste presenti nell'email utilizzando le informazioni aziendali
+ISTRUZIONI CRITICHE:
+1. Scrivi una risposta professionale e cortese basandoti sulle informazioni aziendali fornite
+2. SE l'appuntamento è stato schedulato (scheduled=True):
+   - Conferma l'appuntamento con entusiasmo
+   - Includi il codice evento per riferimento futuro
+   - Specifica che per modifiche o cancellazioni è necessario fornire il codice evento
+3. SE l'appuntamento NON è stato schedulato (scheduled=False) ma ci sono slot proposti:
+   - Proponi cortesemente le date disponibili
+   - Chiedi al cliente di indicare la preferenza
+4. SE ci sono altre richieste nell'email oltre all'appuntamento, rispondi anche a quelle
+5. Usa un tono professionale ma cordiale
+6. Non inventare informazioni non presenti nel contesto
 
-4. Applica le linee guida fornite (formato "parte da correggere : correzione")
-
-5. Mantieni un tono professionale, cordiale e chiaro
-
-6. Basa la risposta ESCLUSIVAMENTE sulle informazioni aziendali fornite, non inventare dettagli
-
-Scrivi SOLO il corpo della risposta email, senza oggetto o saluti iniziali.
+Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
 """
 
 WRITER_REQUEST_APPOINTMENT_PROMPT_ENG = """
-You are an expert assistant in writing professional email responses for appointment requests.
-
-Write a professional email response based on the provided context and company information.
+You are a professional AI assistant writing email responses on behalf of a company.
 
 EMAIL CONTEXT:
 - CONVERSATION SUMMARY: {extended_summary}
 - CURRENT EMAIL SUMMARY: {mail_summary}
-- ATTACHMENTS: {attachment_summary}
 - RELEVANT COMPANY INFORMATION: {chunked_company_info}
+- ATTACHMENTS SUMMARY: {attachment_summary}
 
-APPOINTMENT STATUS:
-- APPOINTMENT ALREADY BOOKED: {scheduled}
-{event_info}
+APPOINTMENT SCHEDULING STATUS:
+- APPOINTMENT SCHEDULED: {scheduled}
+- EVENT CODE: {event_code}
+- PROPOSED SLOTS: {proposed_slots}
 
-GUIDELINES TO FOLLOW:
-{guidelines}
+{guidelines_section}
 
-INSTRUCTIONS:
-1. If SCHEDULED is True:
-   - Confirm that the appointment has been successfully booked
-   - Provide appointment details (date, time, location if available)
-   - Include the event code if available
-   
-2. If SCHEDULED is False:
-   - If there are proposed slots: present available dates clearly
-   - If there are no slots: politely explain the situation and propose alternatives
-   
-3. Handle any other requests present in the email using company information
+CRITICAL INSTRUCTIONS:
+1. Write a professional and courteous response based on the provided company information
+2. IF the appointment was scheduled (scheduled=True):
+   - Confirm the appointment with enthusiasm
+   - Include the event code for future reference
+   - Specify that for changes or cancellations the event code is required
+3. IF the appointment was NOT scheduled (scheduled=False) but there are proposed slots:
+   - Kindly propose the available dates
+   - Ask the client to indicate their preference
+4. IF there are other requests in the email besides the appointment, respond to those as well
+5. Use a professional but friendly tone
+6. Do not invent information not present in the context
 
-4. Apply the provided guidelines (format "part to correct : correction")
-
-5. Maintain a professional, friendly, and clear tone
-
-6. Base the response EXCLUSIVELY on the provided company information, do not invent details
-
-Write ONLY the email response body, without subject or initial greetings.
+Write ONLY the email response body, without subject or signature.
 """
 
-# REQUEST_APPOINTMENT_CHANGE WRITER PROMPTS
+# WRITER PROMPT - REQUEST_APPOINTMENT_CHANGE SUBCATEGORY
 WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ITA = """
-Sei un assistente esperto nella scrittura di risposte email professionali per richieste di modifica appuntamento.
-
-Scrivi una risposta email professionale basandoti sul contesto fornito e sullo stato della richiesta.
+Sei un assistente AI professionale che scrive risposte email per conto di un'azienda.
 
 CONTESTO EMAIL:
 - RIASSUNTO CONVERSAZIONE: {extended_summary}
 - RIASSUNTO EMAIL CORRENTE: {mail_summary}
-- ALLEGATI: {attachment_summary}
 - INFORMAZIONI AZIENDALI RILEVANTI: {chunked_company_info}
+- RIASSUNTO ALLEGATI: {attachment_summary}
 
-STATO RICHIESTA:
-- STATUS: {status}
-- EVENT CODE: {change_event_code}
-- APPUNTAMENTO RIPROGRAMMATO: {scheduled}
-{event_info}
+STATO MODIFICA APPUNTAMENTO:
+- CODICE EVENTO RICHIESTA: {change_event_code}
+- STATO OPERAZIONE: {status}
+- APPUNTAMENTO RISCHEDULATO: {scheduled}
+- NUOVO CODICE EVENTO: {event_code}
+- SLOT PROPOSTI: {proposed_slots}
 
-LINEE GUIDA DA SEGUIRE:
-{guidelines}
+{guidelines_section}
 
-ISTRUZIONI:
-1. Se STATUS è "EVENT_CODE_INVALID":
-   - Spiega gentilmente che serve un codice evento valido
-   - Fornisci un esempio di codice a 6 cifre (es. "A1B2C3" o "123456")
-   - Invita a fornire il codice ricevuto nella conferma dell'appuntamento originale
-   
-2. Se il codice evento è valido:
-   - Se SCHEDULED è True: conferma la riprogrammazione con i nuovi dettagli
-   - Se SCHEDULED è False e ci sono slot proposti: presenta le date disponibili
-   - Se SCHEDULED è False senza slot: spiega la situazione e proponi alternative
+ISTRUZIONI CRITICHE:
+1. SE lo stato è "EVENT_CODE_INVALID":
+   - Spiega cortesemente che il codice evento fornito non è valido
+   - Fornisci un esempio di codice evento valido (6 cifre numeriche, es. "123456")
+   - Chiedi di verificare e reinviare il codice corretto
+2. SE lo stato è "EVENT_RESCHEDULED" (scheduled=True):
+   - Conferma che l'appuntamento è stato riprogrammato con successo
+   - Includi il nuovo codice evento se diverso
+   - Fornisci i dettagli del nuovo appuntamento
+3. SE l'appuntamento NON è stato rischedulato ma ci sono slot proposti:
+   - Proponi cortesemente le nuove date disponibili
+   - Chiedi al cliente di indicare la preferenza
+4. SE ci sono altre richieste nell'email, rispondi anche a quelle
+5. Basa la risposta sulle informazioni aziendali fornite
+6. Usa un tono professionale ma cordiale
 
-3. Gestisci eventuali altre richieste presenti nell'email
-
-4. Applica le linee guida fornite (formato "parte da correggere : correzione")
-
-5. Mantieni un tono professionale e cordiale
-
-6. Basa la risposta ESCLUSIVAMENTE sulle informazioni fornite
-
-Scrivi SOLO il corpo della risposta email, senza oggetto o saluti iniziali.
+Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
 """
 
 WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ENG = """
-You are an expert assistant in writing professional email responses for appointment change requests.
-
-Write a professional email response based on the provided context and request status.
+You are a professional AI assistant writing email responses on behalf of a company.
 
 EMAIL CONTEXT:
 - CONVERSATION SUMMARY: {extended_summary}
 - CURRENT EMAIL SUMMARY: {mail_summary}
-- ATTACHMENTS: {attachment_summary}
 - RELEVANT COMPANY INFORMATION: {chunked_company_info}
+- ATTACHMENTS SUMMARY: {attachment_summary}
 
-REQUEST STATUS:
-- STATUS: {status}
-- EVENT CODE: {change_event_code}
+APPOINTMENT CHANGE STATUS:
+- REQUESTED EVENT CODE: {change_event_code}
+- OPERATION STATUS: {status}
 - APPOINTMENT RESCHEDULED: {scheduled}
-{event_info}
+- NEW EVENT CODE: {event_code}
+- PROPOSED SLOTS: {proposed_slots}
 
-GUIDELINES TO FOLLOW:
-{guidelines}
+{guidelines_section}
 
-INSTRUCTIONS:
-1. If STATUS is "EVENT_CODE_INVALID":
-   - Politely explain that a valid event code is needed
-   - Provide an example of a 6-digit code (e.g., "A1B2C3" or "123456")
-   - Ask them to provide the code received in the original appointment confirmation
-   
-2. If the event code is valid:
-   - If SCHEDULED is True: confirm the rescheduling with new details
-   - If SCHEDULED is False and there are proposed slots: present available dates
-   - If SCHEDULED is False without slots: explain the situation and propose alternatives
+CRITICAL INSTRUCTIONS:
+1. IF status is "EVENT_CODE_INVALID":
+   - Politely explain that the provided event code is not valid
+   - Provide an example of a valid event code (6 numeric digits, e.g., "123456")
+   - Ask to verify and resend the correct code
+2. IF status is "EVENT_RESCHEDULED" (scheduled=True):
+   - Confirm that the appointment has been successfully rescheduled
+   - Include the new event code if different
+   - Provide the details of the new appointment
+3. IF the appointment was NOT rescheduled but there are proposed slots:
+   - Kindly propose the new available dates
+   - Ask the client to indicate their preference
+4. IF there are other requests in the email, respond to those as well
+5. Base the response on the provided company information
+6. Use a professional but friendly tone
 
-3. Handle any other requests present in the email
-
-4. Apply the provided guidelines (format "part to correct : correction")
-
-5. Maintain a professional and friendly tone
-
-6. Base the response EXCLUSIVELY on the provided information
-
-Write ONLY the email response body, without subject or initial greetings.
+Write ONLY the email response body, without subject or signature.
 """
 
-# CANCEL_APPOINTMENT WRITER PROMPTS
+# WRITER PROMPT - CANCEL_APPOINTMENT SUBCATEGORY
 WRITER_CANCEL_APPOINTMENT_PROMPT_ITA = """
-Sei un assistente esperto nella scrittura di risposte email professionali per cancellazioni di appuntamento.
-
-Scrivi una risposta email professionale basandoti sul contesto fornito e sullo stato della richiesta.
+Sei un assistente AI professionale che scrive risposte email per conto di un'azienda.
 
 CONTESTO EMAIL:
 - RIASSUNTO CONVERSAZIONE: {extended_summary}
 - RIASSUNTO EMAIL CORRENTE: {mail_summary}
-- ALLEGATI: {attachment_summary}
 - INFORMAZIONI AZIENDALI RILEVANTI: {chunked_company_info}
+- RIASSUNTO ALLEGATI: {attachment_summary}
 
-STATO RICHIESTA:
-- STATUS: {status}
-- EVENT CODE: {cancellation_event_code}
+STATO CANCELLAZIONE APPUNTAMENTO:
+- CODICE EVENTO RICHIESTA: {cancellation_event_code}
+- STATO OPERAZIONE: {status}
 
-LINEE GUIDA DA SEGUIRE:
-{guidelines}
+{guidelines_section}
 
-ISTRUZIONI:
-1. Se STATUS è "EVENT_CODE_INVALID":
-   - Spiega gentilmente che serve un codice evento valido per procedere con la cancellazione
-   - Fornisci un esempio di codice a 6 cifre (es. "A1B2C3" o "123456")
-   - Invita a fornire il codice ricevuto nella conferma dell'appuntamento
-   
-2. Se il codice evento è valido e la cancellazione è avvenuta:
+ISTRUZIONI CRITICHE:
+1. SE lo stato è "EVENT_CODE_INVALID":
+   - Spiega cortesemente che il codice evento fornito non è valido
+   - Fornisci un esempio di codice evento valido (6 cifre numeriche, es. "123456")
+   - Chiedi di verificare e reinviare il codice corretto
+2. SE lo stato è "EVENT_DELETED":
    - Conferma che l'appuntamento è stato cancellato con successo
-   - Esprimi disponibilità per futuri appuntamenti se necessario
-   - Mantieni un tono professionale e comprensivo
+   - Esprimi disponibilità per future prenotazioni
+3. SE ci sono altre richieste nell'email, rispondi anche a quelle
+4. Basa la risposta sulle informazioni aziendali fornite
+5. Usa un tono professionale e comprensivo
 
-3. Gestisci eventuali altre richieste presenti nell'email
-
-4. Applica le linee guida fornite (formato "parte da correggere : correzione")
-
-5. Mantieni un tono professionale, cordiale e comprensivo
-
-6. Basa la risposta ESCLUSIVAMENTE sulle informazioni fornite
-
-Scrivi SOLO il corpo della risposta email, senza oggetto o saluti iniziali.
+Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
 """
 
 WRITER_CANCEL_APPOINTMENT_PROMPT_ENG = """
-You are an expert assistant in writing professional email responses for appointment cancellations.
-
-Write a professional email response based on the provided context and request status.
+You are a professional AI assistant writing email responses on behalf of a company.
 
 EMAIL CONTEXT:
 - CONVERSATION SUMMARY: {extended_summary}
 - CURRENT EMAIL SUMMARY: {mail_summary}
-- ATTACHMENTS: {attachment_summary}
 - RELEVANT COMPANY INFORMATION: {chunked_company_info}
+- ATTACHMENTS SUMMARY: {attachment_summary}
 
-REQUEST STATUS:
-- STATUS: {status}
-- EVENT CODE: {cancellation_event_code}
+APPOINTMENT CANCELLATION STATUS:
+- REQUESTED EVENT CODE: {cancellation_event_code}
+- OPERATION STATUS: {status}
 
-GUIDELINES TO FOLLOW:
-{guidelines}
+{guidelines_section}
 
-INSTRUCTIONS:
-1. If STATUS is "EVENT_CODE_INVALID":
-   - Politely explain that a valid event code is needed to proceed with cancellation
-   - Provide an example of a 6-digit code (e.g., "A1B2C3" or "123456")
-   - Ask them to provide the code received in the appointment confirmation
-   
-2. If the event code is valid and cancellation was successful:
+CRITICAL INSTRUCTIONS:
+1. IF status is "EVENT_CODE_INVALID":
+   - Politely explain that the provided event code is not valid
+   - Provide an example of a valid event code (6 numeric digits, e.g., "123456")
+   - Ask to verify and resend the correct code
+2. IF status is "EVENT_DELETED":
    - Confirm that the appointment has been successfully cancelled
-   - Express availability for future appointments if needed
-   - Maintain a professional and understanding tone
+   - Express availability for future bookings
+3. IF there are other requests in the email, respond to those as well
+4. Base the response on the provided company information
+5. Use a professional and understanding tone
 
-3. Handle any other requests present in the email
-
-4. Apply the provided guidelines (format "part to correct : correction")
-
-5. Maintain a professional, friendly, and understanding tone
-
-6. Base the response EXCLUSIVELY on the provided information
-
-Write ONLY the email response body, without subject or initial greetings.
+Write ONLY the email response body, without subject or signature.
 """
 
-# BOOK_APPOINTMENT_CHANGE (RESCHEDULE SUCCESS) WRITER PROMPTS
-WRITER_BOOK_APPOINTMENT_CHANGE_PROMPT_ITA = """
-Sei un assistente esperto nella scrittura di risposte email professionali per conferme di riprogrammazione appuntamento.
-
-Scrivi una risposta email professionale confermando la riprogrammazione dell'appuntamento.
-
-CONTESTO EMAIL:
-- RIASSUNTO CONVERSAZIONE: {extended_summary}
-- RIASSUNTO EMAIL CORRENTE: {mail_summary}
-- ALLEGATI: {attachment_summary}
-- INFORMAZIONI AZIENDALI RILEVANTI: {chunked_company_info}
-
-STATO RICHIESTA:
-- STATUS: {status}
-{event_info}
-
-LINEE GUIDA DA SEGUIRE:
-{guidelines}
-
-ISTRUZIONI:
-1. Se STATUS è "EVENT_RESCHEDULED":
-   - Conferma che l'appuntamento è stato riprogrammato con successo
-   - Fornisci i nuovi dettagli dell'appuntamento (data, ora, luogo)
-   - Includi il codice evento se disponibile
-   
-2. Gestisci eventuali altre richieste presenti nell'email
-
-3. Applica le linee guida fornite (formato "parte da correggere : correzione")
-
-4. Mantieni un tono professionale e cordiale
-
-5. Basa la risposta ESCLUSIVAMENTE sulle informazioni fornite
-
-Scrivi SOLO il corpo della risposta email, senza oggetto o saluti iniziali.
-"""
-
-WRITER_BOOK_APPOINTMENT_CHANGE_PROMPT_ENG = """
-You are an expert assistant in writing professional email responses for appointment rescheduling confirmations.
-
-Write a professional email response confirming the appointment rescheduling.
-
-EMAIL CONTEXT:
-- CONVERSATION SUMMARY: {extended_summary}
-- CURRENT EMAIL SUMMARY: {mail_summary}
-- ATTACHMENTS: {attachment_summary}
-- RELEVANT COMPANY INFORMATION: {chunked_company_info}
-
-REQUEST STATUS:
-- STATUS: {status}
-{event_info}
-
-GUIDELINES TO FOLLOW:
-{guidelines}
-
-INSTRUCTIONS:
-1. If STATUS is "EVENT_RESCHEDULED":
-   - Confirm that the appointment has been successfully rescheduled
-   - Provide the new appointment details (date, time, location)
-   - Include the event code if available
-   
-2. Handle any other requests present in the email
-
-3. Apply the provided guidelines (format "part to correct : correction")
-
-4. Maintain a professional and friendly tone
-
-5. Base the response EXCLUSIVELY on the provided information
-
-Write ONLY the email response body, without subject or initial greetings.
-"""
-
-# GENERIC WRITER PROMPTS (for all other subcategories)
+# WRITER PROMPT - GENERIC SUBCATEGORY (for all other cases)
 WRITER_GENERIC_PROMPT_ITA = """
-Sei un assistente esperto nella scrittura di risposte email professionali.
-
-Scrivi una risposta email professionale basandoti sul contesto fornito e sulle informazioni aziendali disponibili.
+Sei un assistente AI professionale che scrive risposte email per conto di un'azienda.
 
 CONTESTO EMAIL:
 - RIASSUNTO CONVERSAZIONE: {extended_summary}
 - RIASSUNTO EMAIL CORRENTE: {mail_summary}
-- ALLEGATI: {attachment_summary}
 - INFORMAZIONI AZIENDALI RILEVANTI: {chunked_company_info}
+- RIASSUNTO ALLEGATI: {attachment_summary}
 
-LINEE GUIDA DA SEGUIRE:
-{guidelines}
+{guidelines_section}
 
-ISTRUZIONI:
-1. Analizza attentamente le richieste presenti nell'email
+ISTRUZIONI CRITICHE:
+1. Scrivi una risposta professionale e cortese basandoti sulle informazioni aziendali fornite
+2. Rispondi a tutte le richieste presenti nell'email in modo completo
+3. Usa SOLO le informazioni presenti nel contesto - non inventare nulla
+4. Se non hai informazioni sufficienti per rispondere a una richiesta specifica, indica gentilmente che la richiesta sarà gestita dal team appropriato
+5. Mantieni un tono professionale ma cordiale e accessibile
+6. Struttura la risposta in modo chiaro e leggibile
 
-2. Rispondi a tutte le domande e richieste utilizzando le informazioni aziendali fornite
-
-3. Se le informazioni aziendali non coprono una specifica richiesta, comunicalo gentilmente suggerendo di contattare direttamente l'azienda
-
-4. Applica le linee guida fornite (formato "parte da correggere : correzione")
-
-5. Mantieni un tono professionale, cordiale e chiaro
-
-6. Basa la risposta ESCLUSIVAMENTE sulle informazioni aziendali fornite, non inventare dettagli
-
-7. Struttura la risposta in modo logico e facile da leggere
-
-Scrivi SOLO il corpo della risposta email, senza oggetto o saluti iniziali.
+Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
 """
 
 WRITER_GENERIC_PROMPT_ENG = """
-You are an expert assistant in writing professional email responses.
-
-Write a professional email response based on the provided context and available company information.
+You are a professional AI assistant writing email responses on behalf of a company.
 
 EMAIL CONTEXT:
 - CONVERSATION SUMMARY: {extended_summary}
 - CURRENT EMAIL SUMMARY: {mail_summary}
-- ATTACHMENTS: {attachment_summary}
 - RELEVANT COMPANY INFORMATION: {chunked_company_info}
+- ATTACHMENTS SUMMARY: {attachment_summary}
 
-GUIDELINES TO FOLLOW:
-{guidelines}
+{guidelines_section}
 
-INSTRUCTIONS:
-1. Carefully analyze the requests present in the email
+CRITICAL INSTRUCTIONS:
+1. Write a professional and courteous response based on the provided company information
+2. Respond to all requests in the email completely
+3. Use ONLY the information present in the context - do not invent anything
+4. If you don't have enough information to answer a specific request, kindly indicate that the request will be handled by the appropriate team
+5. Maintain a professional but friendly and accessible tone
+6. Structure the response clearly and readably
 
-2. Respond to all questions and requests using the provided company information
+Write ONLY the email response body, without subject or signature.
+"""
 
-3. If company information doesn't cover a specific request, politely communicate this and suggest contacting the company directly
+# Guidelines section templates
+GUIDELINES_SECTION_ITA = """
+LINEE GUIDA DI CORREZIONE DA SEGUIRE:
+Le seguenti correzioni devono essere applicate alla risposta:
+{guidelines_list}
 
-4. Apply the provided guidelines (format "part to correct : correction")
+IMPORTANTE: Segui attentamente tutte le linee guida sopra indicate. Ogni linea guida è nel formato "parte da correggere : correzione da applicare".
+"""
 
-5. Maintain a professional, friendly, and clear tone
+GUIDELINES_SECTION_ENG = """
+CORRECTION GUIDELINES TO FOLLOW:
+The following corrections must be applied to the response:
+{guidelines_list}
 
-6. Base the response EXCLUSIVELY on the provided company information, do not invent details
-
-7. Structure the response logically and make it easy to read
-
-Write ONLY the email response body, without subject or initial greetings.
+IMPORTANT: Carefully follow all the guidelines above. Each guideline is in the format "part to correct : correction to apply".
 """

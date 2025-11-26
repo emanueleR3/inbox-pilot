@@ -1347,7 +1347,19 @@ def rescheduler_node(state):
         # Validate event_code
         if event_code is None or (isinstance(event_code, str) and len(event_code) != 6):
             print(f"⚠️ [RESCHEDULER] Invalid event_code: {event_code}")
+            state["status"] = "EVENT_CODE_INVALID"
             return state
+
+        event_response = get_scheduled_event_by_code(event_code)
+            
+        if not event_response:
+            state["status"] = "EVENT_CODE_NOT_FOUND"
+            state["human_response"] = True
+            state["automation_executed"] = True
+            return state
+
+
+        state["status"] = "EVENT_CODE_VALID"
         
         # Event code is valid, proceed with LLM rescheduling
         print(f"✅ [RESCHEDULER] Valid event_code: {event_code}")
@@ -1414,6 +1426,10 @@ def rescheduler_node(state):
         
         # Update state with rescheduling results
         state["appointment_scheduled"] = rescheduler_response.scheduled
+
+        if rescheduler_response.scheduled:
+            state["status"] = "EVENT_RESCHEDULED"
+
         state["appointment_overlap"] = rescheduler_response.overlap
         state["appointment_event_code"] = rescheduler_response.event_code
         state["appointment_proposed_slots"] = rescheduler_response.proposed_slots
@@ -1512,6 +1528,7 @@ def cancellation_node(state):
             
             if db_delete_response and calendar_deleted:
                 print(f"   ✅ Event {event_code} successfully deleted")
+                state["status"] = "EVENT_DELETED"
                 return state
             else:
                 state["status"] = "EVENT_DELETION_FAILED"
@@ -1604,42 +1621,231 @@ def extractor_company_info_node(state):
 
 def writer_node(state):
     """
-    Write company information to database.
+    Write email response based on subcategory and context.
+    Handles different cases:
+    - REQUEST_APPOINTMENT: Uses scheduled, event_code, proposed_slots
+    - REQUEST_APPOINTMENT_CHANGE: Uses change_event_code, status, scheduled, event_code, proposed_slots
+    - CANCEL_APPOINTMENT: Uses cancellation_event_code, status
+    - Other subcategories: Uses generic prompt with company info
     
     Args:
         state: Current workflow state
         
     Returns:
-        Updated state with company information or AutomationExecutedResponse if writing fails
+        Updated state with written_email_body
     """
-    ## TODO chiamare llm_client.write_email
-    
-    return state
+    try:
+        print(f"✍️ [WRITER] Starting email writing...")
+        
+        # Get common parameters from state
+        subcategory = state.get("subcategory", "")
+        language = state.get("language", "ITA")
+        extended_summary = state.get("extended_summary", "")
+        mail_summary = state.get("mail_summary", "")
+        chunked_company_info = state.get("chunked_company_informations", {})
+        attachment_summary = state.get("summary_attachments", "")
+        guidelines = state.get("guidelines", [])
+        
+        print(f"📋 [WRITER] Writing parameters:")
+        print(f"   🏷️ Subcategory: {subcategory}")
+        print(f"   🔒 Language: {language}")
+        print(f"   📝 Has guidelines: {len(guidelines) if guidelines else 0}")
+        
+        # Prepare parameters based on subcategory
+        if subcategory == "REQUEST_APPOINTMENT":
+            # Get appointment-specific parameters
+            scheduled = state.get("appointment_scheduled", False)
+            event_code = state.get("appointment_event_code")
+            proposed_slots = state.get("appointment_proposed_slots")
+            
+            print(f"   📅 Scheduled: {scheduled}")
+            print(f"   🔢 Event code: {event_code}")
+            print(f"   📆 Proposed slots: {proposed_slots}")
+            
+            # Call LLM to write email
+            write_response = llm_client.write_email(
+                subcategory=subcategory,
+                extended_summary=extended_summary,
+                mail_summary=mail_summary,
+                chunked_company_info=chunked_company_info,
+                attachment_summary=attachment_summary,
+                guidelines=guidelines,
+                language=language,
+                scheduled=scheduled,
+                event_code=event_code,
+                proposed_slots=proposed_slots
+            )
+            
+        elif subcategory == "REQUEST_APPOINTMENT_CHANGE":
+            # Get appointment change-specific parameters
+            change_event_code = state.get("change_event_code")
+            status = state.get("status", "")
+            scheduled = state.get("appointment_scheduled", False)
+            event_code = state.get("appointment_event_code")
+            proposed_slots = state.get("appointment_proposed_slots")
+            
+            print(f"   🔑 Change event code: {change_event_code}")
+            print(f"   📊 Status: {status}")
+            print(f"   📅 Scheduled: {scheduled}")
+            print(f"   🔢 Event code: {event_code}")
+            print(f"   📆 Proposed slots: {proposed_slots}")
+            
+            # Call LLM to write email
+            write_response = llm_client.write_email(
+                subcategory=subcategory,
+                extended_summary=extended_summary,
+                mail_summary=mail_summary,
+                chunked_company_info=chunked_company_info,
+                attachment_summary=attachment_summary,
+                guidelines=guidelines,
+                language=language,
+                change_event_code=change_event_code,
+                status=status,
+                scheduled=scheduled,
+                event_code=event_code,
+                proposed_slots=proposed_slots
+            )
+            
+        elif subcategory == "CANCEL_APPOINTMENT":
+            # Get cancellation-specific parameters
+            cancellation_event_code = state.get("cancellation_event_code")
+            status = state.get("status", "")
+            
+            print(f"   🔑 Cancellation event code: {cancellation_event_code}")
+            print(f"   📊 Status: {status}")
+            
+            # Call LLM to write email
+            write_response = llm_client.write_email(
+                subcategory=subcategory,
+                extended_summary=extended_summary,
+                mail_summary=mail_summary,
+                chunked_company_info=chunked_company_info,
+                attachment_summary=attachment_summary,
+                guidelines=guidelines,
+                language=language,
+                cancellation_event_code=cancellation_event_code,
+                status=status
+            )
+            
+        else:
+            # Generic case for all other subcategories
+            print(f"   📝 Using generic writer prompt")
+            
+            # Call LLM to write email
+            write_response = llm_client.write_email(
+                subcategory=subcategory,
+                extended_summary=extended_summary,
+                mail_summary=mail_summary,
+                chunked_company_info=chunked_company_info,
+                attachment_summary=attachment_summary,
+                guidelines=guidelines,
+                language=language
+            )
+        
+        # Update state with written email
+        state["written_email_body"] = write_response.written_email_body
+        
+        print(f"✅ [WRITER] Email written successfully")
+        print(f"   📝 Email length: {len(write_response.written_email_body)} characters")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [WRITER] Error writing email: {e}")
+        # Set error message in state
+        state["written_email_body"] = "Error generating email response."
+        state["status"] = "WRITER_ERROR"
+        return state
 
 def reviewer_node(state):
     """
-    Review company information.
+    Review the written email and provide feedback.
+    Increments the review_iteration counter and sets needs_review and correctness_score.
+    
+    NOTE: The actual review logic is NOT implemented yet.
+    This node currently just increments the iteration counter and passes through.
     
     Args:
         state: Current workflow state
         
     Returns:
-        Updated state with company information or AutomationExecutedResponse if review fails
+        Updated state with review results (needs_review, correctness_score, guidelines)
     """
-    ## TODO
-    
-    return state
+    try:
+        print(f"📝 [REVIEWER] Starting email review...")
+        
+        # Get current iteration and increment
+        current_iteration = state.get("review_iteration", 0)
+        state["review_iteration"] = current_iteration + 1
+        
+        print(f"   🔢 Review iteration: {state['review_iteration']}")
+        print(f"   📄 Written email length: {len(state.get('written_email_body', ''))}")
+        
+        # TODO: Implement actual review logic using LLM
+        # For now, just pass through with default values
+        # The reviewer should:
+        # 1. Analyze the written email against the context
+        # 2. Check for accuracy, tone, completeness
+        # 3. Set needs_review=True if corrections are needed
+        # 4. Set correctness_score (0.0 to 1.0)
+        # 5. Provide guidelines list if corrections are needed
+        
+        # Default values - assume email is acceptable
+        state["needs_review"] = False
+        state["correctness_score"] = 1.0
+        state["guidelines"] = []
+        
+        print(f"✅ [REVIEWER] Review completed (placeholder - not yet implemented)")
+        print(f"   📊 Needs review: {state['needs_review']}")
+        print(f"   📈 Correctness score: {state['correctness_score']}")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [REVIEWER] Error in review: {e}")
+        # On error, don't require review and pass through
+        state["needs_review"] = False
+        state["correctness_score"] = 1.0
+        state["guidelines"] = []
+        return state
 
 def sender_node(state):
     """
-    Send company information to user.
+    Prepare email for sending and set the final status.
     
     Args:
         state: Current workflow state
         
     Returns:
-        Updated state with company information or AutomationExecutedResponse if sending fails
+        Updated state with status set to EMAIL_READY_TO_SEND
     """
-    ## TODO
-    
-    return state
+    try:
+        print(f"📤 [SENDER] Preparing email for sending...")
+        
+        written_email = state.get("written_email_body", "")
+        
+        if not written_email or len(written_email.strip()) == 0:
+            print(f"❌ [SENDER] No email body to send")
+            state["status"] = "SENDER_ERROR"
+            state["human_response"] = True
+            state["automation_executed"] = True
+            return state
+        
+        print(f"   📝 Email length: {len(written_email)} characters")
+        print(f"   🔢 Review iterations: {state.get('review_iteration', 0)}")
+        print(f"   📊 Final correctness score: {state.get('correctness_score', 'N/A')}")
+        
+        # Set status to indicate email is ready to send
+        state["status"] = "EMAIL_READY_TO_SEND"
+        state["automation_executed"] = True
+        
+        print(f"✅ [SENDER] Email ready to send")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [SENDER] Error preparing email: {e}")
+        state["status"] = "SENDER_ERROR"
+        state["human_response"] = True
+        state["automation_executed"] = True
+        return state

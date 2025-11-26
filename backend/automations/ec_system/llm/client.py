@@ -32,7 +32,8 @@ from ..models.llm_responses import (
     ReaderAppointmentChangeResponse,
     ReaderCancellationResponse,
     SchedulerResponse,
-    ExtractorCompanyInfoResponse
+    ExtractorCompanyInfoResponse,
+    WriteResponse
 )
 from ..prompts.templates import (
     LANGUAGE_DETECTION_PROMPT,
@@ -73,7 +74,17 @@ from ..prompts.templates import (
     RESCHEDULER_PROMPT_ITA,
     RESCHEDULER_PROMPT_ENG,
     EXTRACTOR_COMPANY_INFO_PROMPT_ITA,
-    EXTRACTOR_COMPANY_INFO_PROMPT_ENG
+    EXTRACTOR_COMPANY_INFO_PROMPT_ENG,
+    WRITER_REQUEST_APPOINTMENT_PROMPT_ITA,
+    WRITER_REQUEST_APPOINTMENT_PROMPT_ENG,
+    WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ITA,
+    WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ENG,
+    WRITER_CANCEL_APPOINTMENT_PROMPT_ITA,
+    WRITER_CANCEL_APPOINTMENT_PROMPT_ENG,
+    WRITER_GENERIC_PROMPT_ITA,
+    WRITER_GENERIC_PROMPT_ENG,
+    GUIDELINES_SECTION_ITA,
+    GUIDELINES_SECTION_ENG
 )
 
 # Import utils and db_client for calendar operations
@@ -1344,7 +1355,13 @@ class LLMClient:
                         # Call the reschedule_appointment tool function
                         args = tool_call['args']
                         reschedule_appointment = self._reschedule_appointment_tool(
-                            # TODO: implement tool
+                            event_code=event_code,
+                            new_title=args.get('new_title'),
+                            new_date=args.get('new_date'),
+                            new_duration=args.get('new_duration'),
+                            new_attendees=args.get('new_attendees'),
+                            new_place=args.get('new_place'),
+                            additional_notes=args.get('additional_notes')
                         )
                         scheduled = reschedule_appointment['scheduled']
                         overlap = reschedule_appointment['overlap']
@@ -1827,10 +1844,151 @@ class LLMClient:
             # Return empty dict in case of error
             return ExtractorCompanyInfoResponse(chunked_company_informations={})
 
-    def write_email(self, state: dict) -> WriterResponse: 
-        #TODO
-        pass
+    def write_email(
+        self,
+        subcategory: str,
+        extended_summary: str,
+        mail_summary: str,
+        chunked_company_info: dict,
+        attachment_summary: str,
+        guidelines: list,
+        language: str = "ITA",
+        # Request appointment specific params
+        scheduled: bool = None,
+        event_code: str = None,
+        proposed_slots: list = None,
+        # Request appointment change specific params
+        change_event_code: str = None,
+        status: str = None,
+        # Cancel appointment specific params
+        cancellation_event_code: str = None
+    ) -> WriteResponse:
+        """
+        Write an email response based on the subcategory and context.
         
+        Args:
+            subcategory: Email subcategory (REQUEST_APPOINTMENT, REQUEST_APPOINTMENT_CHANGE, CANCEL_APPOINTMENT, or other)
+            extended_summary: Extended conversation summary
+            mail_summary: Current email summary
+            chunked_company_info: Relevant company information
+            attachment_summary: Summary of attachments
+            guidelines: List of correction guidelines from reviewer (format: "part to correct : correction")
+            language: Language (ITA or ENG)
+            scheduled: Whether appointment was scheduled (for REQUEST_APPOINTMENT/CHANGE)
+            event_code: Event code if appointment was scheduled
+            proposed_slots: Proposed slots if appointment couldn't be scheduled
+            change_event_code: Event code from change request
+            status: Status of the operation
+            cancellation_event_code: Event code from cancellation request
+            
+        Returns:
+            WriteResponse with written_email_body
+        """
+        try:
+            print(f"✍️ [LLM_CLIENT] Writing email response for subcategory: {subcategory}")
+            
+            # Prepare guidelines section
+            guidelines_section = ""
+            if guidelines and len(guidelines) > 0:
+                guidelines_list = "\n".join([f"- {g}" for g in guidelines])
+                if language == "ITA":
+                    guidelines_section = GUIDELINES_SECTION_ITA.format(guidelines_list=guidelines_list)
+                else:
+                    guidelines_section = GUIDELINES_SECTION_ENG.format(guidelines_list=guidelines_list)
+            
+            # Prepare attachment summary
+            attachment_text = attachment_summary if attachment_summary else (
+                "Nessun allegato presente" if language == "ITA" else "No attachments present"
+            )
+            
+            # Convert chunked_company_info to string
+            import json
+            company_info_str = json.dumps(chunked_company_info, ensure_ascii=False, indent=2) if chunked_company_info else "{}"
+            
+            # Select prompt based on subcategory
+            if subcategory == "REQUEST_APPOINTMENT":
+                if language == "ITA":
+                    prompt_template = WRITER_REQUEST_APPOINTMENT_PROMPT_ITA
+                else:
+                    prompt_template = WRITER_REQUEST_APPOINTMENT_PROMPT_ENG
+                
+                prompt = prompt_template.format(
+                    extended_summary=extended_summary or "",
+                    mail_summary=mail_summary or "",
+                    chunked_company_info=company_info_str,
+                    attachment_summary=attachment_text,
+                    scheduled=scheduled,
+                    event_code=event_code or "N/A",
+                    proposed_slots=proposed_slots or [],
+                    guidelines_section=guidelines_section
+                )
+                
+            elif subcategory == "REQUEST_APPOINTMENT_CHANGE":
+                if language == "ITA":
+                    prompt_template = WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ITA
+                else:
+                    prompt_template = WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ENG
+                
+                prompt = prompt_template.format(
+                    extended_summary=extended_summary or "",
+                    mail_summary=mail_summary or "",
+                    chunked_company_info=company_info_str,
+                    attachment_summary=attachment_text,
+                    change_event_code=change_event_code or "N/A",
+                    status=status or "UNKNOWN",
+                    scheduled=scheduled,
+                    event_code=event_code or "N/A",
+                    proposed_slots=proposed_slots or [],
+                    guidelines_section=guidelines_section
+                )
+                
+            elif subcategory == "CANCEL_APPOINTMENT":
+                if language == "ITA":
+                    prompt_template = WRITER_CANCEL_APPOINTMENT_PROMPT_ITA
+                else:
+                    prompt_template = WRITER_CANCEL_APPOINTMENT_PROMPT_ENG
+                
+                prompt = prompt_template.format(
+                    extended_summary=extended_summary or "",
+                    mail_summary=mail_summary or "",
+                    chunked_company_info=company_info_str,
+                    attachment_summary=attachment_text,
+                    cancellation_event_code=cancellation_event_code or "N/A",
+                    status=status or "UNKNOWN",
+                    guidelines_section=guidelines_section
+                )
+                
+            else:
+                # Generic prompt for all other subcategories
+                if language == "ITA":
+                    prompt_template = WRITER_GENERIC_PROMPT_ITA
+                else:
+                    prompt_template = WRITER_GENERIC_PROMPT_ENG
+                
+                prompt = prompt_template.format(
+                    extended_summary=extended_summary or "",
+                    mail_summary=mail_summary or "",
+                    chunked_company_info=company_info_str,
+                    attachment_summary=attachment_text,
+                    guidelines_section=guidelines_section
+                )
+            
+            # Use structured completion to get response
+            response = self.structured_completion(prompt, WriteResponse)
+            
+            print(f"✅ [LLM_CLIENT] Email written successfully")
+            print(f"   📝 Response length: {len(response.written_email_body)} characters")
+            
+            return response
+            
+        except Exception as e:
+            print(f"❌ [LLM_CLIENT] Error writing email: {str(e)}")
+            # Return empty response in case of error
+            if language == "ITA":
+                error_msg = "Si è verificato un errore nella generazione della risposta. Si prega di riprovare."
+            else:
+                error_msg = "An error occurred while generating the response. Please try again."
+            return WriteResponse(written_email_body=error_msg)
 
         
 

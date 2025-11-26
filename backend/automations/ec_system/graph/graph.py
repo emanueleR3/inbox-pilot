@@ -16,6 +16,10 @@ os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGCHAIN_ENDPOINT", "https://api.
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "corretto-email-classification")
 
+# Get max iteration for writer-reviewer loop
+MAX_REVIEW_ITERATIONS = int(os.getenv("MAX_REVIEW_ITERATIONS", "3"))
+CORRECTNESS_THRESHOLD = float(os.getenv("CORRECTNESS_THRESHOLD", "0.9"))
+
 from langgraph.graph import StateGraph, END
 
 from .config import NodeNames
@@ -608,24 +612,52 @@ def create_email_classification_graph():
         }
     )
 
-    graph.add_edge(NodeNames.WRITER, NodeNames.REVIEWER) # TODO: è sempre connesso?
+    # Writer to Reviewer edge - always goes to reviewer after first write
+    graph.add_edge(NodeNames.WRITER, NodeNames.REVIEWER)
 
     def should_continue_after_reviewer(state):
         """
-        Check reviewer results and create appropriate AutomationExecutedResponse.
-        Routes based on which tool was called (propose_new_slots vs reschedule_appointment)
-        and the results obtained.
+        Check reviewer results and decide whether to loop back to writer or continue to sender.
+        
+        Loop conditions:
+        - needs_review is True AND correctness_score < CORRECTNESS_THRESHOLD (0.9)
+        - review_iteration < MAX_REVIEW_ITERATIONS
+        
+        If loop conditions are not met, continue to sender.
         """
-        # TODO: implement logic
-
+        # TODO momentaneo
+        print(f"📝 [REVIEWER] Checking review results: {state.get("written_email_body")}")
         return END
+        # ===============
+
+        needs_review = state.get("needs_review", False)
+        correctness_score = state.get("correctness_score", 1.0)
+        review_iteration = state.get("review_iteration", 0)
+        
+        # Check if we should loop back to writer
+        should_loop = (
+            needs_review and 
+            correctness_score < CORRECTNESS_THRESHOLD and 
+            review_iteration < MAX_REVIEW_ITERATIONS
+        )
+        
+        if should_loop:
+            print(f"🔁 [REVIEWER] Looping back to WRITER (iteration {review_iteration + 1})")
+            return NodeNames.WRITER
+        else:
+            if review_iteration >= MAX_REVIEW_ITERATIONS:
+                print(f"⚠️ [REVIEWER] Max iterations reached - continuing to SENDER")
+            elif correctness_score >= CORRECTNESS_THRESHOLD:
+                print(f"✅ [REVIEWER] Correctness threshold met - continuing to SENDER")
+            else:
+                print(f"✅ [REVIEWER] No review needed - continuing to SENDER")
+            return END
 
     graph.add_conditional_edges(
         NodeNames.REVIEWER,
         should_continue_after_reviewer,
         {
             NodeNames.WRITER: NodeNames.WRITER,
-            NodeNames.SENDER: NodeNames.SENDER,
             END: END
         }
     )
@@ -645,6 +677,12 @@ def create_email_classification_graph():
         event_code = state.get("appointment_event_code")
         proposed_slots = state.get("appointment_proposed_slots")
         
+        if state.get("automation_executed"):
+            return END    
+
+        if state.get("status") == "EVENT_CODE_INVALID":
+            return NodeNames.EXTRACTOR_COMPANY_INFO
+
         # Case 1: propose_new_slots was called (proposed_slots is not None)
         if proposed_slots is not None:
             print(f"📅 [RESCHEDULER] Tool propose_new_slots called - checking results")
@@ -746,7 +784,8 @@ def run_workflow(email_data: dict = None):
                 "attachments_too_large": False,
                 "human_response": False,
                 "automation_executed": False,
-                "summarizer_only": email_data.get("summarizer_only", False)
+                "summarizer_only": email_data.get("summarizer_only", False),
+                "review_iteration": 0
             }
         else:
             # Create default initial state

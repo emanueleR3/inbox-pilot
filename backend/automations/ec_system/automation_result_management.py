@@ -29,6 +29,8 @@ def process_automation_result(workflow_result: dict):
 
     status = workflow_result.get("status", "unknown")
 
+    # TODO gestire caso di summarizer_only
+
     # ======= AUTOMATION DISABLED CHECK ======= ✅
     if status == "AUTOMATION_DISABLED":
         print(f"⚠️ [WORKFLOW] Automation is disabled. No processing to be done.")
