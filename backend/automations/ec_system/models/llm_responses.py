@@ -410,16 +410,6 @@ class ExtractorCompanyInfoResponse(BaseModel):
         ...,
         description="Dizionario contenente le informazioni aziendali rilevanti estratte per rispondere alla email"
     )
-    """Response model for OTHER email evaluation."""
-    priority_score: float = Field(
-        ..., 
-        ge=0.0, le=1.0,
-        description="Punteggio di priorità da 0.0 a 1.0 (prima cifra decimale)"
-    )
-    subcategory: OtherSubcategory = Field(
-        ..., 
-        description="Sottocategoria specifica per email generiche"
-    )
 
 
 class WriteResponse(BaseModel):
