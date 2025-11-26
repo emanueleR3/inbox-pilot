@@ -60,7 +60,12 @@ class EmailProcessor:
             
             # Step 3: Handle the result based on filter outcome
             action = filter_result.get("action")
+            email_data["action"] = action
             
+            if action == "send_to_summarizer":
+                # TODO summarizer
+                return {}
+
             if action == "thread_created":
                 # New thread was created
                 thread_data = filter_result.get("thread", {})
@@ -268,7 +273,8 @@ class EmailProcessor:
             "attachment_ids": attachment_ids,
             "has_attachments": has_attachments,
             "extended_summary": extended_summary,
-            "no_reply": email_data.get("no_reply", False)
+            "no_reply": email_data.get("no_reply", False),
+            "action": email_data.get("action")
         }
         
         return automation_payload
