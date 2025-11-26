@@ -1318,14 +1318,6 @@ Restituisci un dizionario dove:
 - Chiavi: nomi degli argomenti rilevanti (es. "orari_apertura", "servizi_offerti", "contatti")
 - Valori: testo esatto estratto dalle informazioni aziendali
 
-Esempio:
-{
-    "chunked_company_informations": {
-        "orari_apertura": "Lunedì-Venerdì: 9:00-18:00, Sabato: 9:00-13:00",
-        "contatti": "Email: info@azienda.it, Tel: +39 123456789"
-    }
-}
-
 Estrai solo informazioni pertinenti e necessarie per rispondere alla richiesta.
 """
 
@@ -1355,14 +1347,6 @@ OUTPUT FORMAT:
 Return a dictionary where:
 - Keys: names of relevant topics (e.g., "opening_hours", "services_offered", "contacts")
 - Values: exact text extracted from company information
-
-Example:
-{
-    "chunked_company_informations": {
-        "opening_hours": "Monday-Friday: 9:00-18:00, Saturday: 9:00-13:00",
-        "contacts": "Email: info@company.com, Phone: +39 123456789"
-    }
-}
 
 Extract only pertinent and necessary information to answer the request.
 """

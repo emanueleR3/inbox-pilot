@@ -1571,6 +1571,7 @@ def extractor_company_info_node(state):
         
         # Step 1: Recupera company information dal database
         company_information = get_company_information_sync(box_email)
+        print(f"   📝 Company information: {company_information}")
         
         # Step 2: Gestione caso information vuota o non presente
         if not company_information:
@@ -1587,12 +1588,7 @@ def extractor_company_info_node(state):
         summary_attachments = state.get('summary_attachments', '')
         key_entities = state.get('key_entities', {})
         language = state.get('language', 'ITA')
-        
-        print(f"   📝 Extended summary length: {len(extended_summary)}")
-        print(f"   📝 Mail summary length: {len(mail_summary)}")
-        print(f"   📎 Has attachment summary: {bool(summary_attachments)}")
-        print(f"   🔑 Key entities: {len(key_entities)} items")
-        
+
         # Invoca l'LLM per estrarre le informazioni rilevanti
         extraction_result = llm_client.extract_company_info(
             extended_summary=extended_summary,
@@ -1605,6 +1601,12 @@ def extractor_company_info_node(state):
         
         # Aggiorna lo stato con le informazioni estratte
         state['chunked_company_informations'] = extraction_result.chunked_company_informations
+
+        if extraction_result.chunked_company_informations is None or extraction_result.chunked_company_informations == []:
+            state["human_response"] = True
+            state["automation_executed"] = True
+            state["status"] = "COMPANY_INFO_EXTRACTION_FAILED"
+            return state
 
         # DEBUG
         print(f"✅ [EXTRACTOR_COMPANY_INFO] Company information extracted successfully")
