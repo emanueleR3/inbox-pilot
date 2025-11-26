@@ -420,3 +420,7 @@ class ExtractorCompanyInfoResponse(BaseModel):
         ..., 
         description="Sottocategoria specifica per email generiche"
     )
+
+class WriterResponse(BaseModel):
+    """Response model for email writing."""
+    email_body: str = Field(..., description="Corpo della risposta email")

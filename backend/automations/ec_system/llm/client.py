@@ -11,7 +11,7 @@ import random
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import PydanticOutputParser
-from typing import TypeVar, Type, Optional
+from typing import TypeVar, Type, Optional, List
 
 from ..models.llm_responses import (
     LanguageDetectionResponse, 
@@ -1826,6 +1826,11 @@ class LLMClient:
             print(f"❌ [LLM_CLIENT] Error extracting company information: {str(e)}")
             # Return empty dict in case of error
             return ExtractorCompanyInfoResponse(chunked_company_informations={})
+
+    def write_email(self, state: dict) -> WriterResponse: 
+        #TODO
+        pass
+        
 
         
 

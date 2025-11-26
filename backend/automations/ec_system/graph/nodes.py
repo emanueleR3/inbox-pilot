@@ -1612,7 +1612,7 @@ def writer_node(state):
     Returns:
         Updated state with company information or AutomationExecutedResponse if writing fails
     """
-    ## TODO
+    ## TODO chiamare llm_client.write_email
     
     return state
 
