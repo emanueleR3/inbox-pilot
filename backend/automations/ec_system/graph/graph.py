@@ -719,20 +719,6 @@ def create_email_classification_graph():
             END: END
         }
     )
-
-    def should_continue_after_extractor_company_info(state):
-        if state.get("status") == "COMPANY_INFO_EXTRACTION_FAILED":
-            return END
-        return NodeNames.WRITER
-
-    graph.add_conditional_edges(
-        NodeNames.EXTRACTOR_COMPANY_INFO,
-        should_continue_after_extractor_company_info,
-        {
-            NodeNames.WRITER: NodeNames.WRITER,
-            END: END
-        }
-    )
     
     return graph
 
