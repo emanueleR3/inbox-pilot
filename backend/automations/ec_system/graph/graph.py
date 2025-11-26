@@ -151,9 +151,24 @@ def create_email_classification_graph():
     graph.set_entry_point(NodeNames.NEW_MAIL)
     graph.add_edge(NodeNames.NEW_MAIL, NodeNames.CONFIG_LOADER)
     graph.add_edge(NodeNames.CONFIG_LOADER, NodeNames.LANGUAGE_DETECTOR)
-    graph.add_edge(NodeNames.LANGUAGE_DETECTOR, NodeNames.AI_FILTER)
+
+    def route_after_language_detector(state):
+        if state.get("summarizer_only"):
+            return NodeNames.SUMMARIZER
+        else:
+            return NodeNames.AI_FILTER
+
+    graph.add_conditional_edges(
+        NodeNames.LANGUAGE_DETECTOR,
+        route_after_language_detector,
+        {
+            NodeNames.AI_FILTER: NodeNames.AI_FILTER,
+            NodeNames.SUMMARIZER: NodeNames.SUMMARIZER,
+        }
+    )
+
     graph.add_edge(NodeNames.AI_FILTER, NodeNames.GUARDRAIL)
-    
+
     # Conditional edge from guardrail: continue if safe, end if dangerous
     def should_continue_after_guardrail(state):
         """Check if workflow should continue after guardrail."""
@@ -169,9 +184,26 @@ def create_email_classification_graph():
             END: END
         }
     )
+
+    def route_after_summarizer(state):
+        if state.get("summarizer_only"):
+            if state.get("has_attachments"):
+                return NodeNames.ATTACHMENT_EXTRACTOR
+            else:
+                return END
+        else:
+            return NodeNames.CLASSIFIER
     
-    # Edge from summarizer to classifier
-    graph.add_edge(NodeNames.SUMMARIZER, NodeNames.CLASSIFIER)
+    graph.add_conditional_edges(
+        NodeNames.SUMMARIZER,
+        route_after_summarizer,
+        {
+            NodeNames.CLASSIFIER: NodeNames.CLASSIFIER,
+            NodeNames.ATTACHMENT_EXTRACTOR: NodeNames.ATTACHMENT_EXTRACTOR,
+            END: END
+        }
+    )# Edge from summarizer to classifier
+    
     
     # Conditional edge from classifier: check confidence and whether attachments are required
     def should_continue_after_classifier(state):
@@ -203,8 +235,19 @@ def create_email_classification_graph():
     # Edge from attachment extractor to attachment summarizer
     graph.add_edge(NodeNames.ATTACHMENT_EXTRACTOR, NodeNames.ATTACHMENT_SUMMARIZER)
     
-    # Edge from attachment summarizer to router
-    graph.add_edge(NodeNames.ATTACHMENT_SUMMARIZER, NodeNames.ROUTER)
+    def should_continue_after_attachment_summarizer(state):
+        if state.get("summarizer_only"):
+            return END
+        return NodeNames.ROUTER
+    
+    graph.add_conditional_edges(
+        NodeNames.ATTACHMENT_SUMMARIZER,
+        should_continue_after_attachment_summarizer,
+        {
+            NodeNames.ROUTER: NodeNames.ROUTER,
+            END: END
+        }
+    )
     
     # Edge from router to evaluator
     graph.add_edge(NodeNames.ROUTER, NodeNames.EVALUATOR)
@@ -688,7 +731,8 @@ def run_workflow(email_data: dict = None):
                 "user_config": None,
                 "attachments_too_large": False,
                 "human_response": False,
-                "automation_executed": False
+                "automation_executed": False,
+                "summarizer_only": email_data.get("summarizer_only", False)
             }
         else:
             # Create default initial state
