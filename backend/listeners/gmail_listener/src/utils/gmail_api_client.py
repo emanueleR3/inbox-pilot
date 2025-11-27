@@ -31,7 +31,7 @@ def get_service_for_user(email: str):
         ]
     
 
-    print("\n\nDEBUG --- Access Token:", access_token)
+    print("\n\nDEBUG --- Access Token:", creds_data['access_token'])
     creds = Credentials(
         token=creds_data['access_token'],
         refresh_token=creds_data['refresh_token'],
