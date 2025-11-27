@@ -381,7 +381,7 @@ def get_calendar_service_data(service_id: str) -> Optional[Dict]:
         service_id: Service ID from subscription_services
         
     Returns:
-        Dict con calendar_provider, access_token (decrypted), opening_hrs, working_days, appointment_duration
+        Dict con calendar_provider, access_token (decrypted), business_hours, working_days, appointment_duration
         None se non trovato
     """
     try:
