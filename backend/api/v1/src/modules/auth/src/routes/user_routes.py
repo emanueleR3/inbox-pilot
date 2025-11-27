@@ -114,6 +114,10 @@ def create_user_with_sub(
         description="Email e password per la registrazione del nuovo utente.",
     )
 ):
+    print("\n\nDEBUG =======================")
+    print(payload)
+    print("DEBUG =======================\n\n")
+
     result = controller.create_user_with_sub(payload)
     return {"message": "Registrazione completata", "result": result}
 
