@@ -1836,40 +1836,6 @@ def reviewer_node(state):
         state["correctness_score"] = 0.8
         state["guidelines"] = []
         return state
-
-def sender_node(state):
-    """
-    Prepare email for sending and set the final status.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with status set to EMAIL_READY_TO_SEND
-    """
-    try:
-        print(f"📤 [SENDER] Preparing email for sending...")
-        
-        written_email = state.get("written_email_body", "")
-        
-        if not written_email or len(written_email.strip()) == 0:
-            print(f"❌ [SENDER] No email body to send")
-            state["status"] = "SENDER_ERROR"
-            state["human_response"] = True
-            state["automation_executed"] = True
-            return state
-        
-        print(f"   📝 Email length: {len(written_email)} characters")
-        print(f"   🔢 Review iterations: {state.get('review_iteration', 0)}")
-        print(f"   📊 Final correctness score: {state.get('correctness_score', 'N/A')}")
-        
-        # Set status to indicate email is ready to send
-        state["status"] = "EMAIL_READY_TO_SEND"
-        state["automation_executed"] = True
-        
-        print(f"✅ [SENDER] Email ready to send")
-        
-        return state
         
     except Exception as e:
         print(f"❌ [SENDER] Error preparing email: {e}")

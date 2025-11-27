@@ -376,12 +376,14 @@ SOTTOCATEGORIE DISPONIBILI:
 - PRODUCT_UPDATE: Aggiornamenti su prodotti, nuove funzionalità
 - REQUEST_QUOTE: Richieste di preventivo o quotazioni
 
-CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
-- 0.8-1.0: Tono urgente/pressante, scadenze immediate, linguaggio che esprime urgenza o preoccupazione
-- 0.5-0.7: Tono professionale importante, offerte con scadenza a breve, comunicazioni che richiedono attenzione
-- 0.2-0.4: Tono neutrale, newsletter standard, comunicazioni informative senza urgenza
-- 0.0-0.1: Tono spam/generico, contenuti chiaramente irrilevanti o automatici
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU CONTENUTO, TONO E URGENZA:
+- 0.8-1.0: CONTENUTO CRITICO + TONO URGENTE. Solo se l'offerta è personalizzata e scade a brevissimo. MAI per newsletter di massa.
+- 0.5-0.7: CONTENUTO RILEVANTE. Offerte personalizzate, comunicazioni specifiche per l'utente.
+- 0.2-0.4: CONTENUTO STANDARD. Newsletter, promozioni generiche. Anche se il tono è "URGENTE" (es. "Ultimi giorni!"), se è una mail di massa, la priorità è qui.
+- 0.0-0.1: CONTENUTO IRRILEVANTE. Spam, pubblicità non richiesta.
 
+REGOLA SPECIALE "FAKE URGENCY":
+Se l'email è chiaramente una newsletter o promozione di massa (es. da grandi aziende, negozi online), anche se l'oggetto o il testo usano parole come "URGENTE", "SCADE ORA", "ULTIMA CHIAMATA", la priorità DEVE essere BASSA (max 0.4). Il CONTENUTO (newsletter) prevale sul TONO (urgente).
 Analizza il contenuto e determina priorità e sottocategoria più appropriate.
 """
 
@@ -409,12 +411,14 @@ AVAILABLE SUBCATEGORIES:
 - PRODUCT_UPDATE: Product updates, new features
 - REQUEST_QUOTE: Quote or quotation requests
 
-PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
-- 0.8-1.0: Urgent/pressing tone, immediate deadlines, language expressing urgency or concern
-- 0.5-0.7: Important professional tone, offers with short deadlines, communications requiring attention
-- 0.2-0.4: Neutral tone, standard newsletters, informational communications without urgency
-- 0.0-0.1: Spam/generic tone, clearly irrelevant or automated content
+PRIORITY CRITERIA (0.0-1.0) - BASED ON CONTENT, TONE AND URGENCY:
+- 0.8-1.0: CRITICAL CONTENT + URGENT TONE. Only if the offer is personalized and expires very soon. NEVER for mass newsletters.
+- 0.5-0.7: RELEVANT CONTENT. Personalized offers, specific communications for the user.
+- 0.2-0.4: STANDARD CONTENT. Newsletters, generic promotions. Even if the tone is "URGENT" (e.g., "Last days!"), if it is a mass email, priority is here.
+- 0.0-0.1: IRRELEVANT CONTENT. Spam, unsolicited advertising.
 
+SPECIAL RULE "FAKE URGENCY":
+If the email is clearly a mass newsletter or promotion (e.g., from big companies, online stores), even if the subject or text uses words like "URGENT", "EXPIRES NOW", "LAST CALL", priority MUST be LOW (max 0.4). CONTENT (newsletter) overrides TONE (urgent).
 Analyze the content and determine the most appropriate priority and subcategory.
 """
 
@@ -434,11 +438,11 @@ SOTTOCATEGORIE DISPONIBILI:
 - SYSTEM_ALERT: Avvisi di sistema importanti
 - SYSTEM_NOTIFICATION: Notifiche di sistema generiche
 
-CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
-- 0.8-1.0: Tono allarmato/urgente, system alert critici, linguaggio che richiede azione immediata
-- 0.5-0.7: Tono di richiesta importante, messaggi da contatti rilevanti, notifiche che richiedono attenzione
-- 0.2-0.4: Tono neutrale/informativo, notifiche standard senza particolare urgenza
-- 0.0-0.1: Tono automatico/generico, notifiche spam o completamente irrilevanti
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU CONTENUTO, TONO E URGENZA:
+- 0.8-1.0: CONTENUTO CRITICO. Alert di sicurezza, tentativi di accesso, messaggi diretti urgenti.
+- 0.5-0.7: CONTENUTO RILEVANTE. Messaggi diretti da contatti, inviti personali.
+- 0.2-0.4: CONTENUTO STANDARD. Notifiche generiche, aggiornamenti feed, "potresti conoscere".
+- 0.0-0.1: CONTENUTO IRRILEVANTE. Notifiche spam.
 
 Analizza il contenuto e determina priorità e sottocategoria più appropriate.
 """
@@ -458,11 +462,11 @@ AVAILABLE SUBCATEGORIES:
 - SYSTEM_ALERT: Important system alerts
 - SYSTEM_NOTIFICATION: Generic system notifications
 
-PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
-- 0.8-1.0: Alarmed/urgent tone, critical system alerts, language requiring immediate action
-- 0.5-0.7: Important request tone, messages from relevant contacts, notifications requiring attention
-- 0.2-0.4: Neutral/informational tone, standard notifications without particular urgency
-- 0.0-0.1: Automatic/generic tone, spam notifications or completely irrelevant content
+PRIORITY CRITERIA (0.0-1.0) - BASED ON CONTENT, TONE AND URGENCY:
+- 0.8-1.0: CRITICAL CONTENT. Security alerts, login attempts, urgent direct messages.
+- 0.5-0.7: RELEVANT CONTENT. Direct messages from contacts, personal invitations.
+- 0.2-0.4: STANDARD CONTENT. Generic notifications, feed updates, "people you may know".
+- 0.0-0.1: IRRELEVANT CONTENT. Spam notifications.
 
 Analyze the content and determine the most appropriate priority and subcategory.
 """
@@ -490,11 +494,11 @@ SOTTOCATEGORIE DISPONIBILI:
 - TICKET_UPDATE: Aggiornamenti ticket
 - GENERAL_GREETING: Saluti generici, comunicazioni cordiali
 
-CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
-- 0.8-1.0: Tono serio/formale per documenti critici, informazioni urgenti che richiedono conferma immediata
-- 0.5-0.7: Tono professionale importante, aggiornamenti su progetti critici, documenti che richiedono attenzione
-- 0.2-0.4: Tono neutrale/informativo, informazioni standard senza particolare urgenza
-- 0.0-0.1: Tono automatico/generico, informazioni di cortesia o completamente irrilevanti
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU CONTENUTO, TONO E URGENZA:
+- 0.8-1.0: CONTENUTO CRITICO. Documenti legali/fiscali, aggiornamenti bloccanti su progetti, informazioni di sicurezza.
+- 0.5-0.7: CONTENUTO RILEVANTE. Documenti di lavoro, aggiornamenti di progetto, conferme appuntamenti.
+- 0.2-0.4: CONTENUTO STANDARD. Informazioni generali, newsletter interne, aggiornamenti non urgenti.
+- 0.0-0.1: CONTENUTO IRRILEVANTE. Info di cortesia non richieste.
 
 Analizza il contenuto e determina priorità e sottocategoria più appropriate.
 """
@@ -521,11 +525,11 @@ AVAILABLE SUBCATEGORIES:
 - TICKET_UPDATE: Ticket updates
 - GENERAL_GREETING: Generic greetings, cordial communications
 
-PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
-- 0.8-1.0: Serious/formal tone for critical documents, urgent information requiring immediate confirmation
-- 0.5-0.7: Important professional tone, critical project updates, documents requiring attention
-- 0.2-0.4: Neutral/informational tone, standard information without particular urgency
-- 0.0-0.1: Automatic/generic tone, courtesy information or completely irrelevant content
+PRIORITY CRITERIA (0.0-1.0) - BASED ON CONTENT, TONE AND URGENCY:
+- 0.8-1.0: CRITICAL CONTENT. Legal/tax documents, blocking project updates, security information.
+- 0.5-0.7: RELEVANT CONTENT. Work documents, project updates, appointment confirmations.
+- 0.2-0.4: STANDARD CONTENT. General information, internal newsletters, non-urgent updates.
+- 0.0-0.1: IRRELEVANT CONTENT. Unsolicited courtesy info.
 
 Analyze the content and determine the most appropriate priority and subcategory.
 """
@@ -561,11 +565,11 @@ SOTTOCATEGORIE DISPONIBILI:
 - GENERAL_INQUIRY: Domande generiche, informazioni
 - PAYMENT_ISSUE: Problemi di pagamento, fatturazione
 
-CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
-- 0.8-1.0: Tono arrabbiato/frustrato, richieste urgenti con scadenze ravvicinate, linguaggio che esprime preoccupazione o insoddisfazione
-- 0.5-0.7: Tono professionale ma insistente, richieste importanti che richiedono attenzione, questioni che necessitano risposta ponderata
-- 0.2-0.4: Tono neutrale/cordiale, richieste standard senza particolare urgenza
-- 0.0-0.1: Tono automatico/generico, richieste spam o completamente irrilevanti
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU CONTENUTO, TONO E URGENZA:
+- 0.8-1.0: CONTENUTO CRITICO. Pagamenti, Scadenze legali/fiscali, Richieste bloccanti. Il contenuto prevale sul tono (es. una richiesta di pagamento scaduto è critica anche se il tono è formale).
+- 0.5-0.7: CONTENUTO RILEVANTE. Richieste di documenti, Preventivi, Appuntamenti, Richieste da clienti/partner importanti.
+- 0.2-0.4: CONTENUTO STANDARD. Richieste generiche, info non urgenti.
+- 0.0-0.1: CONTENUTO IRRILEVANTE. Spam, richieste automatiche.
 
 Analizza il contenuto e determina priorità e sottocategoria più appropriate.
 """
@@ -600,11 +604,11 @@ AVAILABLE SUBCATEGORIES:
 - GENERAL_INQUIRY: Generic questions, information requests
 - PAYMENT_ISSUE: Payment or billing issues
 
-PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
-- 0.8-1.0: Angry/frustrated tone, urgent requests with close deadlines, language expressing concern or dissatisfaction
-- 0.5-0.7: Professional but insistent tone, important requests requiring attention, issues needing thoughtful response
-- 0.2-0.4: Neutral/cordial tone, standard requests without particular urgency
-- 0.0-0.1: Automatic/generic tone, spam requests or completely irrelevant content
+PRIORITY CRITERIA (0.0-1.0) - BASED ON CONTENT, TONE AND URGENCY:
+- 0.8-1.0: CRITICAL CONTENT. Payments, Legal/tax deadlines, Blocking requests. Content overrides tone (e.g., an overdue payment request is critical even if tone is formal).
+- 0.5-0.7: RELEVANT CONTENT. Document requests, Quotes, Appointments, Requests from important clients/partners.
+- 0.2-0.4: STANDARD CONTENT. Generic requests, non-urgent info.
+- 0.0-0.1: IRRELEVANT CONTENT. Spam, automated requests.
 
 Analyze the content and determine the most appropriate priority and subcategory.
 """
@@ -625,11 +629,11 @@ SOTTOCATEGORIE DISPONIBILI:
 - CANCEL_APPOINTMENT: Cancellazioni di appuntamenti
 - EVENT_FOLLOWUP: Follow-up post evento o meeting
 
-CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
-- 0.8-1.0: Tono urgente per cancellazioni/modifiche dell'ultimo momento, linguaggio che esprime preoccupazione o stress
-- 0.5-0.7: Tono professionale importante per eventi/meeting critici, richieste che necessitano risposta rapida
-- 0.2-0.4: Tono neutrale/cordiale per appuntamenti standard, inviti senza particolare urgenza
-- 0.0-0.1: Tono automatico/generico, inviti spam o completamente irrilevanti
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU CONTENUTO, TONO E URGENZA:
+- 0.8-1.0: CONTENUTO CRITICO. Cancellazioni/modifiche last-minute, meeting con VIP/CEO.
+- 0.5-0.7: CONTENUTO RILEVANTE. Nuovi inviti, conferme, meeting di lavoro standard.
+- 0.2-0.4: CONTENUTO STANDARD. Webinar facoltativi, eventi aziendali generali.
+- 0.0-0.1: CONTENUTO IRRILEVANTE. Spam calendario.
 
 Analizza il contenuto e determina priorità e sottocategoria più appropriate.
 """
@@ -649,11 +653,11 @@ AVAILABLE SUBCATEGORIES:
 - CANCEL_APPOINTMENT: Appointment cancellations
 - EVENT_FOLLOWUP: Post-event or meeting follow-up
 
-PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
-- 0.8-1.0: Urgent tone for last-minute cancellations/changes, language expressing concern or stress
-- 0.5-0.7: Important professional tone for critical events/meetings, requests needing quick response
-- 0.2-0.4: Neutral/cordial tone for standard appointments, invitations without particular urgency
-- 0.0-0.1: Automatic/generic tone, spam invitations or completely irrelevant content
+PRIORITY CRITERIA (0.0-1.0) - BASED ON CONTENT, TONE AND URGENCY:
+- 0.8-1.0: CRITICAL CONTENT. Last-minute cancellations/changes, meetings with VIP/CEO.
+- 0.5-0.7: RELEVANT CONTENT. New invitations, confirmations, standard business meetings.
+- 0.2-0.4: STANDARD CONTENT. Optional webinars, general company events.
+- 0.0-0.1: IRRELEVANT CONTENT. Calendar spam.
 
 Analyze the content and determine the most appropriate priority and subcategory.
 """
@@ -690,11 +694,11 @@ SOTTOCATEGORIE DISPONIBILI:
 - SYSTEM_NOTIFICATION: Notifiche sistema generiche
 - TICKET_UPDATE: Aggiornamenti ticket supporto
 
-CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
-- 0.8-1.0: Tono critico/allarmato per problemi di pagamento o sicurezza, system alert che richiedono azione immediata
-- 0.5-0.7: Tono serio/formale per transazioni importanti, verifiche che richiedono attenzione tempestiva
-- 0.2-0.4: Tono neutrale/professionale per notifiche standard, aggiornamenti di routine
-- 0.0-0.1: Tono automatico/generico, notifiche di sistema irrilevanti
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU CONTENUTO, TONO E URGENZA:
+- 0.8-1.0: CONTENUTO CRITICO. Fatture scadute, Pagamenti falliti, Verifiche sicurezza, Alert bloccanti. Indipendentemente dal tono (anche se neutrale).
+- 0.5-0.7: CONTENUTO RILEVANTE. Nuove fatture, Conferme d'ordine, Aggiornamenti stato importanti.
+- 0.2-0.4: CONTENUTO STANDARD. Ricevute automatiche, notifiche di routine.
+- 0.0-0.1: CONTENUTO IRRILEVANTE. Notifiche di sistema ignorabili.
 
 Analizza il contenuto e determina priorità e sottocategoria più appropriate.
 """
@@ -720,11 +724,11 @@ AVAILABLE SUBCATEGORIES:
 - SYSTEM_NOTIFICATION: Generic system notifications
 - TICKET_UPDATE: Support ticket updates
 
-PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
-- 0.8-1.0: Critical/alarmed tone for payment or security issues, system alerts requiring immediate action
-- 0.5-0.7: Serious/formal tone for important transactions, verifications requiring timely attention
-- 0.2-0.4: Neutral/professional tone for standard notifications, routine updates
-- 0.0-0.1: Automatic/generic tone, irrelevant system notifications
+PRIORITY CRITERIA (0.0-1.0) - BASED ON CONTENT, TONE AND URGENCY:
+- 0.8-1.0: CRITICAL CONTENT. Overdue invoices, Failed payments, Security checks, Blocking alerts. Regardless of tone (even if neutral).
+- 0.5-0.7: RELEVANT CONTENT. New invoices, Order confirmations, Important status updates.
+- 0.2-0.4: STANDARD CONTENT. Automatic receipts, routine notifications.
+- 0.0-0.1: IRRELEVANT CONTENT. Ignorable system notifications.
 
 Analyze the content and determine the most appropriate priority and subcategory.
 """
@@ -743,11 +747,11 @@ SOTTOCATEGORIE DISPONIBILI:
 - SPAM_OR_UNKNOWN: Spam o contenuti sconosciuti
 - UNRELATED_CONTENT: Contenuti non correlati al business
 
-CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU TONO E URGENZA EMOTIVA:
-- 0.8-1.0: Tono urgente/preoccupato per note interne critiche, comunicazioni che richiedono attenzione immediata
-- 0.5-0.7: Tono cordiale ma importante da persone rilevanti, comunicazioni che meritano considerazione
-- 0.2-0.4: Tono neutrale/generico, comunicazioni standard senza particolare urgenza
-- 0.0-0.1: Tono automatico/spam, contenuti completamente irrilevanti o dannosi
+CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU CONTENUTO, TONO E URGENZA:
+- 0.8-1.0: CONTENUTO CRITICO. Comunicazioni urgenti da management/HR, problemi gravi segnalati.
+- 0.5-0.7: CONTENUTO RILEVANTE. Note interne importanti, comunicazioni personali dirette.
+- 0.2-0.4: CONTENUTO STANDARD. Saluti, info generali.
+- 0.0-0.1: CONTENUTO IRRILEVANTE. Spam, errori.
 
 Analizza il contenuto e determina priorità e sottocategoria più appropriate.
 """
@@ -765,11 +769,11 @@ AVAILABLE SUBCATEGORIES:
 - SPAM_OR_UNKNOWN: Spam or unknown content
 - UNRELATED_CONTENT: Content unrelated to business
 
-PRIORITY CRITERIA (0.0-1.0) - BASED ON TONE AND EMOTIONAL URGENCY:
-- 0.8-1.0: Urgent/concerned tone for critical internal notes, communications requiring immediate attention
-- 0.5-0.7: Cordial but important tone from relevant people, communications deserving consideration
-- 0.2-0.4: Neutral/generic tone, standard communications without particular urgency
-- 0.0-0.1: Automatic/spam tone, completely irrelevant or harmful content
+PRIORITY CRITERIA (0.0-1.0) - BASED ON CONTENT, TONE AND URGENCY:
+- 0.8-1.0: CRITICAL CONTENT. Urgent communications from management/HR, reported serious issues.
+- 0.5-0.7: RELEVANT CONTENT. Important internal notes, direct personal communications.
+- 0.2-0.4: STANDARD CONTENT. Greetings, general info.
+- 0.0-0.1: IRRELEVANT CONTENT. Spam, errors.
 
 Analyze the content and determine the most appropriate priority and subcategory.
 """

@@ -543,6 +543,21 @@ def save_ai_generated_email(email_data: Dict) -> bool:
         print(f"❌ [DB_CLIENT] Error saving email: {e}")
         return False
 
+def insert_new_mail_in_history_thread(thread_id: str, message_id: str) -> bool:
+    try:
+        supabase = get_supabase_client()
+
+        # append in history array of text the new message_id
+        response = supabase.table("threads").update({"history": "history" + message_id}).eq("thread_id", thread_id).execute()
+
+        if response.data:
+            return True
+        else:
+            return False
+
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error inserting new mail in history thread: {e}")
+        return False
 
 def get_subscription_service_id_by_email(email: str) -> Optional[str]:
     try:

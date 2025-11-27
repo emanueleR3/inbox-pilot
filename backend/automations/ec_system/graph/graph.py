@@ -115,7 +115,6 @@ def create_email_classification_graph():
     graph.add_node(NodeNames.EXTRACTOR_COMPANY_INFO, extractor_company_info_node)
     graph.add_node(NodeNames.WRITER, writer_node)
     graph.add_node(NodeNames.REVIEWER, reviewer_node)
-    graph.add_node(NodeNames.SENDER, sender_node)
     
     # Add subcategory handler nodes
     graph.add_node(NodeNames.HANDLE_OFFER_PROMOTION, handle_offer_promotion_node)
@@ -681,11 +680,6 @@ def create_email_classification_graph():
         
         If loop conditions are not met, continue to sender.
         """
-        # TODO momentaneo
-        print(f"📝 [REVIEWER] Checking review results: {state.get('written_email_body')}")
-        return END
-        # ===============
-
         needs_review = state.get("needs_review", False)
         correctness_score = state.get("correctness_score", 1.0)
         review_iteration = state.get("review_iteration", 0)
@@ -701,12 +695,14 @@ def create_email_classification_graph():
             print(f"🔁 [REVIEWER] Looping back to WRITER (iteration {review_iteration + 1})")
             return NodeNames.WRITER
         else:
-            if review_iteration >= MAX_REVIEW_ITERATIONS:
-                print(f"⚠️ [REVIEWER] Max iterations reached - continuing to SENDER")
-            elif correctness_score >= CORRECTNESS_THRESHOLD:
-                print(f"✅ [REVIEWER] Correctness threshold met - continuing to SENDER")
+            if needs_review and correctness_score < CORRECTNESS_THRESHOLD:
+                print(f"⚠️ [REVIEWER] Low confidence writing - needs review")
+                state["status"] = "LOW_CONFIDENCE_WRITER" # TODO
+                state["human_response"] = True
+                state["automation_executed"] = True
             else:
-                print(f"✅ [REVIEWER] No review needed - continuing to SENDER")
+                state["status"] = "EMAIL_READY_TO_SEND"
+                state["automation_executed"] = True
             return END
 
     graph.add_conditional_edges(
