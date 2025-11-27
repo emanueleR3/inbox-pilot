@@ -202,9 +202,14 @@ async def google_callback(request: Request):
         history_id = None
         if services == "all":
             try:
+
+                print("\n\nDEBUG --- Access Token:", access_token)
+
                 logger.info(f"Creating Gmail watch for {email} (services: {services})")  # Usa sempre l'email autenticata per la watch
                 response = create_watch_for_user(access_token=access_token, refresh_token=refresh_token, user_email=email)
                 logger.info(f"Gmail watch response: {response}")
+
+                print("\n\nDEBUG --- Gmail watch response:", response)
                 
                 history_id = response.get("historyId")
                 if not history_id:
