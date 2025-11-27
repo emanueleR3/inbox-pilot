@@ -12,6 +12,7 @@ sys.path.insert(0, str(project_root))
 # Import core Jerry logic and components
 from automations.chatbot import jerry
 from automations.chatbot.tools import send_email
+from automations.chatbot.db.db import get_user_context
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 
 
@@ -25,9 +26,46 @@ class JerryService:
         self.checkpointer = jerry.checkpointer
         self.agent_prompt = jerry.agent_prompt
     
+    def _build_system_prompt_with_context(self, user_id: str) -> str:
+        """
+        Build the system prompt with user context from Supabase.
+        
+        Args:
+            user_id: The user identifier
+            
+        Returns:
+            System prompt enriched with user context
+        """
+        # Retrieve user context from Supabase
+        user_context = get_user_context(user_id)
+        
+        if not user_context:
+            print(f"⚠️ [JERRY_SERVICE] No user context found for user_id: {user_id}, using base prompt")
+            return self.agent_prompt
+        
+        # Build the enriched system prompt
+        context_section = f"""
+
+=== USER CONTEXT ===
+The following information is about the current user and their configured services. 
+Use this context to provide personalized assistance and to know which email accounts are available for sending emails.
+
+{user_context.get('summary', 'No additional context available.')}
+
+Configured email addresses available for sending:
+{', '.join(user_context.get('configured_emails', [])) or 'No configured emails'}
+
+=== END USER CONTEXT ===
+"""
+        
+        enriched_prompt = self.agent_prompt + context_section
+        print(f"✅ [JERRY_SERVICE] System prompt enriched with user context for user_id: {user_id}")
+        
+        return enriched_prompt
+    
     def create_thread(self, user_id: str) -> str:
         """
-        Create a new conversation thread.
+        Create a new conversation thread with user context.
         
         Args:
             user_id: The user identifier
@@ -37,10 +75,13 @@ class JerryService:
         """
         thread_id = f"user{user_id}:conv{uuid4()}"
         
-        # Initialize the thread with system message
+        # Build system prompt with user context
+        system_prompt = self._build_system_prompt_with_context(user_id)
+        
+        # Initialize the thread with enriched system message
         config = {"configurable": {"thread_id": thread_id}}
         self.graph.invoke(
-            {"messages": [SystemMessage(content=self.agent_prompt)]},
+            {"messages": [SystemMessage(content=system_prompt)]},
             config=config,
         )
         
@@ -90,9 +131,19 @@ class JerryService:
         Yields:
             Chunks of the response as they are generated
         """
-        # Create new thread if not provided
+        # Create new thread with user context if not provided
         if thread_id is None:
             thread_id = f"user{user_id}:conv{uuid4()}"
+            
+            # Build system prompt with user context
+            system_prompt = self._build_system_prompt_with_context(user_id)
+            
+            # Initialize the thread with enriched system message
+            config = {"configurable": {"thread_id": thread_id}}
+            self.graph.invoke(
+                {"messages": [SystemMessage(content=system_prompt)]},
+                config=config,
+            )
         
         config = {"configurable": {"thread_id": thread_id}}
         

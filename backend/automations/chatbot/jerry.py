@@ -7,6 +7,7 @@ from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
 from uuid import uuid4
 from automations.chatbot.tools import send_email
+from automations.chatbot.db.db import get_user_context
 from langchain_core.runnables import RunnableConfig
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -37,13 +38,58 @@ class GraphState(TypedDict):
     messages: Annotated[list, add_messages]
 
 
+def _build_system_prompt_with_context(user_id: str) -> str:
+    """
+    Build the system prompt with user context from Supabase.
+    
+    Args:
+        user_id: The user identifier
+        
+    Returns:
+        System prompt enriched with user context
+    """
+    # Retrieve user context from Supabase
+    user_context = get_user_context(user_id)
+    
+    if not user_context:
+        print(f"⚠️ [JERRY] No user context found for user_id: {user_id}, using base prompt")
+        return agent_prompt
+    
+    # Build the enriched system prompt
+    context_section = f"""
+
+=== USER CONTEXT ===
+The following information is about the current user and their configured services. 
+Use this context to provide personalized assistance and to know which email accounts are available for sending emails.
+
+{user_context.get('summary', 'No additional context available.')}
+
+Configured email addresses available for sending:
+{', '.join(user_context.get('configured_emails', [])) or 'No configured emails'}
+
+=== END USER CONTEXT ===
+"""
+    
+    enriched_prompt = agent_prompt + context_section
+    print(f"✅ [JERRY] System prompt enriched with user context for user_id: {user_id}")
+    
+    return enriched_prompt
+
+
 def handle_user_message(user_id: str, thread_id: str | None, text: str):
-    # Nel caso non esista thread_id, ne crea uno nuovo. Tuttavia, dovrebbe essere sempre gia' presente, perche' gestito a livello di API.
+    # Nel caso non esista thread_id, ne crea uno nuovo con user context. 
+    # Tuttavia, dovrebbe essere sempre gia' presente, perche' gestito a livello di API.
     if thread_id is None:
-        messages = [
-            SystemMessage(agent_prompt),
-        ]
+        # Build system prompt with user context
+        system_prompt = _build_system_prompt_with_context(user_id)
         thread_id = f"user{user_id}:conv{uuid4()}"
+        
+        # Initialize the thread with the system message first
+        config = {"configurable": {"thread_id": thread_id}}
+        graph.invoke(
+            {"messages": [SystemMessage(content=system_prompt)]},
+            config=config,
+        )
 
     config = {"configurable": {"thread_id": thread_id}}
 
