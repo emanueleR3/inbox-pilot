@@ -635,7 +635,7 @@ def process_automation_result(workflow_result: dict):
                 # TODO temporaneo
                 extracted_info = workflow_result.get("extracted_info", {})
                 box_email = extracted_info.get("box_email", "unknown")
-                if box_email in ["dev1@example.com", "dev4@example.com", "customer@example.com"]
+                if box_email in ["dev1@example.com", "dev4@example.com", "customer@example.com"]:
                     print(f"[WORKFLOW] Skipping email sending for {box_email}")
                     return
                 # ----------------------------------------
