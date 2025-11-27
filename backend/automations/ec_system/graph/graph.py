@@ -45,7 +45,6 @@ from .nodes import (
     extractor_company_info_node,
     writer_node,
     reviewer_node,
-    sender_node,
     # Subcategory handler nodes
     handle_offer_promotion_node,
     handle_newsletter_node,
