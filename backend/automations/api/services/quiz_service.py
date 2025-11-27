@@ -37,7 +37,7 @@ def _map_company_to_model(service_row: dict, subscription_row: dict | None) -> C
     sub_name = subscription_row.get("name") if subscription_row else None
     sub_website = subscription_row.get("website") if subscription_row else None
     sub_industry = subscription_row.get("industry") if subscription_row else None
-    sub_opening_hrs = subscription_row.get("opening_hours") if subscription_row else None
+    sub_business_hours = subscription_row.get("business_hours") if subscription_row else None
     sub_employee_count = subscription_row.get("employee_count") if subscription_row else None
     sub_products_services = subscription_row.get("products_services") if subscription_row else None
     sub_ton_of_voice = subscription_row.get("tone_of_voice") if subscription_row else "professional"
@@ -58,7 +58,7 @@ def _map_company_to_model(service_row: dict, subscription_row: dict | None) -> C
         company_name=sub_name,
         website=sub_website,
         industry=sub_industry,
-        opening_hrs=sub_opening_hrs,
+        business_hours=sub_business_hours,
         employee_count=sub_employee_count,
         address=address,
         products_services=sub_products_services,

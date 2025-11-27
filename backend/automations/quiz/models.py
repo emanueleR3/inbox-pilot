@@ -17,7 +17,7 @@ class CompanyInfo(BaseModel):
     company_name: Optional[str] = None
     website: Optional[AnyUrl] = None
     industry: Optional[str] = None
-    opening_hrs: Optional[str] = None
+    business_hours: Optional[dict] = None
     employee_count: Optional[int] = None
     address: Optional[Address] = None
     products_services: Optional[str] = None
@@ -58,8 +58,8 @@ class CompanyInfo(BaseModel):
                 lines.append(f"Address: {', '.join(addr_parts)}")
         if self.employee_count:
             lines.append(f"Employee Count: {self.employee_count}")
-        if self.opening_hrs:
-            lines.append(f"Opening Hours: {self.opening_hrs}")
+        if self.business_hours:
+            lines.append(f"Business Hours: {self.business_hours}")
         if self.products_services:
             lines.append(f"Products/Services: {self.products_services}")
         if self.tone_of_voice:

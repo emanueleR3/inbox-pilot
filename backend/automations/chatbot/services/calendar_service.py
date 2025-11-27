@@ -35,13 +35,13 @@ def propose_new_slots(email: str, favourite_day: Optional[str] = None, not_avail
     hash_token = data.get("hash_token")
     subscription_id = data.get("subscription_id")
 
-    response_sub = supabase.table("subscriptions").select("opening_hrs, working_days, appointament_duration").where("subscription_id", subscription_id).execute()
+    response_sub = supabase.table("subscriptions").select("business_hours, working_days, appointament_duration").where("subscription_id", subscription_id).execute()
 
     if not response_sub.data:
         print("No subscription data found.")
         return []
     
-    opening_hrs = response_sub.data[0].get("opening_hrs") 
+    business_hours = response_sub.data[0].get("business_hours") 
     working_days = response_sub.data[0].get("working_days") 
     appointment_duration = response_sub.data[0].get("appointament_duration") # in minutes
     
@@ -85,7 +85,7 @@ def propose_new_slots(email: str, favourite_day: Optional[str] = None, not_avail
         start_time, 
         end_time, 
         busy_slots, 
-        opening_hrs, 
+        business_hours, 
         working_days, 
         appointment_duration, 
         not_available_dates
