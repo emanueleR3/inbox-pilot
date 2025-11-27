@@ -37,6 +37,13 @@ class AdvancedEmailFilter:
             if sender_email.lower() == self.notification_sender_email.lower():
                 print(f"🚫 [FILTER] Skipping notification email from system sender: {sender_email}")
                 return None
+
+            # Check if email is from user
+            email_data["summarizer_only"] = False
+            if sender_email.lower() == email_data.get("user_email").lower():
+                email_data["action"] = "send_to_summarizer"
+                email_data["summarizer_only"] = True
+                return email_data
             
             # Check for duplicate message_id first
             message_id = email_data.get("message_id")

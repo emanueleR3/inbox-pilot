@@ -16,6 +16,10 @@ os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGCHAIN_ENDPOINT", "https://api.
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "corretto-email-classification")
 
+# Get max iteration for writer-reviewer loop
+MAX_REVIEW_ITERATIONS = int(os.getenv("MAX_REVIEW_ITERATIONS", "3"))
+CORRECTNESS_THRESHOLD = float(os.getenv("CORRECTNESS_THRESHOLD", "0.9"))
+
 from langgraph.graph import StateGraph, END
 
 from .config import NodeNames
@@ -151,9 +155,24 @@ def create_email_classification_graph():
     graph.set_entry_point(NodeNames.NEW_MAIL)
     graph.add_edge(NodeNames.NEW_MAIL, NodeNames.CONFIG_LOADER)
     graph.add_edge(NodeNames.CONFIG_LOADER, NodeNames.LANGUAGE_DETECTOR)
-    graph.add_edge(NodeNames.LANGUAGE_DETECTOR, NodeNames.AI_FILTER)
+
+    def route_after_language_detector(state):
+        if state.get("summarizer_only"):
+            return NodeNames.SUMMARIZER
+        else:
+            return NodeNames.AI_FILTER
+
+    graph.add_conditional_edges(
+        NodeNames.LANGUAGE_DETECTOR,
+        route_after_language_detector,
+        {
+            NodeNames.AI_FILTER: NodeNames.AI_FILTER,
+            NodeNames.SUMMARIZER: NodeNames.SUMMARIZER,
+        }
+    )
+
     graph.add_edge(NodeNames.AI_FILTER, NodeNames.GUARDRAIL)
-    
+
     # Conditional edge from guardrail: continue if safe, end if dangerous
     def should_continue_after_guardrail(state):
         """Check if workflow should continue after guardrail."""
@@ -169,9 +188,26 @@ def create_email_classification_graph():
             END: END
         }
     )
+
+    def route_after_summarizer(state):
+        if state.get("summarizer_only"):
+            if state.get("has_attachments"):
+                return NodeNames.ATTACHMENT_EXTRACTOR
+            else:
+                return END
+        else:
+            return NodeNames.CLASSIFIER
     
-    # Edge from summarizer to classifier
-    graph.add_edge(NodeNames.SUMMARIZER, NodeNames.CLASSIFIER)
+    graph.add_conditional_edges(
+        NodeNames.SUMMARIZER,
+        route_after_summarizer,
+        {
+            NodeNames.CLASSIFIER: NodeNames.CLASSIFIER,
+            NodeNames.ATTACHMENT_EXTRACTOR: NodeNames.ATTACHMENT_EXTRACTOR,
+            END: END
+        }
+    )# Edge from summarizer to classifier
+    
     
     # Conditional edge from classifier: check confidence and whether attachments are required
     def should_continue_after_classifier(state):
@@ -203,8 +239,19 @@ def create_email_classification_graph():
     # Edge from attachment extractor to attachment summarizer
     graph.add_edge(NodeNames.ATTACHMENT_EXTRACTOR, NodeNames.ATTACHMENT_SUMMARIZER)
     
-    # Edge from attachment summarizer to router
-    graph.add_edge(NodeNames.ATTACHMENT_SUMMARIZER, NodeNames.ROUTER)
+    def should_continue_after_attachment_summarizer(state):
+        if state.get("summarizer_only"):
+            return END
+        return NodeNames.ROUTER
+    
+    graph.add_conditional_edges(
+        NodeNames.ATTACHMENT_SUMMARIZER,
+        should_continue_after_attachment_summarizer,
+        {
+            NodeNames.ROUTER: NodeNames.ROUTER,
+            END: END
+        }
+    )
     
     # Edge from router to evaluator
     graph.add_edge(NodeNames.ROUTER, NodeNames.EVALUATOR)
@@ -475,6 +522,62 @@ def create_email_classification_graph():
             END: END
         }
     )
+
+    # Conditional logic for Rescheduler node based on tool called and results
+    def should_continue_after_rescheduler(state):
+        """
+        Check rescheduler results and create appropriate AutomationExecutedResponse.
+        Routes based on which tool was called (propose_new_slots vs reschedule_appointment)
+        and the results obtained.
+        """
+        
+        # Get rescheduler results
+        scheduled = state.get("appointment_scheduled", False)
+        event_code = state.get("appointment_event_code")
+        proposed_slots = state.get("appointment_proposed_slots")
+        
+        if state.get("automation_executed"):
+            return END    
+
+        if state.get("status") == "EVENT_CODE_INVALID":
+            return NodeNames.EXTRACTOR_COMPANY_INFO
+
+        # Case 1: propose_new_slots was called (proposed_slots is not None)
+        if proposed_slots is not None:
+            print(f"📅 [RESCHEDULER] Tool propose_new_slots called - checking results")
+            
+            # Check if array is empty
+            if not proposed_slots or len(proposed_slots) == 0:
+                state["status"] = "NO_AVAILABLE_SLOTS"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return END
+            else:
+                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to Extractor Company Info")
+                return NodeNames.EXTRACTOR_COMPANY_INFO
+            
+        # Case 2: book_appointment was called (scheduled is not None and proposed_slots is None)
+        else:
+            print(f"📅 [RESCHEDULER] Tool reschedule_appointment called - checking scheduled status")
+            
+            if scheduled:
+                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code} - Routing to Extractor Company Info")
+                return NodeNames.EXTRACTOR_COMPANY_INFO
+            else:
+                state["status"] = "APPOINTMENT_NOT_SCHEDULED"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return END
+    
+    # Add conditional edge from RESCHEDULER
+    graph.add_conditional_edges(
+        NodeNames.RESCHEDULER,
+        should_continue_after_rescheduler,
+        {
+            NodeNames.EXTRACTOR_COMPANY_INFO: NodeNames.EXTRACTOR_COMPANY_INFO,
+            END: END
+        }
+    )
     
     # Conditional logic for Scheduler node based on tool called and results
     def should_continue_after_scheduler(state):
@@ -565,76 +668,52 @@ def create_email_classification_graph():
         }
     )
 
-    graph.add_edge(NodeNames.WRITER, NodeNames.REVIEWER) # TODO: è sempre connesso?
+    # Writer to Reviewer edge - always goes to reviewer after first write
+    graph.add_edge(NodeNames.WRITER, NodeNames.REVIEWER)
 
     def should_continue_after_reviewer(state):
         """
-        Check reviewer results and create appropriate AutomationExecutedResponse.
-        Routes based on which tool was called (propose_new_slots vs reschedule_appointment)
-        and the results obtained.
+        Check reviewer results and decide whether to loop back to writer or continue to sender.
+        
+        Loop conditions:
+        - needs_review is True AND correctness_score < CORRECTNESS_THRESHOLD (0.9)
+        - review_iteration < MAX_REVIEW_ITERATIONS
+        
+        If loop conditions are not met, continue to sender.
         """
-        # TODO: implement logic
-
+        # TODO momentaneo
+        print(f"📝 [REVIEWER] Checking review results: {state.get('written_email_body')}")
         return END
+        # ===============
+
+        needs_review = state.get("needs_review", False)
+        correctness_score = state.get("correctness_score", 1.0)
+        review_iteration = state.get("review_iteration", 0)
+        
+        # Check if we should loop back to writer
+        should_loop = (
+            needs_review and 
+            correctness_score < CORRECTNESS_THRESHOLD and 
+            review_iteration < MAX_REVIEW_ITERATIONS
+        )
+        
+        if should_loop:
+            print(f"🔁 [REVIEWER] Looping back to WRITER (iteration {review_iteration + 1})")
+            return NodeNames.WRITER
+        else:
+            if review_iteration >= MAX_REVIEW_ITERATIONS:
+                print(f"⚠️ [REVIEWER] Max iterations reached - continuing to SENDER")
+            elif correctness_score >= CORRECTNESS_THRESHOLD:
+                print(f"✅ [REVIEWER] Correctness threshold met - continuing to SENDER")
+            else:
+                print(f"✅ [REVIEWER] No review needed - continuing to SENDER")
+            return END
 
     graph.add_conditional_edges(
         NodeNames.REVIEWER,
         should_continue_after_reviewer,
         {
             NodeNames.WRITER: NodeNames.WRITER,
-            NodeNames.SENDER: NodeNames.SENDER,
-            END: END
-        }
-    )
-
-    graph.add_edge(NodeNames.SENDER, END)
-    
-    # Conditional logic for Rescheduler node based on tool called and results
-    def should_continue_after_rescheduler(state):
-        """
-        Check rescheduler results and create appropriate AutomationExecutedResponse.
-        Routes based on which tool was called (propose_new_slots vs reschedule_appointment)
-        and the results obtained.
-        """
-        
-        # Get rescheduler results
-        scheduled = state.get("appointment_scheduled", False)
-        event_code = state.get("appointment_event_code")
-        proposed_slots = state.get("appointment_proposed_slots")
-        
-        # Case 1: propose_new_slots was called (proposed_slots is not None)
-        if proposed_slots is not None:
-            print(f"📅 [RESCHEDULER] Tool propose_new_slots called - checking results")
-            
-            # Check if array is empty
-            if not proposed_slots or len(proposed_slots) == 0:
-                state["status"] = "NO_AVAILABLE_SLOTS"
-                state["human_response"] = True
-                state["automation_executed"] = True
-                return END
-            else:
-                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to Extractor Company Info")
-                return NodeNames.EXTRACTOR_COMPANY_INFO
-            
-        # Case 2: book_appointment was called (scheduled is not None and proposed_slots is None)
-        else:
-            print(f"📅 [RESCHEDULER] Tool reschedule_appointment called - checking scheduled status")
-            
-            if scheduled:
-                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code} - Routing to Extractor Company Info")
-                return NodeNames.EXTRACTOR_COMPANY_INFO
-            else:
-                state["status"] = "APPOINTMENT_NOT_SCHEDULED"
-                state["human_response"] = True
-                state["automation_executed"] = True
-                return END
-    
-    # Add conditional edge from RESCHEDULER
-    graph.add_conditional_edges(
-        NodeNames.RESCHEDULER,
-        should_continue_after_rescheduler,
-        {
-            NodeNames.EXTRACTOR_COMPANY_INFO: NodeNames.EXTRACTOR_COMPANY_INFO,
             END: END
         }
     )
@@ -688,7 +767,10 @@ def run_workflow(email_data: dict = None):
                 "user_config": None,
                 "attachments_too_large": False,
                 "human_response": False,
-                "automation_executed": False
+                "automation_executed": False,
+                "summarizer_only": email_data.get("summarizer_only", False),
+                "review_iteration": 0,
+                "edit_history": []
             }
         else:
             # Create default initial state

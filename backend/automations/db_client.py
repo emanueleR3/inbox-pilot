@@ -8,6 +8,7 @@ from supabase import create_client, Client
 from threading import Lock
 from typing import Dict, Optional
 from dotenv import load_dotenv
+from ec_system.utils.utils import decrypt
 
 # Carica le variabili d'ambiente
 load_dotenv()
@@ -674,6 +675,52 @@ def get_company_information_sync(box_email: str) -> Optional[str]:
         
     except Exception as e:
         print(f"❌ [DB_CLIENT] Error retrieving company information: {str(e)}")
+        return None
+
+
+
+def get_email_service_data(email: str) -> Optional[Dict]:
+    """
+    Retrieves email service configuration (provider and credentials) from subscription_services.
+    
+    Args:
+        email: Email address to look up
+        
+    Returns:
+        Dict with email_provider and credentials, or None if not found
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select(
+            "email_provider, hashed_access_token, smtp_server, smtp_port, hashed_password"
+        ).eq("email", email).execute()
+        
+        if response.data:
+            data = response.data[0]
+            
+            # Decrypt hashed_password if present
+            hashed_password = data.get("hashed_password")
+            if hashed_password:
+                try:
+                    # Decrypt using ENCRYPTION_KEY_PASS
+                    # Note: decrypt function expects "pass" as the condition to use _cipher_pass
+                    # which is initialized with ENCRYPTION_KEY_PASS
+                    decrypted_password = decrypt(hashed_password, "pass")
+                    data["hashed_password"] = decrypted_password
+                except Exception as e:
+                    print(f"❌ [DB_CLIENT] Error decrypting password: {e}")
+                    # Keep original hashed password or set to None? 
+                    # User asked to decrypt, if it fails we probably can't use it.
+                    # But let's keep the data as is to avoid breaking flow if decryption fails but other fields are needed.
+                    pass
+            
+            return data
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving email service data: {e}")
         return None
 
 

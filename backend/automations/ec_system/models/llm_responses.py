@@ -3,7 +3,7 @@ Pydantic models for LLM responses and structured outputs.
 """
 
 from pydantic import BaseModel, Field
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 from enum import Enum
 
 
@@ -410,13 +410,33 @@ class ExtractorCompanyInfoResponse(BaseModel):
         ...,
         description="Dizionario contenente le informazioni aziendali rilevanti estratte per rispondere alla email"
     )
-    """Response model for OTHER email evaluation."""
-    priority_score: float = Field(
-        ..., 
-        ge=0.0, le=1.0,
-        description="Punteggio di priorità da 0.0 a 1.0 (prima cifra decimale)"
+
+
+class WriteResponse(BaseModel):
+    """Response model for Writer node - email writing result."""
+    written_email_body: str = Field(
+        ...,
+        description="Il corpo della email di risposta generata"
     )
-    subcategory: OtherSubcategory = Field(
-        ..., 
-        description="Sottocategoria specifica per email generiche"
+    modifications_summary: Optional[str] = Field(
+        None,
+        description="Descrizione testuale delle modifiche applicate seguendo le linee guida del reviewer. Deve essere vuota se non ci sono linee guida da seguire."
+    )
+
+
+class ReviewerResponse(BaseModel):
+    """Response model for Reviewer node - email review result."""
+    needs_review: bool = Field(
+        ...,
+        description="True se l'email necessita di ulteriori correzioni, False altrimenti"
+    )
+    correctness_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Punteggio di correttezza dell'email da 0.0 a 1.0"
+    )
+    guidelines: Optional[List[str]] = Field(
+        None,
+        description="Lista di linee guida per correggere l'email, nel formato 'parte da correggere : correzione'"
     )

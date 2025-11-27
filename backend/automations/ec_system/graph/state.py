@@ -49,6 +49,8 @@ class EmailState(TypedDict):
     change_new_attendees: Optional[List[str]]  # New attendees to add
     change_new_place: Optional[str]  # New location
     change_additional_notes: Optional[str]  # Additional notes
+    # Cancellation-specific fields (for CANCELLATION subcategory)
+    cancellation_event_code: Optional[str]  # Code of event to cancel
     # Extract info and write email
     guidelines: Optional[List[str]]  # Guidelines for writing the email
     written_email_body: Optional[str]  # Body of the email to write
@@ -56,6 +58,8 @@ class EmailState(TypedDict):
     correctness_score: Optional[float]  # Correctness score of the email
     needs_review: Optional[bool]  # Flag indicating if email needs review
     low_confidence_classification: Optional[bool]  # Flag for low confidence classification
+    review_iteration: Optional[int]  # Counter for writer-reviewer loop iterations
+    edit_history: Optional[List[str]]  # History of modification summaries from writer (text descriptions of changes made)
 
 
 def create_initial_state() -> EmailState:
@@ -102,5 +106,7 @@ def create_initial_state() -> EmailState:
         "written_email_body": None,
         "chunked_company_informations": None,
         "correctness_score": None,
-        "needs_review": None
+        "needs_review": None,
+        "review_iteration": 0,
+        "edit_history": []
     }

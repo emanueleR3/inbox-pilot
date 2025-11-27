@@ -3,8 +3,11 @@ from db_client import (
     save_ai_generated_email,
     get_subscription_service_id_by_email,
     update_thread,
-    update_ai_generated_email_outcome
+    update_ai_generated_email_outcome,
+    get_email_service_data
 )
+import os
+import requests
 from .services.notification_client import (
     send_high_priority_notification, 
     send_low_confidence_notification,
@@ -21,6 +24,9 @@ from .services.notification_client import (
 )
 from models import ThreadStatus, EmailOutcome
 from datetime import datetime, timezone
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def process_automation_result(workflow_result: dict):
     """
@@ -28,6 +34,8 @@ def process_automation_result(workflow_result: dict):
     """
 
     status = workflow_result.get("status", "unknown")
+
+    # TODO gestire caso di summarizer_only
 
     # ======= AUTOMATION DISABLED CHECK ======= ✅
     if status == "AUTOMATION_DISABLED":
@@ -631,7 +639,57 @@ def process_automation_result(workflow_result: dict):
 
                 try:
                     print(f"📧 [WORKFLOW] Sending email...")
-                    # TODO send email (NON IMPLEMENTARE QUESTO)
+
+                    # Get email service data
+                    email_service_data = get_email_service_data(box_email)
+                    if not email_service_data:
+                        raise Exception(f"No email service data found for {box_email}")
+
+                    provider = email_service_data.get("email_provider")
+                    if not provider:
+                        raise Exception(f"No email provider configured for {box_email}")
+
+                    # Prepare payload TODO voglio rispondere all'email e non creare un nuovo thread
+                    payload = {
+                        "email": extracted_info.get("from"), # Recipient
+                        "subject": extracted_info.get("subject"),
+                        "body": workflow_result.get("written_email_body")
+                    }
+
+                    senders_url = os.getenv("SENDERS_URL")
+                    endpoint = ""
+
+                    if provider == "google":
+                        endpoint = f"{senders_url}/send-email/send-gmail"
+                        payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
+                    elif provider == "microsoft":
+                        endpoint = f"{senders_url}/send-email/send-microsoft"
+                        payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
+                    elif provider == "imap":
+                        endpoint = f"{senders_url}/send-email/send-smtp"
+                        payload["smtp_server"] = email_service_data.get("smtp_server")
+                        payload["smtp_port"] = email_service_data.get("smtp_port")
+                        payload["smtp_email"] = box_email
+                        payload["hashed_password"] = email_service_data.get("hashed_password")
+                    else:
+                        raise Exception(f"Unknown email provider: {provider}")
+
+                    # Send request
+                    response = requests.post(endpoint, json=payload)
+                    response.raise_for_status()
+                    
+                    result = response.json()
+                    if not result.get("success"):
+                         raise Exception(f"Email sending failed: {result.get('message')}")
+
+                    print(f"✅ [WORKFLOW] Email sent successfully via {provider}")
+                    
+                    # Update ai_generated_email outcome to SENT
+                    try:
+                        update_ai_generated_email_outcome(thread_id, EmailOutcome.SENT.value)
+                    except Exception as update_error:
+                        print(f"❌ [WORKFLOW] Error updating ai_generated_email outcome: {update_error}")
+                    
                 except Exception as e:
                     print(f"❌ [WORKFLOW] Error sending email: {e}")
                     
