@@ -27,6 +27,10 @@ from datetime import datetime
 # Import attachment extractor service
 from ..services.attachment_extractor import attachment_extractor
 
+# Get max iteration for writer-reviewer loop
+MAX_REVIEW_ITERATIONS = int(os.getenv("MAX_REVIEW_ITERATIONS", 3))
+CORRECTNESS_THRESHOLD = float(os.getenv("CORRECTNESS_THRESHOLD", 0.9))
+
 
 def new_mail_node(state):
     """
@@ -1816,16 +1820,27 @@ def reviewer_node(state):
         state["correctness_score"] = review_response.correctness_score
         state["guidelines"] = review_response.guidelines if review_response.guidelines else []
         
-        print(f"✅ [REVIEWER] Review completed")
-        print(f"   📊 Needs review: {state['needs_review']}")
-        print(f"   📈 Correctness score: {state['correctness_score']}")
-        print(f"   📋 Guidelines provided: {len(state['guidelines'])}")
+        # Check if we should loop back to writer
+        should_loop = (
+            state["needs_review"] and 
+            state["correctness_score"] < CORRECTNESS_THRESHOLD and 
+            state["review_iteration"] < MAX_REVIEW_ITERATIONS
+        )
         
-        # Print guidelines if provided
-        if state['guidelines']:
-            print(f"   📝 Guidelines:")
-            for i, guideline in enumerate(state['guidelines'], 1):
-                print(f"      {i}. {guideline}")
+        if should_loop:
+            print(f"🔁 [REVIEWER] Looping back to WRITER (iteration {state['review_iteration'] + 1})")
+            # State remains as is, graph will route back to WRITER based on needs_review/correctness
+        else:
+            # End of loop - determine final status
+            if state["needs_review"] and state["correctness_score"] < CORRECTNESS_THRESHOLD:
+                print(f"⚠️ [REVIEWER] Low confidence writing - needs review")
+                state["status"] = "LOW_CONFIDENCE_WRITER"
+                state["human_response"] = True
+                state["automation_executed"] = True
+            else:
+                print(f"✅ [REVIEWER] Email ready to send")
+                state["status"] = "EMAIL_READY_TO_SEND"
+                state["automation_executed"] = True
         
         return state
         

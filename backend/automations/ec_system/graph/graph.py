@@ -672,37 +672,13 @@ def create_email_classification_graph():
     def should_continue_after_reviewer(state):
         """
         Check reviewer results and decide whether to loop back to writer or continue to sender.
-        
-        Loop conditions:
-        - needs_review is True AND correctness_score < CORRECTNESS_THRESHOLD (0.9)
-        - review_iteration < MAX_REVIEW_ITERATIONS
-        
-        If loop conditions are not met, continue to sender.
+        Logic for status updates is now in reviewer_node.
         """
-        needs_review = state.get("needs_review", False)
-        correctness_score = state.get("correctness_score", 1.0)
-        review_iteration = state.get("review_iteration", 0)
-        
-        # Check if we should loop back to writer
-        should_loop = (
-            needs_review and 
-            correctness_score < CORRECTNESS_THRESHOLD and 
-            review_iteration < MAX_REVIEW_ITERATIONS
-        )
-        
-        if should_loop:
-            print(f"🔁 [REVIEWER] Looping back to WRITER (iteration {review_iteration + 1})")
-            return NodeNames.WRITER
-        else:
-            if needs_review and correctness_score < CORRECTNESS_THRESHOLD:
-                print(f"⚠️ [REVIEWER] Low confidence writing - needs review")
-                state["status"] = "LOW_CONFIDENCE_WRITER" # TODO
-                state["human_response"] = True
-                state["automation_executed"] = True
-            else:
-                state["status"] = "EMAIL_READY_TO_SEND"
-                state["automation_executed"] = True
+        if state.get("automation_executed"):
             return END
+        
+        # If not automated/ended, it means we need to loop
+        return NodeNames.WRITER
 
     graph.add_conditional_edges(
         NodeNames.REVIEWER,
