@@ -632,6 +632,14 @@ def process_automation_result(workflow_result: dict):
                 except Exception as e:
                     print(f"❌ [WORKFLOW] Error saving AI generated email: {e}")
 
+                # TODO temporaneo
+                extracted_info = workflow_result.get("extracted_info", {})
+                box_email = extracted_info.get("box_email", "unknown")
+                if box_email in ["dev1@example.com", "dev4@example.com", "customer@example.com"]
+                    print(f"[WORKFLOW] Skipping email sending for {box_email}")
+                    return
+                # ----------------------------------------
+
                 try:
                     print(f"📧 [WORKFLOW] Sending email...")
 
