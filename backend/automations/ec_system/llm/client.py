@@ -33,7 +33,8 @@ from ..models.llm_responses import (
     ReaderCancellationResponse,
     SchedulerResponse,
     ExtractorCompanyInfoResponse,
-    WriteResponse
+    WriteResponse,
+    ReviewerResponse
 )
 from ..prompts.templates import (
     LANGUAGE_DETECTION_PROMPT,
@@ -84,7 +85,9 @@ from ..prompts.templates import (
     WRITER_GENERIC_PROMPT_ITA,
     WRITER_GENERIC_PROMPT_ENG,
     GUIDELINES_SECTION_ITA,
-    GUIDELINES_SECTION_ENG
+    GUIDELINES_SECTION_ENG,
+    REVIEWER_PROMPT_ITA,
+    REVIEWER_PROMPT_ENG
 )
 
 # Import utils and db_client for calendar operations
@@ -1989,6 +1992,85 @@ class LLMClient:
             else:
                 error_msg = "An error occurred while generating the response. Please try again."
             return WriteResponse(written_email_body=error_msg)
+
+    def review_email(
+        self,
+        written_email_body: str,
+        chunked_company_info: dict,
+        extended_summary: str,
+        mail_summary: str,
+        edit_history: list,
+        language: str = "ITA"
+    ):
+        """
+        Review a written email body and provide feedback.
+        
+        Args:
+            written_email_body: The email body to review
+            chunked_company_info: Relevant company information
+            extended_summary: Extended conversation summary
+            mail_summary: Current email summary
+            edit_history: History of previous editing iterations
+            language: Language (ITA or ENG)
+            
+        Returns:
+            ReviewerResponse with needs_review, correctness_score, and guidelines
+        """
+        try:
+            print(f"🔍 [LLM_CLIENT] Reviewing email...")
+            
+            # Select prompt based on language
+            prompt_template = REVIEWER_PROMPT_ITA if language == "ITA" else REVIEWER_PROMPT_ENG
+            
+            # Format edit history for prompt (now it's a list of strings)
+            if edit_history and len(edit_history) > 0:
+                if language == "ITA":
+                    edit_history_text = "STORICO MODIFICHE PRECEDENTI:\n\n" + "\n\n".join([f"Iterazione {idx}:\n{entry}" for idx, entry in enumerate(edit_history, 1)])
+                else:
+                    edit_history_text = "PREVIOUS EDIT HISTORY:\n\n" + "\n\n".join([f"Iteration {idx}:\n{entry}" for idx, entry in enumerate(edit_history, 1)])
+            else:
+                if language == "ITA":
+                    edit_history_text = "Questa è la prima iterazione, nessuno storico di modifiche precedenti."
+                else:
+                    edit_history_text = "This is the first iteration, no previous edit history."
+            
+            # Convert chunked_company_info to string
+            import json
+            company_info_str = json.dumps(chunked_company_info, ensure_ascii=False, indent=2) if chunked_company_info else "{}"
+            
+            # Build the prompt
+            prompt = prompt_template.format(
+                extended_summary=extended_summary or "",
+                mail_summary=mail_summary or "",
+                chunked_company_info=company_info_str,
+                edit_history_text=edit_history_text,
+                written_email_body=written_email_body
+            )
+            
+            print(f"   📊 Email length: {len(written_email_body)} characters")
+            print(f"   🗣️ Language: {language}")
+            print(f"   📝 Edit history entries: {len(edit_history)}")
+            
+            # Use structured completion to get ReviewerResponse
+            response = self.structured_completion(prompt, ReviewerResponse)
+            
+            print(f"✅ [LLM_CLIENT] Email review completed")
+            print(f"   📊 Needs review: {response.needs_review}")
+            print(f"   📈 Correctness score: {response.correctness_score}")
+            print(f"   📋 Guidelines: {len(response.guidelines) if response.guidelines else 0}")
+            
+            return response
+            
+        except Exception as e:
+            print(f"❌ [LLM_CLIENT] Error reviewing email: {str(e)}")
+            # TODO: Return default acceptable response on error
+            return ReviewerResponse(
+                needs_review=False,
+                correctness_score=0.8,
+                guidelines=[]
+            )
+
+        
 
         
 

@@ -1747,8 +1747,20 @@ def writer_node(state):
         # Update state with written email
         state["written_email_body"] = write_response.written_email_body
         
-        print(f"✅ [WRITER] Email written successfully")
-        print(f"   📝 Email length: {len(write_response.written_email_body)} characters")
+        # Update edit history with modifications summary from LLM
+        # Only append if there's a meaningful summary (guidelines were applied)
+        if write_response.modifications_summary and write_response.modifications_summary.strip():
+            edit_history = state.get("edit_history", [])
+            edit_history.append(write_response.modifications_summary)
+            state["edit_history"] = edit_history
+            
+            print(f"✅ [WRITER] Email written successfully")
+            print(f"   📝 Email length: {len(write_response.written_email_body)} characters")
+            print(f"   🗓️ Edit history entries: {len(edit_history)}")
+            print(f"   ✏️  Modifications: {write_response.modifications_summary}")
+        else:
+            print(f"✅ [WRITER] Email written successfully (no modifications to track)")
+            print(f"   📝 Email length: {len(write_response.written_email_body)} characters")
         
         return state
         
@@ -1762,10 +1774,7 @@ def writer_node(state):
 def reviewer_node(state):
     """
     Review the written email and provide feedback.
-    Increments the review_iteration counter and sets needs_review and correctness_score.
-    
-    NOTE: The actual review logic is NOT implemented yet.
-    This node currently just increments the iteration counter and passes through.
+    Uses LLM to assess email quality against context and company information.
     
     Args:
         state: Current workflow state
@@ -1780,34 +1789,51 @@ def reviewer_node(state):
         current_iteration = state.get("review_iteration", 0)
         state["review_iteration"] = current_iteration + 1
         
+        # Get required parameters from state
+        written_email_body = state.get("written_email_body", "")
+        chunked_company_info = state.get("chunked_company_informations", {})
+        extended_summary = state.get("extended_summary", "")
+        mail_summary = state.get("mail_summary", "")
+        edit_history = state.get("edit_history", [])
+        language = state.get("language", "ITA")
+        
         print(f"   🔢 Review iteration: {state['review_iteration']}")
-        print(f"   📄 Written email length: {len(state.get('written_email_body', ''))}")
+        print(f"   📄 Written email length: {len(written_email_body)}")
+        print(f"   🗓️ Edit history entries: {len(edit_history)}")
         
-        # TODO: Implement actual review logic using LLM
-        # For now, just pass through with default values
-        # The reviewer should:
-        # 1. Analyze the written email against the context
-        # 2. Check for accuracy, tone, completeness
-        # 3. Set needs_review=True if corrections are needed
-        # 4. Set correctness_score (0.0 to 1.0)
-        # 5. Provide guidelines list if corrections are needed
+        # Call LLM to review the email
+        review_response = llm_client.review_email(
+            written_email_body=written_email_body,
+            chunked_company_info=chunked_company_info,
+            extended_summary=extended_summary,
+            mail_summary=mail_summary,
+            edit_history=edit_history,
+            language=language
+        )
         
-        # Default values - assume email is acceptable
-        state["needs_review"] = False
-        state["correctness_score"] = 1.0
-        state["guidelines"] = []
+        # Update state with review results
+        state["needs_review"] = review_response.needs_review
+        state["correctness_score"] = review_response.correctness_score
+        state["guidelines"] = review_response.guidelines if review_response.guidelines else []
         
-        print(f"✅ [REVIEWER] Review completed (placeholder - not yet implemented)")
+        print(f"✅ [REVIEWER] Review completed")
         print(f"   📊 Needs review: {state['needs_review']}")
         print(f"   📈 Correctness score: {state['correctness_score']}")
+        print(f"   📋 Guidelines provided: {len(state['guidelines'])}")
+        
+        # Print guidelines if provided
+        if state['guidelines']:
+            print(f"   📝 Guidelines:")
+            for i, guideline in enumerate(state['guidelines'], 1):
+                print(f"      {i}. {guideline}")
         
         return state
         
     except Exception as e:
         print(f"❌ [REVIEWER] Error in review: {e}")
-        # On error, don't require review and pass through
+        # TODO: On error, don't require review and pass through
         state["needs_review"] = False
-        state["correctness_score"] = 1.0
+        state["correctness_score"] = 0.8
         state["guidelines"] = []
         return state
 

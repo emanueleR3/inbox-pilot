@@ -59,6 +59,7 @@ class EmailState(TypedDict):
     needs_review: Optional[bool]  # Flag indicating if email needs review
     low_confidence_classification: Optional[bool]  # Flag for low confidence classification
     review_iteration: Optional[int]  # Counter for writer-reviewer loop iterations
+    edit_history: Optional[List[str]]  # History of modification summaries from writer (text descriptions of changes made)
 
 
 def create_initial_state() -> EmailState:
@@ -106,5 +107,6 @@ def create_initial_state() -> EmailState:
         "chunked_company_informations": None,
         "correctness_score": None,
         "needs_review": None,
-        "review_iteration": 0
+        "review_iteration": 0,
+        "edit_history": []
     }

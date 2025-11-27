@@ -522,6 +522,62 @@ def create_email_classification_graph():
             END: END
         }
     )
+
+    # Conditional logic for Rescheduler node based on tool called and results
+    def should_continue_after_rescheduler(state):
+        """
+        Check rescheduler results and create appropriate AutomationExecutedResponse.
+        Routes based on which tool was called (propose_new_slots vs reschedule_appointment)
+        and the results obtained.
+        """
+        
+        # Get rescheduler results
+        scheduled = state.get("appointment_scheduled", False)
+        event_code = state.get("appointment_event_code")
+        proposed_slots = state.get("appointment_proposed_slots")
+        
+        if state.get("automation_executed"):
+            return END    
+
+        if state.get("status") == "EVENT_CODE_INVALID":
+            return NodeNames.EXTRACTOR_COMPANY_INFO
+
+        # Case 1: propose_new_slots was called (proposed_slots is not None)
+        if proposed_slots is not None:
+            print(f"📅 [RESCHEDULER] Tool propose_new_slots called - checking results")
+            
+            # Check if array is empty
+            if not proposed_slots or len(proposed_slots) == 0:
+                state["status"] = "NO_AVAILABLE_SLOTS"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return END
+            else:
+                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to Extractor Company Info")
+                return NodeNames.EXTRACTOR_COMPANY_INFO
+            
+        # Case 2: book_appointment was called (scheduled is not None and proposed_slots is None)
+        else:
+            print(f"📅 [RESCHEDULER] Tool reschedule_appointment called - checking scheduled status")
+            
+            if scheduled:
+                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code} - Routing to Extractor Company Info")
+                return NodeNames.EXTRACTOR_COMPANY_INFO
+            else:
+                state["status"] = "APPOINTMENT_NOT_SCHEDULED"
+                state["human_response"] = True
+                state["automation_executed"] = True
+                return END
+    
+    # Add conditional edge from RESCHEDULER
+    graph.add_conditional_edges(
+        NodeNames.RESCHEDULER,
+        should_continue_after_rescheduler,
+        {
+            NodeNames.EXTRACTOR_COMPANY_INFO: NodeNames.EXTRACTOR_COMPANY_INFO,
+            END: END
+        }
+    )
     
     # Conditional logic for Scheduler node based on tool called and results
     def should_continue_after_scheduler(state):
@@ -661,64 +717,6 @@ def create_email_classification_graph():
             END: END
         }
     )
-
-    graph.add_edge(NodeNames.SENDER, END)
-    
-    # Conditional logic for Rescheduler node based on tool called and results
-    def should_continue_after_rescheduler(state):
-        """
-        Check rescheduler results and create appropriate AutomationExecutedResponse.
-        Routes based on which tool was called (propose_new_slots vs reschedule_appointment)
-        and the results obtained.
-        """
-        
-        # Get rescheduler results
-        scheduled = state.get("appointment_scheduled", False)
-        event_code = state.get("appointment_event_code")
-        proposed_slots = state.get("appointment_proposed_slots")
-        
-        if state.get("automation_executed"):
-            return END    
-
-        if state.get("status") == "EVENT_CODE_INVALID":
-            return NodeNames.EXTRACTOR_COMPANY_INFO
-
-        # Case 1: propose_new_slots was called (proposed_slots is not None)
-        if proposed_slots is not None:
-            print(f"📅 [RESCHEDULER] Tool propose_new_slots called - checking results")
-            
-            # Check if array is empty
-            if not proposed_slots or len(proposed_slots) == 0:
-                state["status"] = "NO_AVAILABLE_SLOTS"
-                state["human_response"] = True
-                state["automation_executed"] = True
-                return END
-            else:
-                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to Extractor Company Info")
-                return NodeNames.EXTRACTOR_COMPANY_INFO
-            
-        # Case 2: book_appointment was called (scheduled is not None and proposed_slots is None)
-        else:
-            print(f"📅 [RESCHEDULER] Tool reschedule_appointment called - checking scheduled status")
-            
-            if scheduled:
-                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code} - Routing to Extractor Company Info")
-                return NodeNames.EXTRACTOR_COMPANY_INFO
-            else:
-                state["status"] = "APPOINTMENT_NOT_SCHEDULED"
-                state["human_response"] = True
-                state["automation_executed"] = True
-                return END
-    
-    # Add conditional edge from RESCHEDULER
-    graph.add_conditional_edges(
-        NodeNames.RESCHEDULER,
-        should_continue_after_rescheduler,
-        {
-            NodeNames.EXTRACTOR_COMPANY_INFO: NodeNames.EXTRACTOR_COMPANY_INFO,
-            END: END
-        }
-    )
     
     return graph
 
@@ -771,7 +769,8 @@ def run_workflow(email_data: dict = None):
                 "human_response": False,
                 "automation_executed": False,
                 "summarizer_only": email_data.get("summarizer_only", False),
-                "review_iteration": 0
+                "review_iteration": 0,
+                "edit_history": []
             }
         else:
             # Create default initial state

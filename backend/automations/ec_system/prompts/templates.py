@@ -1576,7 +1576,9 @@ ISTRUZIONI CRITICHE:
 5. Mantieni un tono professionale ma cordiale e accessibile
 6. Struttura la risposta in modo chiaro e leggibile
 
-Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
+OUTPUT RICHIESTO:
+1. **written_email_body**: Il corpo della risposta email (senza oggetto o firma)
+2. **modifications_summary**: Se hai applicato delle linee guida di correzione, descrivi brevemente in forma testuale le modifiche che hai apportato. Se non ci sono linee guida da seguire, lascia questo campo vuoto o null. Esempio: "Modificato il saluto da 'Gentile Cliente' a 'Gentile Sig. Rossi'. Specificato l'orario dell'appuntamento (14:00). Corretto il prezzo da 50 euro a 49,99 euro IVA inclusa."
 """
 
 WRITER_GENERIC_PROMPT_ENG = """
@@ -1598,7 +1600,9 @@ CRITICAL INSTRUCTIONS:
 5. Maintain a professional but friendly and accessible tone
 6. Structure the response clearly and readably
 
-Write ONLY the email response body, without subject or signature.
+REQUIRED OUTPUT:
+1. **written_email_body**: The email response body (without subject or signature)
+2. **modifications_summary**: If you applied correction guidelines, briefly describe in text form the changes you made. If there are no guidelines to follow, leave this field empty or null. Example: "Changed greeting from 'Dear Customer' to 'Dear Mr. Smith'. Specified appointment time (2:00 PM). Corrected price from $50 to $49.99 including VAT."
 """
 
 # Guidelines section templates
@@ -1610,10 +1614,146 @@ Le seguenti correzioni devono essere applicate alla risposta:
 IMPORTANTE: Segui attentamente tutte le linee guida sopra indicate. Ogni linea guida è nel formato "parte da correggere : correzione da applicare".
 """
 
+
 GUIDELINES_SECTION_ENG = """
 CORRECTION GUIDELINES TO FOLLOW:
 The following corrections must be applied to the response:
 {guidelines_list}
 
 IMPORTANT: Carefully follow all the guidelines above. Each guideline is in the format "part to correct : correction to apply".
+"""
+
+# Reviewer prompts
+REVIEWER_PROMPT_ITA = """
+Sei un esperto revisore di email aziendali che deve valutare la qualità e la correttezza di una risposta email generata.
+
+La tua missione è analizzare criticamente l'email scritta confrontandola con il contesto della conversazione e le informazioni aziendali disponibili.
+
+CONTESTO CONVERSAZIONE:
+Riassunto conversazione estesa: {extended_summary}
+Riassunto email corrente: {mail_summary}
+
+INFORMAZIONI AZIENDALI RILEVANTI:
+{chunked_company_info}
+
+STORICO MODIFICHE PRECEDENTI:
+{edit_history_text}
+
+EMAIL SCRITTA DA REVISIONARE:
+{written_email_body}
+
+ISTRUZIONI PER LA REVISIONE:
+
+1. VALUTAZIONE ACCURATEZZA:
+   - Verifica che le informazioni nell'email siano coerenti con il contesto della conversazione
+   - Controlla che i dati forniti corrispondano alle informazioni aziendali  
+   - Identifica eventuali informazioni mancanti, errate o contraddittorie
+   - Assicurati che l'email risponda effettivamente a tutte le domande/richieste ricevute
+
+2. VALUTAZIONE COMPLETEZZA:
+   - Verifica che tutti i punti richiesti siano stati affrontati
+   - Controlla che non manchino informazioni cruciali
+   - Valuta se il livello di dettaglio è appropriato
+
+3. VALUTAZIONE TONO E STILE:
+   - Verifica che il tono sia professionale e appropriato
+   - Controlla che lo stile sia coerente con la comunicazione aziendale
+   - Valuta la chiarezza e leggibilità del testo
+
+4. CONSIDERAZIONE STORICO EDITS:
+   - Se presente uno storico di modifiche precedenti, verifica che le correzioni siano state applicate correttamente
+   - Non ripetere le stesse correzioni già fatte nelle iterazioni precedenti
+   - Identifica nuovi problemi non evidenziati prima
+
+OUTPUT RICHIESTO:
+
+1. **needs_review** (bool):
+   - True: se l'email necessita di correzioni o miglioramenti significativi
+   - False: se l'email è accettabile e può essere inviata
+
+2. **correctness_score** (float 0.0-1.0):
+   - 0.9-1.0: Email eccellente, accurata, completa e ben scritta
+   - 0.7-0.8: Email buona con errori minori o miglioramenti marginali
+   - 0.5-0.6: Email accettabile ma con alcuni problemi da correggere
+   - 0.0-0.4: Email con problemi significativi che richiedono revisione
+
+3. **guidelines** (lista di stringhe):
+   - Se needs_review = True, fornisci una lista di correzioni specifiche
+   - Ogni elemento della lista deve essere nel formato: "parte esatta da correggere : correzione da applicare"
+   - Sii specifico e preciso indicando la parte esatta del testo da modificare
+   - Fornisci correzioni chiare e actionable
+
+ESEMPI DI GUIDELINES:
+- "Buongiorno Sig. Rossi : Gentile Sig. Rossi"
+- "appuntamento fissato per il 15 marzo : appuntamento confermato per il 15 marzo alle ore 14:00"
+- "Il prodotto costa 100 euro : Il prodotto costa 99,99 euro IVA inclusa come da listino"
+
+Analizza attentamente l'email e fornisci una valutazione professionale e costruttiva.
+"""
+
+REVIEWER_PROMPT_ENG = """
+You are an expert business email reviewer who must assess the quality and correctness of a generated email response.
+
+Your mission is to critically analyze the written email by comparing it with the conversation context and available company information.
+
+CONVERSATION CONTEXT:
+Extended conversation summary: {extended_summary}
+Current email summary: {mail_summary}
+
+RELEVANT COMPANY INFORMATION:
+{chunked_company_info}
+
+PREVIOUS EDIT HISTORY:
+{edit_history_text}
+
+WRITTEN EMAIL TO REVIEW:
+{written_email_body}
+
+REVIEW INSTRUCTIONS:
+
+1. ACCURACY EVALUATION:
+   - Verify that information in the email is consistent with the conversation context
+   - Check that provided data matches company information
+   - Identify any missing, incorrect, or contradictory information
+   - Ensure the email actually answers all questions/requests received
+
+2. COMPLETENESS EVALUATION:
+   - Verify that all requested points have been addressed
+   - Check for missing crucial information
+   - Assess if the level of detail is appropriate
+
+3. TONE AND STYLE EVALUATION:
+   - Verify that the tone is professional and appropriate
+   - Check that the style is consistent with business communication
+   - Assess text clarity and readability
+
+4. EDIT HISTORY CONSIDERATION:
+   - If previous edit history exists, verify that corrections were applied correctly
+   - Do not repeat the same corrections already made in previous iterations
+   - Identify new problems not highlighted before
+
+REQUIRED OUTPUT:
+
+1. **needs_review** (bool):
+   - True: if the email needs significant corrections or improvements
+   - False: if the email is acceptable and can be sent
+
+2. **correctness_score** (float 0.0-1.0):
+   - 0.9-1.0: Excellent email, accurate, complete and well written
+   - 0.7-0.8: Good email with minor errors or marginal improvements
+   - 0.5-0.6: Acceptable email but with some problems to correct
+   - 0.0-0.4: Email with significant problems requiring revision
+
+3. **guidelines** (list of strings):
+   - If needs_review = True, provide a list of specific corrections
+   - Each list item must be in the format: "exact part to correct : correction to apply"
+   - Be specific and precise indicating the exact part of the text to modify
+   - Provide clear and actionable corrections
+
+EXAMPLES OF GUIDELINES:
+- "Dear Mr. Smith : Dear Mr. Smith,"
+- "appointment scheduled for March 15 : appointment confirmed for March 15 at 2:00 PM"
+- "The product costs $100 : The product costs $99.99 including VAT as per price list"
+
+Carefully analyze the email and provide a professional and constructive evaluation.
 """

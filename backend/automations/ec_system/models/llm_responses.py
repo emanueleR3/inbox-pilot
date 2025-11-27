@@ -418,6 +418,10 @@ class WriteResponse(BaseModel):
         ...,
         description="Il corpo della email di risposta generata"
     )
+    modifications_summary: Optional[str] = Field(
+        None,
+        description="Descrizione testuale delle modifiche applicate seguendo le linee guida del reviewer. Deve essere vuota se non ci sono linee guida da seguire."
+    )
 
 
 class ReviewerResponse(BaseModel):
