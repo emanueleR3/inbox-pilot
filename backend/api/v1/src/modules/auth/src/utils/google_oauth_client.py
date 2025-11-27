@@ -75,18 +75,3 @@ def create_google_flow(services="all"):
     logger.info(f"OAUTHLIB_INSECURE_TRANSPORT set to: {os.environ.get('OAUTHLIB_INSECURE_TRANSPORT')}")
     
     return flow
-
-    '''
-        scopes=[
-            "https://www.googleapis.com/auth/gmail.modify",
-            "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.send",
-            #"https://www.googleapis.com/auth/gmail.metadata",
-            "https://www.googleapis.com/auth/calendar",
-            "https://www.googleapis.com/auth/calendar.events",
-            "https://www.googleapis.com/auth/calendar.readonly",
-            "https://www.googleapis.com/auth/userinfo.email",
-            "https://www.googleapis.com/auth/userinfo.profile",
-            "openid"
-        ],
-    '''

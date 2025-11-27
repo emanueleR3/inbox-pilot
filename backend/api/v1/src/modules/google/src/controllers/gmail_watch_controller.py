@@ -36,7 +36,7 @@ def create_watch_for_user(access_token: str = None, refresh_token: str = None, u
     service = build("gmail", "v1", credentials=credentials)
 
     request = {
-        "labelIds": ["INBOX"],
+        # "labelIds": ["INBOX"], -> NOTE: sembrerebbe dar problemi 
         "topicName": settings.PUBSUB_TOPIC_PATH
     }
 

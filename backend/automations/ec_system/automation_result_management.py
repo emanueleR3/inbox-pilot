@@ -201,11 +201,6 @@ def process_automation_result(workflow_result: dict):
         print(f"✅ [WORKFLOW] AUTOMATION EXECUTED SUCCESSFULLY!")
 
         human_response = workflow_result.get("human_response", None)
-        #DEBUG
-        print(f"DEBUG")
-        print(f"="*20)
-        print(f"Human response: {human_response}")
-        print(f"\n="*20)
 
         if human_response:
             extracted_info = workflow_result.get('extracted_info', {})
