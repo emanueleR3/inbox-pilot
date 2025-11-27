@@ -579,7 +579,7 @@ def process_automation_result(workflow_result: dict):
                 )
                 return
             
-            # CASE - LOW CONFIDENCE WRITER ❌ TODO
+            # CASE - LOW CONFIDENCE WRITER ✅
             if status == "LOW_CONFIDENCE_WRITER":
                 print(f"⚠️ [WORKFLOW] LOW CONFIDENCE WRITER DETECTED!")
                 
@@ -591,6 +591,23 @@ def process_automation_result(workflow_result: dict):
                     "human_response": True,
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
+
+                ai_email_data = {
+                    "thread_id": thread_id,
+                    "response_at_id": message_id,
+                    "processed_at": now_tz,
+                    "duration": 0, #TODO calculate duration
+                    "priority_score": workflow_result.get("priority_score", 0),
+                    "body": workflow_result.get("written_email_body", ""),
+                    "service_id": service_id,
+                    "outcome": EmailOutcome.DRAFT.value
+                }
+
+                # Save draft in ai_generated_emails
+                try:
+                    save_ai_generated_email(ai_email_data)
+                except Exception as e:
+                    print(f"❌ [WORKFLOW] Error saving draft: {e}")
 
                 try:
                     update_thread(thread_id, thread_data)
@@ -611,7 +628,7 @@ def process_automation_result(workflow_result: dict):
                 except Exception as e:
                     print(f"❌ [SCHEDULER] Error inserting notification: {e}")
 
-                send_low_confidence_writer_notification( # TODO
+                send_low_confidence_writer_notification(
                     sender_email=sender_email,
                     box_email=box_email,
                     subject=subject,
