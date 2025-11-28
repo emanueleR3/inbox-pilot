@@ -274,7 +274,8 @@ class EmailProcessor:
             "has_attachments": has_attachments,
             "extended_summary": extended_summary,
             "no_reply": email_data.get("no_reply", False),
-            "action": email_data.get("action")
+            "action": email_data.get("action"),
+            "summarizer_only": email_data.get("summarizer_only", False)
         }
         
         return automation_payload
