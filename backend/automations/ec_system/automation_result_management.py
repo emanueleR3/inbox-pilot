@@ -63,7 +63,7 @@ def process_automation_result(workflow_result: dict):
     subcategory = workflow_result.get("subcategory", "")
     email_body = extracted_info.get("email_body", "")
     summary_attachments = workflow_result.get("summary_attachments", None)
-    now_tz = datetime.now(timezone.utc)
+    now_tz = datetime.now(timezone.utc).isoformat()
 
     # ======= SUMMARIZER ONLY CHECK ======= ✅
     if workflow_result.get("summarizer_only", False):

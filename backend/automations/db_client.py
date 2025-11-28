@@ -547,13 +547,29 @@ def insert_new_mail_in_history_thread(thread_id: str, message_id: str) -> bool:
     try:
         supabase = get_supabase_client()
 
-        # append in history array of text the new message_id
-        response = supabase.table("threads").update({"history": "history" + message_id}).eq("thread_id", thread_id).execute()
-
-        if response.data:
-            return True
-        else:
+        # 1. Fetch current history
+        response = supabase.table("threads").select("history").eq("thread_id", thread_id).execute()
+        
+        if not response.data:
+            print(f"❌ [DB_CLIENT] Thread not found: {thread_id}")
             return False
+            
+        current_history = response.data[0].get("history") or []
+        
+        # 2. Append new message_id
+        if message_id not in current_history:
+            current_history.append(message_id)
+            
+            # 3. Update thread
+            response = supabase.table("threads").update({"history": current_history}).eq("thread_id", thread_id).execute()
+
+            if response.data:
+                return True
+            else:
+                return False
+        else:
+             print(f"ℹ️ [DB_CLIENT] Message ID already in history")
+             return True
 
     except Exception as e:
         print(f"❌ [DB_CLIENT] Error inserting new mail in history thread: {e}")
