@@ -27,6 +27,10 @@ from datetime import datetime
 # Import attachment extractor service
 from ..services.attachment_extractor import attachment_extractor
 
+# Get max iteration for writer-reviewer loop
+MAX_REVIEW_ITERATIONS = int(os.getenv("MAX_REVIEW_ITERATIONS", 3))
+CORRECTNESS_THRESHOLD = float(os.getenv("CORRECTNESS_THRESHOLD", 0.9))
+
 
 def new_mail_node(state):
     """
@@ -1816,16 +1820,27 @@ def reviewer_node(state):
         state["correctness_score"] = review_response.correctness_score
         state["guidelines"] = review_response.guidelines if review_response.guidelines else []
         
-        print(f"✅ [REVIEWER] Review completed")
-        print(f"   📊 Needs review: {state['needs_review']}")
-        print(f"   📈 Correctness score: {state['correctness_score']}")
-        print(f"   📋 Guidelines provided: {len(state['guidelines'])}")
+        # Check if we should loop back to writer
+        should_loop = (
+            state["needs_review"] and 
+            state["correctness_score"] < CORRECTNESS_THRESHOLD and 
+            state["review_iteration"] < MAX_REVIEW_ITERATIONS
+        )
         
-        # Print guidelines if provided
-        if state['guidelines']:
-            print(f"   📝 Guidelines:")
-            for i, guideline in enumerate(state['guidelines'], 1):
-                print(f"      {i}. {guideline}")
+        if should_loop:
+            print(f"🔁 [REVIEWER] Looping back to WRITER (iteration {state['review_iteration'] + 1})")
+            # State remains as is, graph will route back to WRITER based on needs_review/correctness
+        else:
+            # End of loop - determine final status
+            if state["needs_review"] and state["correctness_score"] < CORRECTNESS_THRESHOLD:
+                print(f"⚠️ [REVIEWER] Low confidence writing - needs review")
+                state["status"] = "LOW_CONFIDENCE_WRITER"
+                state["human_response"] = True
+                state["automation_executed"] = True
+            else:
+                print(f"✅ [REVIEWER] Email ready to send")
+                state["status"] = "EMAIL_READY_TO_SEND"
+                state["automation_executed"] = True
         
         return state
         
@@ -1835,40 +1850,6 @@ def reviewer_node(state):
         state["needs_review"] = False
         state["correctness_score"] = 0.8
         state["guidelines"] = []
-        return state
-
-def sender_node(state):
-    """
-    Prepare email for sending and set the final status.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with status set to EMAIL_READY_TO_SEND
-    """
-    try:
-        print(f"📤 [SENDER] Preparing email for sending...")
-        
-        written_email = state.get("written_email_body", "")
-        
-        if not written_email or len(written_email.strip()) == 0:
-            print(f"❌ [SENDER] No email body to send")
-            state["status"] = "SENDER_ERROR"
-            state["human_response"] = True
-            state["automation_executed"] = True
-            return state
-        
-        print(f"   📝 Email length: {len(written_email)} characters")
-        print(f"   🔢 Review iterations: {state.get('review_iteration', 0)}")
-        print(f"   📊 Final correctness score: {state.get('correctness_score', 'N/A')}")
-        
-        # Set status to indicate email is ready to send
-        state["status"] = "EMAIL_READY_TO_SEND"
-        state["automation_executed"] = True
-        
-        print(f"✅ [SENDER] Email ready to send")
-        
         return state
         
     except Exception as e:

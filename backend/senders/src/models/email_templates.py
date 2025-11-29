@@ -75,6 +75,11 @@ def get_base_template(content: str, notification_type: str) -> str:
             "primary": "#EF4444",  # Red
             "secondary": "#FEE2E2",
             "accent": "#B91C1C"
+        },
+        "LOW_CONFIDENCE_WRITER": {
+            "primary": "#0D9488",  # Teal 600
+            "secondary": "#CCFBF1",  # Teal 100
+            "accent": "#0F766E"  # Teal 700
         }
     }
     
@@ -1186,6 +1191,90 @@ def create_email_not_sent_email(
     return get_base_template(content, "EMAIL_NOT_SENT")
 
 
+def create_low_confidence_writer_email(
+    sender_email: str,
+    subject: str,
+    body: str,
+    timestamp: str,
+    summary_attachment: Optional[str] = None
+) -> str:
+    """Create HTML email for low confidence writer notifications."""
+    
+    attachment_html = ""
+    if summary_attachment:
+        attachment_html = f"""
+        <div style="margin-top: 20px; padding: 15px; background-color: #CCFBF1; border-left: 4px solid #0D9488; border-radius: 6px;">
+            <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 600; color: #0F766E;">
+                📎 Allegato
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #115E59;">
+                {summary_attachment}
+            </p>
+        </div>
+        """
+    
+    content = f"""
+    <div style="background-color: #CCFBF1; border-left: 4px solid #0D9488; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+        <p style="margin: 0; font-size: 16px; font-weight: 700; color: #0F766E;">
+            ✍️ Risposta Automatica Incerta
+        </p>
+    </div>
+    
+    <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+        Il sistema ha generato una <strong>bozza di risposta</strong> ma il livello di confidenza è basso. 
+        È necessaria la tua revisione manuale prima dell'invio.
+    </p>
+    
+    <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DA</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{sender_email}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">OGGETTO</p>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827; font-weight: 600;">{subject}</p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0;">
+                    <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">DATA</p>
+                </td>
+                <td style="padding: 8px 0; text-align: right;">
+                    <p style="margin: 0; font-size: 14px; color: #111827;">{timestamp}</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+            Bozza Generata
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.8; white-space: pre-wrap;">
+            {body[:500]}{'...' if len(body) > 500 else ''}
+        </p>
+    </div>
+    
+    {attachment_html}
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 13px; color: #6b7280; text-align: center;">
+            💡 <em>Rivedi la bozza e modificala se necessario prima di inviarla</em>
+        </p>
+    </div>
+    """
+    
+    return get_base_template(content, "LOW_CONFIDENCE_WRITER")
+
+
 def get_email_template(
     notification_type: str,
     sender_email: str,
@@ -1234,6 +1323,8 @@ def get_email_template(
         return create_event_deletion_failed_email(sender_email, subject, body, timestamp, summary_attachment)
     elif notification_type == "EMAIL_NOT_SENT":
         return create_email_not_sent_email(sender_email, subject, body, timestamp, summary_attachment)
+    elif notification_type == "LOW_CONFIDENCE_WRITER":
+        return create_low_confidence_writer_email(sender_email, subject, body, timestamp, summary_attachment)
     else:
         # Fallback to low confidence template
         return create_low_confidence_email(sender_email, subject, body, timestamp, summary_attachment)

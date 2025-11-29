@@ -4,7 +4,8 @@ from db_client import (
     get_subscription_service_id_by_email,
     update_thread,
     update_ai_generated_email_outcome,
-    get_email_service_data
+    get_email_service_data,
+    insert_new_mail_in_history_thread
 )
 import os
 import requests
@@ -20,7 +21,8 @@ from .services.notification_client import (
     send_event_code_not_found_notification,
     send_calendar_service_not_found_notification,
     send_event_deletion_failed_notification,
-    send_email_not_sent_notification
+    send_email_not_sent_notification,
+    send_low_confidence_writer_notification
 )
 from models import ThreadStatus, EmailOutcome
 from datetime import datetime, timezone
@@ -35,8 +37,6 @@ def process_automation_result(workflow_result: dict):
 
     status = workflow_result.get("status", "unknown")
 
-    # TODO gestire caso di summarizer_only
-
     # ======= AUTOMATION DISABLED CHECK ======= ✅
     if status == "AUTOMATION_DISABLED":
         print(f"⚠️ [WORKFLOW] Automation is disabled. No processing to be done.")
@@ -44,14 +44,50 @@ def process_automation_result(workflow_result: dict):
     elif status == "FAILED":
         print(f"❌ [WORKFLOW] Workflow execution failed - Details: {workflow_result.get('error', 'No details provided')}")
         return
+
+    # variables
+    human_response = workflow_result.get("human_response", None)
+    extracted_info = workflow_result.get('extracted_info', {})
+    box_email = extracted_info.get('box_email', 'unknown')
+    message_id = extracted_info.get('message_id', 'unknown')
+    sender_email = extracted_info.get("from", "unknown")
+    subject = extracted_info.get("subject", "No subject")
+    thread_id = extracted_info.get("thread_id", None)
+    summary = workflow_result.get("mail_summary", "")
+    extended_summary = workflow_result.get("extended_summary", None)
+    cc_emails = extracted_info.get("cc", "")
+    has_attachments = extracted_info.get("has_attachments", False)
+    priority_score = workflow_result.get("priority_score", 0)
+    response_body = workflow_result.get("written_email_body", "")
+    category = workflow_result.get("category", "")
+    subcategory = workflow_result.get("subcategory", "")
+    email_body = extracted_info.get("email_body", "")
+    summary_attachments = workflow_result.get("summary_attachments", None)
+    now_tz = datetime.now(timezone.utc).isoformat()
+
+    # ======= SUMMARIZER ONLY CHECK ======= ✅
+    if workflow_result.get("summarizer_only", False):
+        print(f"⚠️ [WORKFLOW] Summarizer only. - Saving summary and extended summary")
+        if not thread_id:
+            print(f"❌ [WORKFLOW] No thread_id found in workflow result")
+            return
+
+        thread_data = {
+            "summary": summary,
+            "extended_summary": extended_summary,
+            "cc_emails": cc_emails,
+            "has_attachments": has_attachments
+        }
+
+        try:
+            update_thread(thread_id, thread_data)
+        except Exception as e:
+            print(f"❌ [WORKFLOW] Error updating thread: {e}")
+        return    
     
     # ======= DANGEROUS EMAIL CHECK ======= ✅
     if workflow_result.get("dangerous_email", False):
         print(f"🚨 [WORKFLOW] DANGEROUS EMAIL DETECTED!")
-        # Extract thread and message IDs from state
-        extracted_info = workflow_result.get("extracted_info", {})
-        message_id = extracted_info.get("message_id", "unknown")
-        box_email = extracted_info.get("box_email", "unknown")
 
         thread_data = {
             "human_response": True,
@@ -84,15 +120,11 @@ def process_automation_result(workflow_result: dict):
     # ======= LOW CONFIDENCE CLASSIFICATION CHECK ======= ✅
     if workflow_result.get("low_confidence_classification", False):
         print(f"⚠️ [WORKFLOW] LOW CONFIDENCE CLASSIFICATION DETECTED!")
-        extracted_info = workflow_result.get("extracted_info", {})
-        message_id = extracted_info.get("message_id", "unknown")
-        box_email = extracted_info.get("box_email", "unknown")
-        thread_id = extracted_info.get("thread_id", "unknown")
         
         thread_data = {
-            "category": workflow_result.get("category", ""),
-            "summary": workflow_result.get("mail_summary", ""),
-            "extended_summary": workflow_result.get("extended_summary", ""),
+            "category": category,
+            "summary": summary,
+            "extended_summary": extended_summary,
             "human_response": True,
             "status": ThreadStatus.LOW_CONFIDENCE_CLASSIFICATION.value
         }
@@ -128,13 +160,6 @@ def process_automation_result(workflow_result: dict):
     # ======= HIGH PRIORITY EMAIL CHECK ======= ✅
     if status == "END_HIGH_PRIORITY":
         print(f"🔥 [WORKFLOW] HIGH PRIORITY EMAIL DETECTED!")
-
-        # Get extracted info for notifications
-        extracted_info = workflow_result.get("extracted_info", {})
-        message_id = extracted_info.get("message_id", "unknown")
-        box_email = extracted_info.get("box_email", "unknown")
-        thread_id = extracted_info.get("thread_id", "unknown")
-        now_tz = datetime.now(timezone.utc)
         
         service_id = None
         try:
@@ -147,16 +172,16 @@ def process_automation_result(workflow_result: dict):
             "response_at_id": message_id,
             "processed_at": now_tz,
             "duration": 0, #TODO calculate duration
-            "priority_score": workflow_result.get("priority_score", 0),
-            "body": workflow_result.get("written_email_body", ""),
+            "priority_score": priority_score,
+            "body": response_body,
             "service_id": service_id,
             "outcome": EmailOutcome.DRAFT.value
         }
 
         thread_data = {
-            "category": workflow_result.get("category", ""),
-            "summary": workflow_result.get("mail_summary", ""),
-            "extended_summary": workflow_result.get("extended_summary", ""),
+            "category": category,
+            "summary": summary,
+            "extended_summary": extended_summary,
             "human_response": True,
             "status": ThreadStatus.HIGH_PRIORITY.value
         }
@@ -185,11 +210,11 @@ def process_automation_result(workflow_result: dict):
         # Send notification webhook for high priority email
         try:
             send_high_priority_notification(
-                sender_email=extracted_info.get("from", "unknown"),
+                sender_email=sender_email,
                 box_email=box_email,
-                subject=extracted_info.get("subject", "No subject"),
-                body=workflow_result.get("email_body", ""),
-                summary_attachment=workflow_result.get("summary_attachments")
+                subject=subject,
+                body=email_body,
+                summary_attachment=summary_attachments
             )
         except Exception as e:
             print(f"❌ [PRIORITY_CONTROLLER] Error sending high priority notification: {e}")
@@ -200,14 +225,11 @@ def process_automation_result(workflow_result: dict):
     if workflow_result.get("automation_executed", False):
         print(f"✅ [WORKFLOW] AUTOMATION EXECUTED SUCCESSFULLY!")
 
-        human_response = workflow_result.get("human_response", None)
-
         if human_response:
-            extracted_info = workflow_result.get('extracted_info', {})
-            box_email = extracted_info.get('box_email', 'unknown')
-            message_id = extracted_info.get('message_id', 'unknown')
-            sender_email = extracted_info.get("from", "unknown")
-            subject = extracted_info.get("subject", "No subject")
+            box_email = box_email
+            message_id = message_id
+            sender_email = sender_email
+            subject = subject
 
 
             # CASE - EVENT_INVITE with category INFORMATION_PROVIDED/CALENDAR_EVENT ⚠️
@@ -215,10 +237,10 @@ def process_automation_result(workflow_result: dict):
                 print(f"⚠️ [WORKFLOW] EVENT INVITE DETECTED - SENDING NOTIFICATION")
 
                 thread_data = {
-                    "category": workflow_result.get("category", ""),
-                    "subcategory": workflow_result.get("subcategory", ""),
-                    "summary": workflow_result.get("mail_summary", ""),
-                    "extended_summary": workflow_result.get("extended_summary", ""),
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
                     "human_response": True,
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
@@ -248,8 +270,8 @@ def process_automation_result(workflow_result: dict):
                     sender_email=sender_email,
                     box_email=box_email,
                     subject=subject,
-                    body=workflow_result.get("email_body", ""),
-                    summary_attachment=workflow_result.get("summary_attachments")
+                    body=email_body,
+                    summary_attachment=summary_attachments
                 )
                 return
             
@@ -258,10 +280,10 @@ def process_automation_result(workflow_result: dict):
                 print(f"⚠️ [WORKFLOW] COMPANY INFO EXTRACTION FAILED - SENDING NOTIFICATION")
 
                 thread_data = {
-                    "category": workflow_result.get("category", ""),
-                    "subcategory": workflow_result.get("subcategory", ""),
-                    "summary": workflow_result.get("mail_summary", ""),
-                    "extended_summary": workflow_result.get("extended_summary", ""),
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
                     "human_response": True,
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
@@ -282,8 +304,8 @@ def process_automation_result(workflow_result: dict):
                     sender_email=sender_email,
                     box_email=box_email,
                     subject=subject,
-                    body=workflow_result.get('email_body', ''),
-                    summary_attachment=workflow_result.get('summary_attachments', '')
+                    body=email_body,
+                    summary_attachment=summary_attachments
                 )
                 return
             
@@ -292,10 +314,10 @@ def process_automation_result(workflow_result: dict):
                 print(f"⚠️ [WORKFLOW] EVENT FOLLOW-UP DETECTED - SENDING NOTIFICATION")
 
                 thread_data = {
-                    "category": workflow_result.get("category", ""),
-                    "subcategory": workflow_result.get("subcategory", ""),
-                    "summary": workflow_result.get("mail_summary", ""),
-                    "extended_summary": workflow_result.get("extended_summary", ""),
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
                     "human_response": True,
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
@@ -325,8 +347,8 @@ def process_automation_result(workflow_result: dict):
                     sender_email=sender_email,
                     box_email=box_email,
                     subject=subject,
-                    body=workflow_result.get("email_body", ""),
-                    summary_attachment=workflow_result.get('summary_attachments', '')
+                    body=email_body,
+                    summary_attachment=summary_attachments
                 )
             
             # CASE - NO AVAILABLE SLOTS ✅
@@ -341,10 +363,10 @@ def process_automation_result(workflow_result: dict):
                     notification_type = "NO_AVAILABLE_SLOTS_RESCHEDULE_APPOINTMENT_MAIL"
 
                 thread_data = {
-                    "category": workflow_result.get("category", ""),
-                    "subcategory": workflow_result.get("subcategory", ""),
-                    "summary": workflow_result.get("mail_summary", ""),
-                    "extended_summary": workflow_result.get("extended_summary", ""),
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
                     "human_response": True,
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
@@ -372,8 +394,8 @@ def process_automation_result(workflow_result: dict):
                     sender_email=sender_email,
                     box_email=box_email,
                     subject=subject,
-                    body=workflow_result.get("email_body", ""),
-                    summary_attachment=workflow_result.get('summary_attachments')
+                    body=email_body,
+                    summary_attachment=summary_attachments
                 )
                 return
 
@@ -388,10 +410,10 @@ def process_automation_result(workflow_result: dict):
                     notification_type = "APPOINTMENT_NOT_RESCHEDULED_MAIL"
 
                 thread_data = {
-                    "category": workflow_result.get("category", ""),
-                    "subcategory": workflow_result.get("subcategory", ""),
-                    "summary": workflow_result.get("mail_summary", ""),
-                    "extended_summary": workflow_result.get("extended_summary", ""),
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
                     "human_response": True,
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
@@ -420,16 +442,16 @@ def process_automation_result(workflow_result: dict):
                         sender_email=sender_email,
                         box_email=box_email,
                         subject=subject,
-                        body=workflow_result.get("email_body", ""),
-                        summary_attachment=workflow_result.get('summary_attachments')
+                        body=email_body,
+                        summary_attachment=summary_attachments
                     )
                 else:
                     send_appointment_not_rescheduled_notification(
                         sender_email=sender_email,
                         box_email=box_email,
                         subject=subject,
-                        body=workflow_result.get("email_body", ""),
-                        summary_attachment=workflow_result.get('summary_attachments')
+                        body=email_body,
+                        summary_attachment=summary_attachments
                     )
 
                 return
@@ -439,10 +461,10 @@ def process_automation_result(workflow_result: dict):
                 print(f"ℹ️ [WORKFLOW] Event code not found in database - sending notification.")
 
                 thread_data = {
-                    "category": workflow_result.get("category", ""),
-                    "subcategory": workflow_result.get("subcategory", ""),
-                    "summary": workflow_result.get("mail_summary", ""),
-                    "extended_summary": workflow_result.get("extended_summary", ""),
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
                     "human_response": True,
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
@@ -470,8 +492,8 @@ def process_automation_result(workflow_result: dict):
                     sender_email=sender_email,
                     box_email=box_email,
                     subject=subject,
-                    body=workflow_result.get("email_body", ""),
-                    summary_attachment=workflow_result.get('summary_attachments')
+                    body=email_body,
+                    summary_attachment=summary_attachments
                 )
                 return
             
@@ -480,10 +502,10 @@ def process_automation_result(workflow_result: dict):
                 print(f"ℹ️ [WORKFLOW] Calendar service not found for user - sending notification.")
 
                 thread_data = {
-                    "category": workflow_result.get("category", ""),
-                    "subcategory": workflow_result.get("subcategory", ""),
-                    "summary": workflow_result.get("mail_summary", ""),
-                    "extended_summary": workflow_result.get("extended_summary", ""),
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
                     "human_response": True,
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
@@ -511,8 +533,8 @@ def process_automation_result(workflow_result: dict):
                     sender_email=sender_email,
                     box_email=box_email,
                     subject=subject,
-                    body=workflow_result.get("email_body", ""),
-                    summary_attachment=workflow_result.get('summary_attachments')
+                    body=email_body,
+                    summary_attachment=summary_attachments
                 )
                 return
             
@@ -521,10 +543,10 @@ def process_automation_result(workflow_result: dict):
                 print(f"ℹ️ [WORKFLOW] Event deletion failed - sending notification.")
 
                 thread_data = {
-                    "category": workflow_result.get("category", ""),
-                    "subcategory": workflow_result.get("subcategory", ""),
-                    "summary": workflow_result.get("mail_summary", ""),
-                    "extended_summary": workflow_result.get("extended_summary", ""),
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
                     "human_response": True,
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
@@ -552,17 +574,76 @@ def process_automation_result(workflow_result: dict):
                     sender_email=sender_email,
                     box_email=box_email,
                     subject=subject,
-                    body=workflow_result.get("email_body", ""),
-                    summary_attachment=workflow_result.get('summary_attachments')
+                    body=email_body,
+                    summary_attachment=summary_attachments
                 )
                 return
             
+            # CASE - LOW CONFIDENCE WRITER ✅
+            if status == "LOW_CONFIDENCE_WRITER":
+                print(f"⚠️ [WORKFLOW] LOW CONFIDENCE WRITER DETECTED!")
+                
+                thread_data = {
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
+                    "human_response": True,
+                    "status": ThreadStatus.HUMAN_REVIEW.value
+                }
+
+                ai_email_data = {
+                    "thread_id": thread_id,
+                    "response_at_id": message_id,
+                    "processed_at": now_tz,
+                    "duration": 0, #TODO calculate duration
+                    "priority_score": priority_score,
+                    "body": response_body,
+                    "service_id": service_id,
+                    "outcome": EmailOutcome.DRAFT.value
+                }
+
+                # Save draft in ai_generated_emails
+                try:
+                    save_ai_generated_email(ai_email_data)
+                except Exception as e:
+                    print(f"❌ [WORKFLOW] Error saving draft: {e}")
+
+                try:
+                    update_thread(thread_id, thread_data)
+                except Exception as e:
+                    print(f"❌ [WORKFLOW] Error updating thread: {e}")
+
+                try:
+                    notification_success = insert_notification_sync(
+                        email=box_email,
+                        notification_type="LOW_CONFIDENCE_WRITER",
+                        message_id=message_id,
+                        text=None
+                    )
+                    
+                    if not notification_success:
+                        print(f"❌ [SCHEDULER] Failed to insert notification for {box_email}")
+                        
+                except Exception as e:
+                    print(f"❌ [SCHEDULER] Error inserting notification: {e}")
+
+                send_low_confidence_writer_notification(
+                    sender_email=sender_email,
+                    box_email=box_email,
+                    subject=subject,
+                    body=email_body,
+                    summary_attachment=summary_attachments
+                )
+                return
+            
+
             # CASE - generic human review ✅  TODO gestire i vari casi (dopo la mail, request_document e altro)
             thread_data = {
-                "category": workflow_result.get("category", ""),
-                "subcategory": workflow_result.get("subcategory", ""),
-                "summary": workflow_result.get("mail_summary", ""),
-                "extended_summary": workflow_result.get("extended_summary", ""),
+                "category": category,
+                "subcategory": subcategory,
+                "summary": summary,
+                "extended_summary": extended_summary,
                 "human_response": True,
                 "status": ThreadStatus.HUMAN_REVIEW.value
             }
@@ -589,48 +670,22 @@ def process_automation_result(workflow_result: dict):
             return
 
         else:
-            subcategory = workflow_result.get("subcategory", "")
-
-            # CASE - email ready to send ⚠️
+            # CASE - email ready to send ✅
             if status == "EMAIL_READY_TO_SEND":
-                # Get extracted info for notifications
-                extracted_info = workflow_result.get("extracted_info", {})
-                message_id = extracted_info.get("message_id", "unknown")
-                box_email = extracted_info.get("box_email", "unknown")
-                thread_id = extracted_info.get("thread_id", "unknown")
-                now_tz = datetime.now(timezone.utc)
-        
+
                 service_id = None
                 try:
                     service_id = get_subscription_service_id_by_email(box_email)
                 except Exception as e:
                     print(f"❌ [WORKFLOW] Error getting service_id: {e}")
 
-                ai_email_data = {
-                    "thread_id": thread_id,
-                    "message_id": None, #TODO da inserire
-                    "response_at_id": message_id,
-                    "processed_at": now_tz,
-                    "duration": 0, #TODO calculate duration
-                    "priority_score": workflow_result.get("priority_score", 0),
-                    "body": workflow_result.get("written_email_body", ""),
-                    "service_id": service_id,
-                    "outcome": EmailOutcome.READY_TO_SEND.value
-                }
+                new_message_id = None
 
-                thread_data = {
-                    "category": workflow_result.get("category", ""),
-                    "subcategory": workflow_result.get("subcategory", ""),
-                    "summary": workflow_result.get("mail_summary", ""),
-                    "extended_summary": workflow_result.get("extended_summary", ""),
-                    "status": ThreadStatus.PROCESSED.value
-                }
-
-                try:
-                    save_ai_generated_email(ai_email_data)
-                    update_thread(thread_id, thread_data)
-                except Exception as e:
-                    print(f"❌ [WORKFLOW] Error saving AI generated email: {e}")
+                # TODO filtro temporaneo
+                if box_email in ["dev1@example.com", "dev4@example.com", "customer@example.com"]:
+                    print(f"[WORKFLOW] Skipping email sending for {box_email}")
+                    return
+                # ----------------------------------------
 
                 try:
                     print(f"📧 [WORKFLOW] Sending email...")
@@ -646,9 +701,9 @@ def process_automation_result(workflow_result: dict):
 
                     # Prepare payload TODO voglio rispondere all'email e non creare un nuovo thread
                     payload = {
-                        "email": extracted_info.get("from"), # Recipient
-                        "subject": extracted_info.get("subject"),
-                        "body": workflow_result.get("written_email_body")
+                        "email": sender_email,
+                        "subject": subject,
+                        "body": response_body
                     }
 
                     senders_url = os.getenv("SENDERS_URL")
@@ -674,28 +729,35 @@ def process_automation_result(workflow_result: dict):
                     response.raise_for_status()
                     
                     result = response.json()
+                    new_message_id = result.get("message_id") # TODO da inserire
+                    
                     if not result.get("success"):
-                         raise Exception(f"Email sending failed: {result.get('message')}")
+                        raise Exception(f"Email sending failed: {result.get('message')}")
 
                     print(f"✅ [WORKFLOW] Email sent successfully via {provider}")
                     
+                    """
                     # Update ai_generated_email outcome to SENT
                     try:
                         update_ai_generated_email_outcome(thread_id, EmailOutcome.SENT.value)
                     except Exception as update_error:
                         print(f"❌ [WORKFLOW] Error updating ai_generated_email outcome: {update_error}")
+                    """
                     
                 except Exception as e:
                     print(f"❌ [WORKFLOW] Error sending email: {e}")
                     
-                    # Send EMAIL_NOT_SENT notification
-                    send_email_not_sent_notification(
-                        sender_email=extracted_info.get("from", "unknown"),
-                        box_email=box_email,
-                        subject=extracted_info.get("subject", "No subject"),
-                        body=workflow_result.get("email_body", ""),
-                        summary_attachment=workflow_result.get("summary_attachments")
-                    )
+                    try:
+                        # Send EMAIL_NOT_SENT notification
+                        send_email_not_sent_notification(
+                            sender_email=sender_email,
+                            box_email=box_email,
+                            subject=subject,
+                            body=email_body,
+                            summary_attachment=summary_attachments
+                        )
+                    except Exception as notif_error:
+                        print(f"❌ [WORKFLOW] Error sending EMAIL_NOT_SENT notification: {notif_error}")
                     
                     # Save notification in database
                     try:
@@ -708,30 +770,78 @@ def process_automation_result(workflow_result: dict):
                     except Exception as notif_error:
                         print(f"❌ [WORKFLOW] Error inserting notification: {notif_error}")
                     
-                    # Update ai_generated_email outcome to FAILED_TO_SEND
+                    # Save ai_generated_email with outcome FAILED_TO_SEND
                     try:
-                        update_ai_generated_email_outcome(thread_id, EmailOutcome.FAILED_TO_SEND.value)
-                    except Exception as update_error:
-                        print(f"❌ [WORKFLOW] Error updating ai_generated_email outcome: {update_error}")
+                        ai_email_data = {
+                            "thread_id": thread_id,
+                            "message_id": None,
+                            "response_at_id": message_id,
+                            "processed_at": now_tz,
+                            "duration": 0, #TODO calculate duration
+                            "priority_score": priority_score,
+                            "body": response_body,
+                            "service_id": service_id,
+                            "outcome": EmailOutcome.FAILED_TO_SEND.value
+                        }
+
+                        save_ai_generated_email(ai_email_data)
+                    except Exception as save_error:
+                        print(f"❌ [WORKFLOW] Error saving ai_generated_email: {save_error}")
                     
-                    # Update thread to human_response=True and status=HUMAN_REVIEW
-                    thread_data_error = {
-                        "human_response": True,
-                        "status": ThreadStatus.HUMAN_REVIEW.value
-                    }
+                    # Update thread with processed_at and status=PROCESSED
                     try:
-                        update_thread(thread_id, thread_data_error)
-                    except Exception as thread_error:
-                        print(f"❌ [WORKFLOW] Error updating thread: {thread_error}")
+                        thread_data = {
+                            "category": category,
+                            "subcategory": subcategory,
+                            "summary": summary,
+                            "extended_summary": extended_summary,
+                            "status": ThreadStatus.HUMAN_REVIEW.value,
+                        }
+                        update_thread(thread_id, thread_data)
+                    except Exception as update_error:
+                        print(f"❌ [WORKFLOW] Error updating thread: {update_error}")
+
+                    return
+        
+                # Save ai_generated_email in database and update thread
+                ai_email_data = {
+                    "thread_id": thread_id,
+                    "message_id": new_message_id,
+                    "response_at_id": message_id,
+                    "processed_at": now_tz,
+                    "duration": 0, #TODO calculate duration
+                    "priority_score": priority_score,
+                    "body": response_body,
+                    "service_id": service_id,
+                    "outcome": EmailOutcome.SENT.value
+                }
+
+                thread_data = {
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
+                    "status": ThreadStatus.PROCESSED.value,
+                    "last_message_id": new_message_id,
+                    "last_message_at": now_tz,
+                    "last_sender_email": box_email
+                }
+
+                try:
+                    insert_new_mail_in_history_thread(thread_id, new_message_id)
+                    save_ai_generated_email(ai_email_data)
+                    update_thread(thread_id, thread_data)
+                except Exception as e:
+                    print(f"❌ [WORKFLOW] Error saving AI generated email: {e}")
 
                 return
 
             # CASE - generic automation completed ✅
             thread_data = {
-                "category": workflow_result.get("category", ""),
-                "subcategory": workflow_result.get("subcategory", ""),
-                "summary": workflow_result.get("mail_summary", ""),
-                "extended_summary": workflow_result.get("extended_summary", ""),
+                "category": category,
+                "subcategory": subcategory,
+                "summary": summary,
+                "extended_summary": extended_summary,
                 "status": ThreadStatus.PROCESSED.value
             }
 
@@ -745,7 +855,6 @@ def process_automation_result(workflow_result: dict):
         
         return
     
-
     return
 
 
