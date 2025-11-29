@@ -18,12 +18,18 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/app/rabbitmq/rabbitmq.conf
       - ./rabbitmq/definitions.json:/app/rabbitmq/definitions.json
-    #healthcheck:
-    #  test: ["CMD", "rabbitmq-diagnostics", "ping"]
-    #  interval: 10s
-    #  timeout: 5s
-    #  retries: 10
-    #  start_period: 30s
+    networks:
+      - broker_net
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333" # API + Dashboard
+      - "6334:6334" # gRPC
+    volumes:
+      - qdrant_storage:/qdrant/storage
     networks:
       - broker_net
 
@@ -37,6 +43,7 @@ services:
       - ./data/attachments:/app/attachments
     depends_on:
       - rabbitmq
+      - qdrant   # <-- aggiunto
     deploy:
       restart_policy:
         condition: on-failure
@@ -58,8 +65,9 @@ services:
       - ./data/attachments:/app/attachments
     depends_on:
       - rabbitmq
+      - qdrant   
     ports:
-      - "8001:8001" # Microsoft webhook
+      - "8001:8001"
     networks:
       - broker_net
 
@@ -69,6 +77,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    depends_on:
+      - qdrant
+    networks:
+      - broker_net
 
   api:
     image: ghcr.io/correttoai/backend/api:latest
@@ -79,6 +91,8 @@ services:
     deploy:
       restart_policy:
         condition: on-failure
+    depends_on:
+      - qdrant   
     ports:
       - "8000:8000"
     networks:
@@ -98,6 +112,7 @@ services:
       - broker_net
     depends_on:
       - senders
+      - qdrant  
 
   senders:
     image: ghcr.io/correttoai/backend/senders:latest
@@ -112,9 +127,8 @@ services:
 
 volumes:
   rabbitmq_data:
+  qdrant_storage: 
 
 networks:
   broker_net:
     driver: bridge
-
-
