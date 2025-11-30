@@ -8,6 +8,7 @@ from langgraph.graph.message import add_messages
 from uuid import uuid4
 from automations.chatbot.tools import send_email
 from automations.chatbot.db.db import get_user_context
+from automations.chatbot.prompts import JERRY_AGENT_PROMPT, build_enriched_prompt
 from langchain_core.runnables import RunnableConfig
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -26,12 +27,10 @@ os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "default")
 
 supabase_project_id = os.getenv("SUPABASE_PROJECT_ID")
 supabase_password = os.getenv("SUPABASE_PASSWORD")
-DB_URI = f"postgresql://postgres:{supabase_password}@db.{supabase_project_id}.supabase.co:5432/postgres?sslmode=disable"
+DB_URI = f"postgresql://postgres.{supabase_project_id}:{supabase_password}@aws-1-eu-central-1.pooler.supabase.com:5432/postgres"
 
-agent_prompt = """
-You are Jerry, a helpful customer support chatbot that assists the customer and uses its tools to address their requests. 
-Use the tools as needed to execute what the customer asks for.
-"""
+# Re-export for backwards compatibility
+agent_prompt = JERRY_AGENT_PROMPT
 
 class GraphState(TypedDict):
     """State schema for the chatbot graph."""
@@ -48,32 +47,14 @@ def _build_system_prompt_with_context(user_id: str) -> str:
     Returns:
         System prompt enriched with user context
     """
-    # Retrieve user context from Supabase
     user_context = get_user_context(user_id)
     
     if not user_context:
         print(f"⚠️ [JERRY] No user context found for user_id: {user_id}, using base prompt")
-        return agent_prompt
+    else:
+        print(f"✅ [JERRY] System prompt enriched with user context for user_id: {user_id}")
     
-    # Build the enriched system prompt
-    context_section = f"""
-
-=== USER CONTEXT ===
-The following information is about the current user and their configured services. 
-Use this context to provide personalized assistance and to know which email accounts are available for sending emails.
-
-{user_context.get('summary', 'No additional context available.')}
-
-Configured email addresses available for sending:
-{', '.join(user_context.get('configured_emails', [])) or 'No configured emails'}
-
-=== END USER CONTEXT ===
-"""
-    
-    enriched_prompt = agent_prompt + context_section
-    print(f"✅ [JERRY] System prompt enriched with user context for user_id: {user_id}")
-    
-    return enriched_prompt
+    return build_enriched_prompt(user_context)
 
 
 def handle_user_message(user_id: str, thread_id: str | None, text: str):
