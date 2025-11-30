@@ -11,10 +11,11 @@ sys.path.insert(0, str(project_root))
 
 # Import core Jerry logic and components
 from automations.chatbot import jerry
-from automations.chatbot.tools import send_email
+from automations.chatbot import tools as jerry_tools
 from automations.chatbot.db.db import get_user_context
 from automations.chatbot.prompts import JERRY_AGENT_PROMPT, build_enriched_prompt
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
+from langchain_core.tools import BaseTool
 
 
 class JerryService:
@@ -227,10 +228,8 @@ class JerryService:
             Result of the tool execution
         """
         try:
-            # Map tool names to actual tool functions
-            available_tools = {
-                "send_email": send_email,
-            }
+            # Get available tools dynamically from jerry_tools module
+            available_tools = self._get_tools_dict()
             
             if tool_name not in available_tools:
                 return {
@@ -255,31 +254,45 @@ class JerryService:
                 "error": str(e)
             }
     
+    def _get_tools_dict(self) -> Dict[str, BaseTool]:
+        """
+        Dynamically retrieve all tools from the jerry_tools module.
+        
+        Returns:
+            Dictionary mapping tool names to tool functions
+        """
+        tools = {}
+        for attr_name in dir(jerry_tools):
+            attr = getattr(jerry_tools, attr_name)
+            # Check if it's a LangChain tool (has 'invoke' method and 'name' attribute)
+            if isinstance(attr, BaseTool):
+                tools[attr.name] = attr
+        return tools
+    
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """
         Get list of available tools with their descriptions.
+        Dynamically retrieves tools from the jerry_tools module.
         
         Returns:
             List of tool information
         """
-        #TODO Retrieve this from tools.py dynamically
-        return [
-            {
-                "name": "send_email",
-                "description": send_email.description,
-                "parameters": {
-                    "sender_address": "Email address of the sender",
-                    "receiver_address": "Email address of the recipient",
-                    "subject": "Email subject",
-                    "body": "Email body content",
-                    "provider": "'google' (default), 'microsoft', or 'smtp'",
-                    "body_type": "'text' or 'html' (default: 'text')",
-                    "cc_recipients": "List of CC email addresses (optional)",
-                    "bcc_recipients": "List of BCC email addresses (optional)",
-                    "attachments": "List of file paths to attach (optional)"
-                }
-            }
-        ]
+        tools_info = []
+        tools = self._get_tools_dict()
+        
+        for tool_name, tool in tools.items():
+            # Extract parameters schema from the tool
+            parameters = {}
+            if hasattr(tool, 'args_schema') and tool.args_schema:
+                # Get the JSON schema from the Pydantic model
+                parameters = tool.args_schema.schema() if hasattr(tool.args_schema, 'schema') else {}
+            
+            tools_info.append({
+                "name": tool_name,
+                "description": getattr(tool, 'description', 'No description available'),
+                "parameters": parameters
+            })
+        return tools_info
     
     @staticmethod
     def _get_role_from_message(message: BaseMessage) -> str:

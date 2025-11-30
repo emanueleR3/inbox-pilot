@@ -6,7 +6,7 @@
 // Marco
 @userIdMarco = d886288a-4e31-4978-b89f-867d55622169
 
-@threadId = userd886288a-4e31-4978-b89f-867d55622169:convb1992f56-99f2-4d51-b14c-ee047a83a7f6
+@threadId = userd886288a-4e31-4978-b89f-867d55622169:conv745b883e-e0ef-47a7-919e-5f36d368afb6
 
 ###############################################
 # 1. Get Available Tools
@@ -44,7 +44,7 @@ Content-Type: application/json
 
 {
     "user_id": "{{userIdMarco}}",
-    "message": "Send an email to customer@example.com telling him to pay my $4,50 back for the starbucks coffee we had last week.",
+    "message": "Can you reply to the last email from customer@example.com saying hey?",
     "thread_id": "{{threadId}}"
 }
 

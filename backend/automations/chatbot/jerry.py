@@ -6,7 +6,16 @@ from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
 from uuid import uuid4
-from automations.chatbot.tools import send_email
+from automations.chatbot.tools import (
+    send_email,
+    create_draft_email,
+    retrieve_last_n_emails,
+    search_emails,
+    get_thread_messages,
+    delete_emails,
+    forward_email,
+    reply_to_email,
+)
 from automations.chatbot.db.db import get_user_context
 from automations.chatbot.prompts import JERRY_AGENT_PROMPT, build_enriched_prompt
 from langchain_core.runnables import RunnableConfig
@@ -89,7 +98,14 @@ def create_chatbot_agent(state: GraphState):
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
 
     tools = [
-         send_email,
+        send_email,
+        create_draft_email,
+        retrieve_last_n_emails,
+        search_emails,
+        get_thread_messages,
+        delete_emails,
+        forward_email,
+        reply_to_email,
     ]
     
     agent = create_agent(
