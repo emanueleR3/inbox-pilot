@@ -1045,9 +1045,9 @@ def _reply_gmail_email(
 
 def _delete_gmail_emails(access_token: str, message_ids: List[str]) -> str:
     """
-    Delete emails from Gmail using batch delete.
+    Move emails to trash in Gmail.
     
-    Uses the messages.batchDelete API endpoint.
+    Uses the messages.trash API endpoint to move messages to trash.
     """
     base_url = "https://gmail.googleapis.com/gmail/v1"
     
@@ -1060,26 +1060,29 @@ def _delete_gmail_emails(access_token: str, message_ids: List[str]) -> str:
     if not valid_ids:
         return "Error: No valid message IDs provided. Message IDs must be non-empty strings."
     
+    trashed_count = 0
+    failed_ids = []
+    
     with httpx.Client() as client:
-        response = client.post(
-            f"{base_url}/users/me/messages/batchDelete",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            },
-            json={"ids": valid_ids}
-        )
-        
-        if response.status_code == 204 or response.status_code == 200:
-            return f"Successfully deleted {len(valid_ids)} email(s)."
-        elif response.status_code == 400:
-            return f"Error: Invalid request. Some message IDs may be invalid. Details: {response.text}"
-        elif response.status_code == 401:
-            return "Error: Authentication failed. The access token may be expired or invalid."
-        elif response.status_code == 403:
-            return "Error: Permission denied. The app may not have permission to delete emails (requires https://mail.google.com/ scope)."
-        else:
-            return f"Error: Failed to delete emails. Status: {response.status_code}. Details: {response.text}"
+        for msg_id in valid_ids:
+            response = client.post(
+                f"{base_url}/users/me/messages/{msg_id}/trash",
+                headers={
+                    "Authorization": f"Bearer {access_token}"
+                }
+            )
+            
+            if response.status_code == 200:
+                trashed_count += 1
+            else:
+                failed_ids.append(msg_id)
+    
+    if trashed_count == len(valid_ids):
+        return f"Successfully moved {trashed_count} email(s) to trash."
+    elif trashed_count > 0:
+        return f"Partially successful: Moved {trashed_count} email(s) to trash. Failed to trash {len(failed_ids)} email(s) with IDs: {', '.join(failed_ids[:5])}{'...' if len(failed_ids) > 5 else ''}"
+    else:
+        return f"Error: Failed to trash any emails. The message IDs may be invalid or already deleted."
 
 
 def _delete_microsoft_emails(access_token: str, message_ids: List[str]) -> str:
