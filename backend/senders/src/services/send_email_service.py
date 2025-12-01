@@ -37,7 +37,8 @@ class SendEmailService:
         email: str, 
         subject: str, 
         body: str, 
-        hashed_access_token: str
+        hashed_access_token: str,
+        thread_id: Optional[str] = None
     ) -> dict:
         """
         Send an email using Gmail API and return RFC Message-ID.
@@ -88,9 +89,13 @@ class SendEmailService:
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
         
             # Send the email
+            message_body = {'raw': raw_message}
+            if thread_id:
+                message_body['threadId'] = thread_id
+
             send_result = service.users().messages().send(
                 userId='me',
-                body={'raw': raw_message}
+                body=message_body
             ).execute()
         
             gmail_internal_id = send_result.get('id')
@@ -137,7 +142,8 @@ class SendEmailService:
         email: str, 
         subject: str, 
         body: str, 
-        hashed_access_token: str
+        hashed_access_token: str,
+        reply_to_id: Optional[str] = None
     ) -> dict:
         """
         Send an email using Microsoft Graph API and return RFC Message-ID (internetMessageId).
@@ -159,24 +165,34 @@ class SendEmailService:
             }
         
             # 1️⃣ CREA IL MESSAGGIO (DRAFT)
-            create_url = "https://graph.microsoft.com/v1.0/me/messages"
-            email_message = {
-                "subject": subject,
-                "body": {
-                    "contentType": content_type,
-                    "content": body
-                },
-                "toRecipients": [
-                    {
-                        "emailAddress": {
-                            "address": email
+            if reply_to_id:
+                # Caso REPLY: usiamo createReply per generare una bozza di risposta
+                create_url = f"https://graph.microsoft.com/v1.0/me/messages/{reply_to_id}/createReply"
+                # Per createReply, il corpo va in "comment" se vogliamo aggiungere testo
+                # Nota: createReply imposta automaticamente Subject (Re: ...) e To/Cc
+                reply_payload = {
+                    "comment": body
+                }
+                create_resp = requests.post(create_url, json=reply_payload, headers=headers)
+            else:
+                # Caso NUOVA EMAIL
+                create_url = "https://graph.microsoft.com/v1.0/me/messages"
+                email_message = {
+                    "subject": subject,
+                    "body": {
+                        "contentType": content_type,
+                        "content": body
+                    },
+                    "toRecipients": [
+                        {
+                            "emailAddress": {
+                                "address": email
+                            }
                         }
-                    }
-                ],
-                # opzionale: "saveToSentItems" non serve qui, il messaggio andrà automaticamente in Sent dopo il send
-            }
-        
-            create_resp = requests.post(create_url, json=email_message, headers=headers)
+                    ],
+                }
+                create_resp = requests.post(create_url, json=email_message, headers=headers)
+
             if create_resp.status_code not in (200, 201):
                 error_msg = f"Microsoft Graph create draft error: {create_resp.status_code} - {create_resp.text}"
                 logger.error(f"❌ {error_msg}")
@@ -253,7 +269,9 @@ class SendEmailService:
         smtp_port: int,
         smtp_server: str,
         smtp_email: str,
-        smtp_password: str
+        smtp_password: str,
+        reply_to_id: Optional[str] = None,
+        message_id: Optional[str] = None
     ) -> dict:
         try:
             sender_email = smtp_email
@@ -266,6 +284,11 @@ class SendEmailService:
             # 🆕 Genero Message-ID RFC e lo aggiungo all'header
             msg_id = make_msgid()
             message["Message-ID"] = msg_id
+
+            if reply_to_id:
+                message["In-Reply-To"] = reply_to_id
+            if message_id:
+                message["References"] = message_id
 
             # HTML o testo
             if body.strip().startswith("<"):

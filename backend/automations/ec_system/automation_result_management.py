@@ -53,6 +53,7 @@ def process_automation_result(workflow_result: dict):
     sender_email = extracted_info.get("from", "unknown")
     subject = extracted_info.get("subject", "No subject")
     thread_id = extracted_info.get("thread_id", None)
+    replay_to_id = extracted_info.get("reply_to_id", None)
     summary = workflow_result.get("mail_summary", "")
     extended_summary = workflow_result.get("extended_summary", None)
     cc_emails = extracted_info.get("cc", "")
@@ -712,15 +713,19 @@ def process_automation_result(workflow_result: dict):
                     if provider == "google":
                         endpoint = f"{senders_url}/send-email/send-gmail"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
+                        payload["thread_id"] = thread_id
                     elif provider == "microsoft":
                         endpoint = f"{senders_url}/send-email/send-microsoft"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
+                        payload["reply_to_id"] = message_id
                     elif provider == "imap":
                         endpoint = f"{senders_url}/send-email/send-smtp"
                         payload["smtp_server"] = email_service_data.get("smtp_server")
                         payload["smtp_port"] = email_service_data.get("smtp_port")
                         payload["smtp_email"] = box_email
                         payload["hashed_password"] = email_service_data.get("hashed_password")
+                        payload["reply_to_id"] = replay_to_id
+                        payload["message_id"] = message_id
                     else:
                         raise Exception(f"Unknown email provider: {provider}")
 
