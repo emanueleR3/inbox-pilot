@@ -65,7 +65,7 @@ def process_automation_result(workflow_result: dict):
     email_body = extracted_info.get("email_body", "")
     summary_attachments = workflow_result.get("summary_attachments", None)
     now_tz = datetime.now(timezone.utc).isoformat()
-    original_thread_id = extracted_info.get("original_thread_id", None)
+    original_thread_id = workflow_result.get("original_thread_id", None)
     
     print(f"[DEBUG AUTOMATION] extracted original_thread_id: {original_thread_id}")
     print(f"[DEBUG AUTOMATION] extracted message_id: {message_id}")
