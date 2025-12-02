@@ -53,6 +53,9 @@ class EmailProcessor:
             
             # Step 2: Apply advanced filtering
             filter_result = await self.filter.process_message(email_data)
+
+            print(f"📝 [DEBUG-PROCESSOR] Filter result: {filter_result}")
+            print(f"📝 [DEBUG-PROCESSOR] email_data result: {email_data}")
             
             if not filter_result:
                 print(f"🚫 [PROCESSOR] Message filtered out")
@@ -60,7 +63,9 @@ class EmailProcessor:
             
             # Step 3: Handle the result based on filter outcome
             action = filter_result.get("action")
+            summarizer_only = filter_result.get("summarizer_only", False)
             email_data["action"] = action
+            email_data["summarizer_only"] = summarizer_only
             
             if action == "send_to_summarizer":
                 print(f"📝 [PROCESSOR] Message sent to summarizer only")
