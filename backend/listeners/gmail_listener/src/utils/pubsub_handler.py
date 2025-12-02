@@ -53,37 +53,8 @@ async def process_pubsub_message(data: dict):
         payload = _serialize_gmail_message(email, msg, history_id)
         sender_email = _extract_email_from_header(payload.get('from', ''))
         labels = payload.get('labels', [])
-        
-        # Se il mittente è la stessa email dell'account o ha label SENT, salta questo messaggio
-        '''
-        if (sender_email and sender_email.lower() == email.lower()) or 'SENT' in labels:
-            print(f"🚫 Messaggio saltato - inviato dalla stessa email o label SENT: {payload.get('subject', 'N/A')}")
-            continue
-        '''
 
-        # TODO CONTROLLARE ID
-        '''
-        -> Esiste il campo In-Reply-To ?
-        TRUE { vedere in history a quale thread fa riferimento
-          -> il message_id è in history ?
-           - TRUE {
-            -- scarta
-           }
-           - FALSE {
-             -> Il sender della mail è uguale alla mail admin ?
-               - TRUE { 
-                 -- set human_response a true e notifica
-                 -- aggiorna summary e category (IA) e i vari campi
-               }
-               - FALSE {
-                 -- aggiorna campi e lancia l'automazione
-               }	 
-           }
-        }
-        FALSE { 
-           -- salvo thread_id, started_at, history, subject, sender_email, cc_emails, [SUMMARY DOPO AUTO], last_message_id, last_message_at, attachment_emails_id, [CATEGORY DOPO AUTO], human_response, last_sender_email
-        }
-        '''
+        print(f"\n\n===========\nDEBUG:\nSender Payload: {payload}\n===========\n\n")
 
         # Salta i messaggi con label DRAFT (bozze)
         if 'DRAFT' in labels:
@@ -124,9 +95,10 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     if message_id:
         message_id = _clean_message_id(message_id)
 
-    thread_id = headers_lower.get("thread-id")
+    thread_id = message.get("threadId")
     if thread_id:
-        thread_id = _clean_message_id(thread_id)
+        # thread_id = _clean_message_id(thread_id) # Non serve pulire il threadId di solito, ma se vuoi mantenerlo:
+        print(f"\n\n===========\nDEBUG:\nThread ID: {thread_id}\n===========\n\n")
     
     # Cerca in-reply-to in modo case-insensitive e rimuovi < >
     reply_to_id = headers_lower.get("in-reply-to")
