@@ -627,7 +627,9 @@ def retrieve_last_n_emails(
         port=port
     )
 
-
+# TODO Fargli capire che non deve mettere dati a caso perché senno sicuro non trova nulla.
+# Si potrebbe anche fare che se non trova nulla, riprova con una ricerca meno stringente.
+# Per ora mi ha scazzato la email (ho detto email da Loris Catalano e ha cercato con sender=loris.catalano@example.com)
 @tool(
     name_or_callable="search_emails",
     description="""Search for emails matching specified criteria. Use this to find specific emails by sender, subject, keywords, date range, or raw search queries.
@@ -658,7 +660,7 @@ Returns: A formatted string containing matching emails with details (sender, sub
                 },
                 "sender": {
                     "type": ["string", "null"],
-                    "description": "Filter by sender email address (e.g., 'boss@company.com'). Finds all emails from this sender."
+                    "description": "Filter by sender email address (e.g., 'boss@company.com'). Finds all emails from this sender. Fill this field only if you are sure of the email address."
                 },
                 "subject": {
                     "type": ["string", "null"],
@@ -679,7 +681,7 @@ Returns: A formatted string containing matching emails with details (sender, sub
                 },
                 "provider": {
                     "type": "string",
-                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365, 'imap' for other providers. Default: 'google'",
+                    "description": "Email provider: Use 'google' for Gmail, 'microsoft' for Outlook/M365, 'imap' for other providers. Default: 'google'",
                     "default": "google"
                 },
                 "access_token": {
@@ -930,7 +932,7 @@ def forward_email(
     name_or_callable="reply_to_email",
     description="""Reply to an existing email. Can reply to just the sender or to all recipients (reply all).
 
-Supported providers: 'google' (Gmail) and 'microsoft' (Outlook/Microsoft 365).
+Supported providers: 'google' (Gmail), 'microsoft' (Outlook/Microsoft 365), and 'imap' (generic IMAP/SMTP servers).
 All credentials are automatically retrieved from the system.
 
 When to use this tool:
@@ -964,7 +966,7 @@ Returns: A confirmation message indicating the reply was sent successfully.""",
                 },
                 "provider": {
                     "type": "string",
-                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365. Default: 'google'",
+                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365, 'imap' for other providers. Default: 'google'",
                     "default": "google"
                 },
                 "access_token": {
@@ -1002,21 +1004,44 @@ def reply_to_email(
         if not access_token:
             return f"Error: Could not retrieve access token for {email_address}. Please ensure the email is configured in the system."
 
-    return email_service.reply_to_email(
-        message_id=message_id,
-        body=body,
-        provider=provider,
-        access_token=access_token,
-        reply_all=reply_all,
-        additional_recipients=additional_recipients
-    )
+        return email_service.reply_to_email(
+            message_id=message_id,
+            body=body,
+            provider=provider,
+            access_token=access_token,
+            reply_all=reply_all,
+            additional_recipients=additional_recipients
+        )
+    
+    # Auto-fetch IMAP/SMTP credentials if provider is 'imap'
+    if provider == 'imap':
+        print(f"Fetching IMAP/SMTP credentials for {email_address} to reply to email...")
+        credentials = _get_imap_smtp_credentials(email_address)
+        if not credentials:
+            return f"Error: Could not retrieve IMAP/SMTP credentials for {email_address}. Please ensure the email is configured with IMAP/SMTP settings."
+        
+        return email_service.reply_to_email(
+            message_id=message_id,
+            body=body,
+            provider=provider,
+            reply_all=reply_all,
+            additional_recipients=additional_recipients,
+            imap_host=credentials["imap_host"],
+            smtp_host=credentials["smtp_host"],
+            username=credentials["email"],
+            password=credentials["password"],
+            imap_port=credentials["imap_port"],
+            smtp_port=credentials["smtp_port"]
+        )
+    
+    return f"Error: Unsupported provider '{provider}'. Use 'google', 'microsoft', or 'imap'."
 
 
 @tool(
     name_or_callable="delete_emails",
     description="""Permanently delete one or more emails. THIS ACTION CANNOT BE UNDONE.
 
-Supported providers: 'google' (Gmail) and 'microsoft' (Outlook/Microsoft 365).
+Supported providers: 'google' (Gmail), 'microsoft' (Outlook/Microsoft 365), and 'imap' (generic IMAP servers).
 All credentials are automatically retrieved from the system.
 
 When to use this tool:
@@ -1047,16 +1072,16 @@ Returns: A confirmation message indicating how many emails were deleted.""",
                 "message_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of message IDs to delete. MUST be obtained from search_emails or retrieve_last_n_emails results. For Gmail: hexadecimal strings. For Microsoft: message id strings."
+                    "description": "List of message IDs to delete. MUST be obtained from search_emails or retrieve_last_n_emails results. For Gmail: hexadecimal strings. For Microsoft: message id strings. For IMAP: sequence numbers."
                 },
                 "provider": {
                     "type": "string",
-                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365. Default: 'google'",
+                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365, 'imap' for other providers. Default: 'google'",
                     "default": "google"
                 },
                 "access_token": {
                     "type": ["string", "null"],
-                    "description": "OAuth access token. Leave empty - automatically retrieved."
+                    "description": "OAuth access token. Leave empty - automatically retrieved for google/microsoft providers."
                 }
             },
             "required": ["email_address", "message_ids"]
@@ -1076,9 +1101,27 @@ def delete_emails(
         if not access_token:
             return f"Error: Could not retrieve access token for {email_address}. Please ensure the email is configured in the system."
 
-    return email_service.delete_emails(
-        message_ids=message_ids,
-        provider=provider,
-        access_token=access_token
-    )
+        return email_service.delete_emails(
+            message_ids=message_ids,
+            provider=provider,
+            access_token=access_token
+        )
+    
+    # Auto-fetch IMAP credentials if provider is 'imap'
+    if provider == 'imap':
+        print(f"Fetching IMAP credentials for {email_address} to delete emails...")
+        credentials = _get_imap_smtp_credentials(email_address)
+        if not credentials:
+            return f"Error: Could not retrieve IMAP credentials for {email_address}. Please ensure the email is configured with IMAP/SMTP settings."
+        
+        return email_service.delete_emails(
+            message_ids=message_ids,
+            provider=provider,
+            host=credentials["imap_host"],
+            username=credentials["email"],
+            password=credentials["password"],
+            port=credentials["imap_port"]
+        )
+    
+    return f"Error: Unsupported provider '{provider}'. Use 'google', 'microsoft', or 'imap'."
 

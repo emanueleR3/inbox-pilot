@@ -1,4 +1,5 @@
 """Centralized prompts for the Jerry chatbot system."""
+# TODO Farli in italiano come main, e gli altri come secondari in base alla ligua dell'utente
 
 from datetime import datetime
 

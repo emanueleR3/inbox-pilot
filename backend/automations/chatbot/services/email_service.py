@@ -641,15 +641,23 @@ def search_emails(
 def delete_emails(
     message_ids: List[str],
     provider: str,
-    access_token: str
+    access_token: str = None,
+    host: str = None,
+    username: str = None,
+    password: str = None,
+    port: int = 993
 ) -> str:
     """
     Delete emails by their message IDs.
     
     Args:
         message_ids: List of message IDs to delete
-        provider: 'google' or 'microsoft'
-        access_token: OAuth access token
+        provider: 'google', 'microsoft', or 'imap'
+        access_token: OAuth access token (required for google/microsoft)
+        host: IMAP host (required for IMAP provider)
+        username: Email username (required for IMAP)
+        password: Email password (required for IMAP)
+        port: IMAP port (default: 993)
     
     Returns:
         String confirming deletion or error message
@@ -661,6 +669,10 @@ def delete_emails(
         return _delete_gmail_emails(access_token, message_ids)
     elif provider == 'microsoft':
         return _delete_microsoft_emails(access_token, message_ids)
+    elif provider == 'imap':
+        if not host or not username or not password:
+            raise ValueError("host, username, and password are required for IMAP provider")
+        return _delete_imap_emails(host, port, username, password, message_ids)
     else:
         raise ValueError(f"Provider {provider} doesn't support email deletion")
 
@@ -703,9 +715,15 @@ def reply_to_email(
     message_id: str,
     body: str,
     provider: str,
-    access_token: str,
+    access_token: str = None,
     reply_all: bool = False,
-    additional_recipients: Optional[List[str]] = None
+    additional_recipients: Optional[List[str]] = None,
+    imap_host: str = None,
+    smtp_host: str = None,
+    username: str = None,
+    password: str = None,
+    imap_port: int = 993,
+    smtp_port: int = 587
 ) -> str:
     """
     Reply to an email.
@@ -713,10 +731,16 @@ def reply_to_email(
     Args:
         message_id: The ID of the message to reply to
         body: The reply message body/comment
-        provider: 'google' or 'microsoft'
-        access_token: OAuth access token
+        provider: 'google', 'microsoft', or 'imap'
+        access_token: OAuth access token (required for google/microsoft)
         reply_all: If True, reply to all recipients (default: False, reply only to sender)
         additional_recipients: Optional list of additional recipients to include in the reply
+        imap_host: IMAP host (required for IMAP provider)
+        smtp_host: SMTP host (required for IMAP provider)
+        username: Email username (required for IMAP provider)
+        password: Email password (required for IMAP provider)
+        imap_port: IMAP port (default: 993)
+        smtp_port: SMTP port (default: 587)
     
     Returns:
         String confirming the reply or error message
@@ -731,6 +755,21 @@ def reply_to_email(
         return _reply_gmail_email(access_token, message_id, body, reply_all, additional_recipients)
     elif provider == 'microsoft':
         return _reply_microsoft_email(access_token, message_id, body, reply_all, additional_recipients)
+    elif provider == 'imap':
+        if not imap_host or not smtp_host or not username or not password:
+            raise ValueError("imap_host, smtp_host, username, and password are required for IMAP provider")
+        return _reply_imap_email(
+            imap_host=imap_host,
+            smtp_host=smtp_host,
+            username=username,
+            password=password,
+            imap_port=imap_port,
+            smtp_port=smtp_port,
+            message_id=message_id,
+            body=body,
+            reply_all=reply_all,
+            additional_recipients=additional_recipients
+        )
     else:
         raise ValueError(f"Provider {provider} doesn't support email replies")
 
@@ -1056,6 +1095,146 @@ def _reply_gmail_email(
             return f"Error: Failed to send reply. Status: {send_response.status_code}. Details: {send_response.text}"
 
 
+def _reply_imap_email(
+    imap_host: str,
+    smtp_host: str,
+    username: str,
+    password: str,
+    message_id: str,
+    body: str,
+    imap_port: int = 993,
+    smtp_port: int = 587,
+    reply_all: bool = False,
+    additional_recipients: Optional[List[str]] = None
+) -> str:
+    """
+    Reply to an email using IMAP to fetch the original message and SMTP to send the reply.
+    
+    This implementation:
+    1. Connects to IMAP to retrieve the original message
+    2. Extracts the necessary headers (From, To, Cc, Subject, Message-ID, References)
+    3. Builds a proper reply with In-Reply-To and References headers
+    4. Sends via SMTP
+    """
+    import imaplib
+    import ssl
+    from email.header import decode_header
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.utils import formatdate, make_msgid
+    import email
+    
+    try:
+        # Create SSL context with relaxed security for servers with weak DH keys
+        ssl_context = ssl.create_default_context()
+        ssl_context.set_ciphers('DEFAULT:@SECLEVEL=1')
+        
+        # Connect to IMAP to get the original message
+        imap = imaplib.IMAP4_SSL(imap_host, imap_port, ssl_context=ssl_context)
+        imap.login(username, password)
+        imap.select('INBOX')
+        
+        # Fetch the original message using the message sequence number
+        _, msg_data = imap.fetch(message_id.encode() if isinstance(message_id, str) else message_id, '(RFC822)')
+        
+        if not msg_data or not msg_data[0]:
+            imap.logout()
+            return f"Error: Could not retrieve original message with ID {message_id}"
+        
+        email_body = msg_data[0][1]
+        original_message = email.message_from_bytes(email_body)
+        imap.logout()
+        
+        # Extract headers from original message
+        original_from = original_message.get('From', '')
+        original_to = original_message.get('To', '')
+        original_cc = original_message.get('Cc', '')
+        original_subject = original_message.get('Subject', 'No Subject')
+        original_message_id = original_message.get('Message-ID', '')
+        original_references = original_message.get('References', '')
+        
+        # Decode subject if needed
+        if original_subject:
+            decoded_subject = decode_header(original_subject)
+            original_subject = decoded_subject[0][0]
+            if isinstance(original_subject, bytes):
+                original_subject = original_subject.decode(decoded_subject[0][1] or 'utf-8')
+        
+        # Determine recipients
+        if reply_all:
+            to_list = [original_from]
+            if original_to:
+                to_list.extend([addr.strip() for addr in original_to.split(',')])
+            if original_cc:
+                to_list.extend([addr.strip() for addr in original_cc.split(',')])
+        else:
+            to_list = [original_from]
+        
+        # Add additional recipients if provided
+        if additional_recipients:
+            to_list.extend(additional_recipients)
+        
+        # Remove duplicates and the sender's own address while preserving order
+        seen = set()
+        unique_to = []
+        sender_lower = username.lower()
+        for addr in to_list:
+            # Extract email from "Name <email>" format if needed
+            addr_clean = addr.strip()
+            addr_lower = addr_clean.lower()
+            # Extract just the email part for comparison
+            if '<' in addr_lower and '>' in addr_lower:
+                email_part = addr_lower.split('<')[1].split('>')[0]
+            else:
+                email_part = addr_lower
+            
+            if email_part and email_part not in seen and email_part != sender_lower:
+                seen.add(email_part)
+                unique_to.append(addr_clean)
+        
+        if not unique_to:
+            return "Error: No valid recipients found for reply."
+        
+        # Build reply subject
+        reply_subject = f"Re: {original_subject}" if not original_subject.startswith('Re:') else original_subject
+        
+        # Create the reply message
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = reply_subject
+        msg['From'] = username
+        msg['To'] = ', '.join(unique_to)
+        msg['Date'] = formatdate(localtime=True)
+        msg['Message-ID'] = make_msgid()
+        
+        # Add threading headers
+        if original_message_id:
+            msg['In-Reply-To'] = original_message_id
+            if original_references:
+                msg['References'] = f"{original_references} {original_message_id}"
+            else:
+                msg['References'] = original_message_id
+        
+        # Add body
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Send via SMTP
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30) as server:
+                server.login(username, password)
+                server.sendmail(username, unique_to, msg.as_string())
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+                server.starttls()
+                server.login(username, password)
+                server.sendmail(username, unique_to, msg.as_string())
+        
+        reply_type = "all recipients" if reply_all else "sender"
+        return f"Reply successfully sent to {reply_type}."
+        
+    except Exception as e:
+        return f"Error: Failed to send reply via IMAP/SMTP: {str(e)}"
+
+
 def _delete_gmail_emails(access_token: str, message_ids: List[str]) -> str:
     """
     Move emails to trash in Gmail.
@@ -1136,6 +1315,67 @@ def _delete_microsoft_emails(access_token: str, message_ids: List[str]) -> str:
         return f"Partially successful: Deleted {deleted_count} email(s). Failed to delete {len(failed_ids)} email(s) with IDs: {', '.join(failed_ids[:5])}{'...' if len(failed_ids) > 5 else ''}"
     else:
         return f"Error: Failed to delete any emails. The message IDs may be invalid or already deleted."
+
+
+def _delete_imap_emails(host: str, port: int, username: str, password: str, message_ids: List[str]) -> str:
+    """
+    Delete emails from IMAP server by marking them as deleted and expunging.
+    
+    For IMAP, message_ids should be the sequence numbers or UIDs obtained from search results.
+    The IMAP implementation stores email sequence numbers in the message_id field.
+    """
+    import imaplib
+    import ssl
+    
+    if not message_ids:
+        return "Error: No message IDs provided."
+    
+    # Validate message IDs
+    valid_ids = [mid.strip() for mid in message_ids if mid and isinstance(mid, str) and len(mid.strip()) > 0]
+    
+    if not valid_ids:
+        return "Error: No valid message IDs provided. Message IDs must be non-empty strings."
+    
+    try:
+        # Create SSL context with relaxed security for servers with weak DH keys
+        ssl_context = ssl.create_default_context()
+        ssl_context.set_ciphers('DEFAULT:@SECLEVEL=1')
+        
+        imap = imaplib.IMAP4_SSL(host, port, ssl_context=ssl_context)
+        imap.login(username, password)
+        imap.select('INBOX')
+        
+        deleted_count = 0
+        failed_ids = []
+        
+        for msg_id in valid_ids:
+            try:
+                # Mark the message for deletion using the STORE command
+                # The message_id should be the email sequence number
+                result, data = imap.store(msg_id.encode() if isinstance(msg_id, str) else msg_id, '+FLAGS', '\\Deleted')
+                if result == 'OK':
+                    deleted_count += 1
+                else:
+                    failed_ids.append(msg_id)
+            except Exception as e:
+                print(f"Failed to delete message {msg_id}: {str(e)}")
+                failed_ids.append(msg_id)
+        
+        # Permanently remove deleted messages
+        if deleted_count > 0:
+            imap.expunge()
+        
+        imap.logout()
+        
+        if deleted_count == len(valid_ids):
+            return f"Successfully deleted {deleted_count} email(s)."
+        elif deleted_count > 0:
+            return f"Partially successful: Deleted {deleted_count} email(s). Failed to delete {len(failed_ids)} email(s) with IDs: {', '.join(failed_ids[:5])}{'...' if len(failed_ids) > 5 else ''}"
+        else:
+            return f"Error: Failed to delete any emails. The message IDs may be invalid or already deleted."
+            
+    except Exception as e:
+        return f"Error: Failed to delete IMAP emails: {str(e)}"
 
 
 def _get_gmail_thread(access_token: str, thread_id: str, format: str = "full") -> str:
@@ -1705,11 +1945,16 @@ def _search_imap_emails(
     """Search emails using IMAP."""
     import imaplib
     import email
+    import ssl
     from email.header import decode_header
     from datetime import datetime
     
     try:
-        imap = imaplib.IMAP4_SSL(host, port)
+        # Create SSL context with relaxed security for servers with weak DH keys
+        ssl_context = ssl.create_default_context()
+        ssl_context.set_ciphers('DEFAULT:@SECLEVEL=1')
+        
+        imap = imaplib.IMAP4_SSL(host, port, ssl_context=ssl_context)
         imap.login(username, password)
         imap.select('INBOX')
         
@@ -1782,6 +2027,7 @@ def _search_imap_emails(
                     body = str(email_message.get_payload())
             
             emails_data.append({
+                'message_id': email_id.decode() if isinstance(email_id, bytes) else str(email_id),
                 'from': email_message.get('From', 'Unknown'),
                 'subject': subj,
                 'date': email_message.get('Date', ''),
@@ -1886,11 +2132,16 @@ def _retrieve_imap_emails(host: str, port: int, username: str, password: str, n:
     """Retrieve emails from IMAP server."""
     import imaplib
     import email
+    import ssl
     from email.header import decode_header
     
     try:
+        # Create SSL context with relaxed security for servers with weak DH keys
+        ssl_context = ssl.create_default_context()
+        ssl_context.set_ciphers('DEFAULT:@SECLEVEL=1')
+        
         # Connect to IMAP server
-        imap = imaplib.IMAP4_SSL(host, port)
+        imap = imaplib.IMAP4_SSL(host, port, ssl_context=ssl_context)
         imap.login(username, password)
         imap.select('INBOX')
         
@@ -1940,6 +2191,7 @@ def _retrieve_imap_emails(host: str, port: int, username: str, password: str, n:
                     body = str(email_message.get_payload())
             
             emails_data.append({
+                'message_id': email_id.decode() if isinstance(email_id, bytes) else str(email_id),
                 'from': email_message.get('From', 'Unknown'),
                 'subject': subject,
                 'date': email_message.get('Date', ''),
