@@ -93,7 +93,7 @@ class EmailProcessor:
                         processed_attachments if 'processed_attachments' in locals() else []
                     )
 
-                    await self.send_to_automation()
+                    await self.send_to_automation(automation_payload)
                 except Exception as e:
                     print(f"❌ [PROCESSOR] Failed to send to summarizer: {e}")
 
