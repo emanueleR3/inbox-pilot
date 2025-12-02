@@ -715,6 +715,7 @@ def process_automation_result(workflow_result: dict):
                         endpoint = f"{senders_url}/send-email/send-gmail"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
                         payload["original_thread_id"] = original_thread_id
+                        payload["message_id"] = message_id  # Required for In-Reply-To and References headers
                     elif provider == "microsoft":
                         endpoint = f"{senders_url}/send-email/send-microsoft"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
