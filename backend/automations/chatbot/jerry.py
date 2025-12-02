@@ -6,7 +6,18 @@ from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
 from uuid import uuid4
-from automations.chatbot.tools import send_email
+from automations.chatbot.tools import (
+    send_email,
+    create_draft_email,
+    retrieve_last_n_emails,
+    search_emails,
+    get_thread_messages,
+    delete_emails,
+    forward_email,
+    reply_to_email,
+)
+from automations.chatbot.db.db import get_user_context
+from automations.chatbot.prompts import JERRY_AGENT_PROMPT, build_enriched_prompt
 from langchain_core.runnables import RunnableConfig
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -27,23 +38,48 @@ supabase_project_id = os.getenv("SUPABASE_PROJECT_ID")
 supabase_password = os.getenv("SUPABASE_PASSWORD")
 DB_URI = f"postgresql://postgres.{supabase_project_id}:{supabase_password}@aws-1-eu-central-1.pooler.supabase.com:5432/postgres"
 
-agent_prompt = """
-You are Jerry, a helpful customer support chatbot that assists the customer and uses its tools to address their requests. 
-Use the tools as needed to execute what the customer asks for.
-"""
+# Re-export for backwards compatibility
+agent_prompt = JERRY_AGENT_PROMPT
 
 class GraphState(TypedDict):
     """State schema for the chatbot graph."""
     messages: Annotated[list, add_messages]
 
 
+def _build_system_prompt_with_context(user_id: str) -> str:
+    """
+    Build the system prompt with user context from Supabase.
+    
+    Args:
+        user_id: The user identifier
+        
+    Returns:
+        System prompt enriched with user context
+    """
+    user_context = get_user_context(user_id)
+    
+    if not user_context:
+        print(f"⚠️ [JERRY] No user context found for user_id: {user_id}, using base prompt")
+    else:
+        print(f"✅ [JERRY] System prompt enriched with user context for user_id: {user_id}")
+    
+    return build_enriched_prompt(user_context)
+
+
 def handle_user_message(user_id: str, thread_id: str | None, text: str):
-    # Nel caso non esista thread_id, ne crea uno nuovo. Tuttavia, dovrebbe essere sempre gia' presente, perche' gestito a livello di API.
+    # Nel caso non esista thread_id, ne crea uno nuovo con user context. 
+    # Tuttavia, dovrebbe essere sempre gia' presente, perche' gestito a livello di API.
     if thread_id is None:
-        messages = [
-            SystemMessage(agent_prompt),
-        ]
+        # Build system prompt with user context
+        system_prompt = _build_system_prompt_with_context(user_id)
         thread_id = f"user{user_id}:conv{uuid4()}"
+        
+        # Initialize the thread with the system message first
+        config = {"configurable": {"thread_id": thread_id}}
+        graph.invoke(
+            {"messages": [SystemMessage(content=system_prompt)]},
+            config=config,
+        )
 
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -62,7 +98,14 @@ def create_chatbot_agent(state: GraphState):
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
 
     tools = [
-         send_email,
+        send_email,
+        create_draft_email,
+        retrieve_last_n_emails,
+        search_emails,
+        get_thread_messages,
+        delete_emails,
+        forward_email,
+        reply_to_email,
     ]
     
     agent = create_agent(

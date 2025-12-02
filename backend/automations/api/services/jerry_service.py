@@ -11,8 +11,11 @@ sys.path.insert(0, str(project_root))
 
 # Import core Jerry logic and components
 from automations.chatbot import jerry
-from automations.chatbot.tools import send_email
+from automations.chatbot import tools as jerry_tools
+from automations.chatbot.db.db import get_user_context
+from automations.chatbot.prompts import JERRY_AGENT_PROMPT, build_enriched_prompt
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
+from langchain_core.tools import BaseTool
 
 
 class JerryService:
@@ -25,9 +28,28 @@ class JerryService:
         self.checkpointer = jerry.checkpointer
         self.agent_prompt = jerry.agent_prompt
     
+    def _build_system_prompt_with_context(self, user_id: str) -> str:
+        """
+        Build the system prompt with user context from Supabase.
+        
+        Args:
+            user_id: The user identifier
+            
+        Returns:
+            System prompt enriched with user context
+        """
+        user_context = get_user_context(user_id)
+        
+        if not user_context:
+            print(f"⚠️ [JERRY_SERVICE] No user context found for user_id: {user_id}, using base prompt")
+        else:
+            print(f"✅ [JERRY_SERVICE] System prompt enriched with user context for user_id: {user_id}")
+        
+        return build_enriched_prompt(user_context)
+    
     def create_thread(self, user_id: str) -> str:
         """
-        Create a new conversation thread.
+        Create a new conversation thread with user context.
         
         Args:
             user_id: The user identifier
@@ -37,10 +59,13 @@ class JerryService:
         """
         thread_id = f"user{user_id}:conv{uuid4()}"
         
-        # Initialize the thread with system message
+        # Build system prompt with user context
+        system_prompt = self._build_system_prompt_with_context(user_id)
+        
+        # Initialize the thread with enriched system message
         config = {"configurable": {"thread_id": thread_id}}
         self.graph.invoke(
-            {"messages": [SystemMessage(content=self.agent_prompt)]},
+            {"messages": [SystemMessage(content=system_prompt)]},
             config=config,
         )
         
@@ -90,9 +115,19 @@ class JerryService:
         Yields:
             Chunks of the response as they are generated
         """
-        # Create new thread if not provided
+        # Create new thread with user context if not provided
         if thread_id is None:
             thread_id = f"user{user_id}:conv{uuid4()}"
+            
+            # Build system prompt with user context
+            system_prompt = self._build_system_prompt_with_context(user_id)
+            
+            # Initialize the thread with enriched system message
+            config = {"configurable": {"thread_id": thread_id}}
+            self.graph.invoke(
+                {"messages": [SystemMessage(content=system_prompt)]},
+                config=config,
+            )
         
         config = {"configurable": {"thread_id": thread_id}}
         
@@ -193,10 +228,8 @@ class JerryService:
             Result of the tool execution
         """
         try:
-            # Map tool names to actual tool functions
-            available_tools = {
-                "send_email": send_email,
-            }
+            # Get available tools dynamically from jerry_tools module
+            available_tools = self._get_tools_dict()
             
             if tool_name not in available_tools:
                 return {
@@ -221,31 +254,45 @@ class JerryService:
                 "error": str(e)
             }
     
+    def _get_tools_dict(self) -> Dict[str, BaseTool]:
+        """
+        Dynamically retrieve all tools from the jerry_tools module.
+        
+        Returns:
+            Dictionary mapping tool names to tool functions
+        """
+        tools = {}
+        for attr_name in dir(jerry_tools):
+            attr = getattr(jerry_tools, attr_name)
+            # Check if it's a LangChain tool (has 'invoke' method and 'name' attribute)
+            if isinstance(attr, BaseTool):
+                tools[attr.name] = attr
+        return tools
+    
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """
         Get list of available tools with their descriptions.
+        Dynamically retrieves tools from the jerry_tools module.
         
         Returns:
             List of tool information
         """
-        #TODO Retrieve this from tools.py dynamically
-        return [
-            {
-                "name": "send_email",
-                "description": send_email.description,
-                "parameters": {
-                    "sender_address": "Email address of the sender",
-                    "receiver_address": "Email address of the recipient",
-                    "subject": "Email subject",
-                    "body": "Email body content",
-                    "provider": "'google' (default), 'microsoft', or 'smtp'",
-                    "body_type": "'text' or 'html' (default: 'text')",
-                    "cc_recipients": "List of CC email addresses (optional)",
-                    "bcc_recipients": "List of BCC email addresses (optional)",
-                    "attachments": "List of file paths to attach (optional)"
-                }
-            }
-        ]
+        tools_info = []
+        tools = self._get_tools_dict()
+        
+        for tool_name, tool in tools.items():
+            # Extract parameters schema from the tool
+            parameters = {}
+            if hasattr(tool, 'args_schema') and tool.args_schema:
+                # Get the JSON schema from the Pydantic model
+                parameters = tool.args_schema.schema() if hasattr(tool.args_schema, 'schema') else {}
+            
+            tools_info.append({
+                "name": tool_name,
+                "description": getattr(tool, 'description', 'No description available'),
+                "parameters": parameters
+            })
+        return tools_info
     
     @staticmethod
     def _get_role_from_message(message: BaseMessage) -> str:
