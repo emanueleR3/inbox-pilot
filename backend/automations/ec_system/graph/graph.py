@@ -748,7 +748,7 @@ def run_workflow(email_data: dict = None):
             # Create default initial state
             return {"status": "FAILED", "error": "No email data provided"}
             
-        print(f"🎯 [WORKFLOW] Starting with mode summarizer_only={initial_state.get('summarizer_only', False)} and original thread id {email_data.get("original_thread_id", None)}")
+        print(f"🎯 [WORKFLOW] Starting with mode summarizer_only={initial_state.get('summarizer_only', False)} and original thread_id={email_data.get('original_thread_id', None)}")
         
         # Compile and execute the workflow
         compiled_graph = graph.compile()
