@@ -5,8 +5,9 @@
 @userIdFerdi = 7ce83f5b-5f97-4393-8cfe-309630f01d99 
 // Marco
 @userIdMarco = d886288a-4e31-4978-b89f-867d55622169
+@userIdLoris = 53642f12-3b5c-4ccb-90c8-88fa1157d033
 
-@threadId = userd886288a-4e31-4978-b89f-867d55622169:conv745b883e-e0ef-47a7-919e-5f36d368afb6
+@threadId = user53642f12-3b5c-4ccb-90c8-88fa1157d033:convc147adcc-8bb3-429a-80a1-f00162d11ead
 
 ###############################################
 # 1. Get Available Tools
@@ -21,7 +22,7 @@ POST {{baseUrl}}/jerry/thread/create HTTP/1.1
 Content-Type: application/json
 
 {
-    "user_id": "{{userIdMarco}}"
+    "user_id": "{{userIdLoris}}"
 }
 
 ###############################################
@@ -31,8 +32,8 @@ POST {{baseUrl}}/jerry/message HTTP/1.1
 Content-Type: application/json
 
 {
-    "user_id": "{{userIdMarco}}",
-    "message": "Hello Jerry! Can you tell me what do you know about me?"
+    "user_id": "{{userIdLoris}}",
+    "message": "Manda una email a dev4@example.com per dirgli che deve sistemare il frontend assolutamente!!"
 }
 
 ###############################################
@@ -43,8 +44,8 @@ POST {{baseUrl}}/jerry/message HTTP/1.1
 Content-Type: application/json
 
 {
-    "user_id": "{{userIdMarco}}",
-    "message": "Can you reply to the last email from customer@example.com saying hey?",
+    "user_id": "{{userIdLoris}}",
+    "message": "Si, inviala subito! Utilizza il tool send_email con provider 'imap'",
     "thread_id": "{{threadId}}"
 }
 
@@ -87,7 +88,7 @@ Content-Type: application/json
 
 {
     "tool_name": "send_email",
-    "tool_params": {
+    "tool_params": {C
         "sender_address": "dev4@example.com",
         "receiver_address": "customer@example.com",
         "subject": "Test Email from Jerry API",

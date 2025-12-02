@@ -2,30 +2,17 @@ from langchain.tools import tool
 from typing import Optional, List
 from automations.chatbot.services import email_service
 from automations.chatbot.db.db import get_supabase_client
+from automations.ec_system.utils.utils import decrypt
 import os
-from cryptography.fernet import Fernet
-import base64
-import hashlib
 import httpx
 from datetime import datetime, timedelta
 
-def _get_cipher():
-    """Get Fernet cipher for token decryption."""
-    encryption_key_str = os.getenv("ENCRYPTION_KEY_TOKEN")
-    if not encryption_key_str:
-        raise ValueError("ENCRYPTION_KEY_TOKEN not found in environment variables")
-    
-    encryption_key = encryption_key_str.encode()
-    key_hash = hashlib.sha256(encryption_key).digest()
-    fernet_key = base64.urlsafe_b64encode(key_hash)
-    return Fernet(fernet_key)
 
 def _decrypt_token(encrypted_token: str) -> str:
     """Decrypt an encrypted token."""
     if not encrypted_token:
         return ""
-    cipher = _get_cipher()
-    return cipher.decrypt(encrypted_token.encode()).decode()
+    return decrypt(encrypted_token, "token")
 
 def _get_access_token_for_email(email: str) -> Optional[str]:
     """Retrieve and decrypt access token for a given email address. Refreshes if expired."""
@@ -64,6 +51,83 @@ def _get_access_token_for_email(email: str) -> Optional[str]:
         print(f"Error retrieving access token for {email}: {str(e)}")
         return None
 
+
+def _decrypt_password(encrypted_password: str) -> str:
+    """Decrypt an encrypted password using the shared decrypt utility."""
+    if not encrypted_password:
+        return ""
+    try:
+        print(f"Attempting to decrypt password (encrypted length: {len(encrypted_password)})")
+        decrypted = decrypt(encrypted_password, "pass")
+        print(f"Password decrypted successfully")
+        return decrypted
+    except Exception as e:
+        import traceback
+        print(f"Decryption failed: {type(e).__name__}: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        raise
+
+
+def _get_imap_smtp_credentials(email: str) -> Optional[dict]:
+    """
+    Retrieve IMAP/SMTP credentials for a given email address.
+    
+    Returns a dictionary with:
+        - host: SMTP server for sending, IMAP server for receiving
+        - smtp_host: SMTP server hostname
+        - smtp_port: SMTP server port
+        - imap_host: IMAP server hostname
+        - imap_port: IMAP server port
+        - password: Decrypted password
+        - email: Email address
+    
+    Returns None if no IMAP/SMTP configuration is found.
+    """
+    try:
+        supabase = get_supabase_client()
+        response = supabase.table("subscription_services").select(
+            "email, imap_server, imap_port, smtp_server, smtp_port, hashed_password"
+        ).eq("email", email.lower()).execute()
+        
+        if not response.data:
+            print(f"No IMAP/SMTP credentials found for email {email}")
+            return None
+        
+        user_data = response.data[0]
+        print(f"Found user data for {email}: imap_server={user_data.get('imap_server')}, smtp_server={user_data.get('smtp_server')}, has_password={bool(user_data.get('hashed_password'))}")
+        
+        # Check if IMAP/SMTP is configured
+        if not user_data.get("imap_server") or not user_data.get("smtp_server"):
+            print(f"IMAP/SMTP not configured for email {email}")
+            return None
+        
+        # Decrypt the password
+        decrypted_password = ""
+        if user_data.get("hashed_password"):
+            try:
+                decrypted_password = _decrypt_password(user_data["hashed_password"])
+            except Exception as decrypt_error:
+                print(f"Error decrypting password for {email}: {str(decrypt_error)}")
+                return None
+        
+        if not decrypted_password:
+            print(f"No password found for IMAP/SMTP email {email}")
+            return None
+        
+        return {
+            "email": user_data.get("email"),
+            "smtp_host": user_data.get("smtp_server"),
+            "smtp_port": user_data.get("smtp_port", 587),
+            "imap_host": user_data.get("imap_server"),
+            "imap_port": user_data.get("imap_port", 993),
+            "password": decrypted_password
+        }
+    except Exception as e:
+        import traceback
+        print(f"Error retrieving IMAP/SMTP credentials for {email}: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return None
+
 @tool
 def send_email(
     sender_address: str,
@@ -81,25 +145,28 @@ def send_email(
     port: Optional[int] = None
 ) -> str:
     """
-    Send an email using Google OAuth, Microsoft OAuth, or SMTP.
+    Send an email using Google OAuth, Microsoft OAuth, IMAP/SMTP, or plain SMTP.
     
     IMPORTANT: Use 'google' provider (default) unless you have specific SMTP credentials.
-    For SMTP, you MUST provide both 'host' and 'password' parameters.
+    For 'imap' provider, credentials are automatically retrieved from the system.
+    For 'smtp' provider, you MUST provide both 'host' and 'password' parameters.
     
     Args:
         sender_address: Email address of the sender
         receiver_address: Email address of the recipient
         subject: Email subject
         body: Email body content
-        provider: 'google' (default), 'microsoft', or 'smtp'. Use 'google' unless SMTP is required.
-        password: Password or app password (REQUIRED for SMTP, not used for google/microsoft)
-        host: SMTP host like 'smtp.gmail.com' (REQUIRED for SMTP provider)
+        provider: 'google' (default), 'microsoft', 'imap', or 'smtp'. 
+                  Use 'imap' for configured IMAP/SMTP accounts.
+                  Use 'smtp' only with manual host/password credentials.
+        password: Password or app password (REQUIRED for 'smtp', auto-retrieved for 'imap')
+        host: SMTP host like 'smtp.gmail.com' (REQUIRED for 'smtp', auto-retrieved for 'imap')
         body_type: 'text' or 'html' (default: 'text')
         cc_recipients: List of CC email addresses
         bcc_recipients: List of BCC email addresses
         attachments: List of file paths to attach
         access_token: OAuth access token (automatically retrieved for google/microsoft)
-        port: SMTP port like 587 or 465 (optional for SMTP, defaults to 587)
+        port: SMTP port like 587 or 465 (optional, defaults to 587)
     """
     
     # Auto-fetch access token for Google/Microsoft if not provided
@@ -108,6 +175,20 @@ def send_email(
         access_token = _get_access_token_for_email(sender_address)
         if not access_token:
             return f"Error: Could not retrieve access token for {sender_address}. Please ensure the email is configured in the system."
+    
+    # Auto-fetch IMAP/SMTP credentials if provider is 'imap'
+    if provider == 'imap':
+        print(f"Fetching IMAP/SMTP credentials for {sender_address}...")
+        credentials = _get_imap_smtp_credentials(sender_address)
+        if not credentials:
+            return f"Error: Could not retrieve IMAP/SMTP credentials for {sender_address}. Please ensure the email is configured with IMAP/SMTP settings."
+        
+        # Use the retrieved credentials
+        host = credentials["smtp_host"]
+        port = credentials["smtp_port"]
+        password = credentials["password"]
+        # Switch to 'smtp' provider for the actual sending since we now have the credentials
+        provider = "smtp"
 
     return email_service.send_email(
         sender_address=sender_address,
@@ -178,15 +259,15 @@ def retrieve_last_n_emails(
     Retrieve the last N emails from a mailbox. Useful for summarization, searching recent conversations, or context gathering.
 
     For 'google' or 'microsoft' providers, the access token is automatically retrieved if not provided.
-    For 'imap' provider, you must supply host, email_address (as username), and password.
+    For 'imap' provider, credentials are automatically retrieved from the system if not provided.
 
     Args:
         email_address: The email address to retrieve emails from (also used as username for IMAP)
         n: Number of emails to retrieve (default: 10, max: 20)
         provider: 'google' (default), 'microsoft', or 'imap'
         access_token: OAuth access token (automatically retrieved for google/microsoft if not provided)
-        host: IMAP host like 'imap.gmail.com' (REQUIRED for 'imap' provider)
-        password: Email password (REQUIRED for 'imap' provider)
+        host: IMAP host like 'imap.gmail.com' (auto-retrieved for configured 'imap' accounts)
+        password: Email password (auto-retrieved for configured 'imap' accounts)
         port: IMAP port (default: 993, only used for 'imap' provider)
 
     Returns:
@@ -198,6 +279,17 @@ def retrieve_last_n_emails(
         access_token = _get_access_token_for_email(email_address)
         if not access_token:
             return f"Error: Could not retrieve access token for {email_address}. Please ensure the email is configured in the system."
+    
+    # Auto-fetch IMAP credentials if provider is 'imap' and credentials not provided
+    if provider == 'imap' and (not host or not password):
+        print(f"Fetching IMAP credentials for {email_address}...")
+        credentials = _get_imap_smtp_credentials(email_address)
+        if not credentials:
+            return f"Error: Could not retrieve IMAP credentials for {email_address}. Please ensure the email is configured with IMAP/SMTP settings."
+        
+        host = credentials["imap_host"]
+        port = credentials["imap_port"]
+        password = credentials["password"]
 
     return email_service.retrieve_last_n_emails(
         n=n,
@@ -233,7 +325,7 @@ def search_emails(
     emails from a particular sender, or messages within a date range.
 
     For 'google' or 'microsoft' providers, the access token is automatically retrieved if not provided.
-    For 'imap' provider, you must supply host, email_address (as username), and password.
+    For 'imap' provider, credentials are automatically retrieved from the system if not provided.
 
     Args:
         email_address: The email address to search in (also used as username for IMAP)
@@ -248,8 +340,8 @@ def search_emails(
         label_ids: List of Gmail label IDs to filter by (e.g., ["INBOX", "IMPORTANT"]) - Gmail only
         include_spam_trash: Include spam and trash folders in search results (default: False)
         max_results: Maximum number of results to return (default: 10, max: 50)
-        host: IMAP host like 'imap.gmail.com' (REQUIRED for 'imap' provider)
-        password: Email password (REQUIRED for 'imap' provider)
+        host: IMAP host like 'imap.gmail.com' (auto-retrieved for configured 'imap' accounts)
+        password: Email password (auto-retrieved for configured 'imap' accounts)
         port: IMAP port (default: 993, only used for 'imap' provider)
 
     Returns:
@@ -268,6 +360,17 @@ def search_emails(
         access_token = _get_access_token_for_email(email_address)
         if not access_token:
             return f"Error: Could not retrieve access token for {email_address}. Please ensure the email is configured in the system."
+    
+    # Auto-fetch IMAP credentials if provider is 'imap' and credentials not provided
+    if provider == 'imap' and (not host or not password):
+        print(f"Fetching IMAP credentials for {email_address}...")
+        credentials = _get_imap_smtp_credentials(email_address)
+        if not credentials:
+            return f"Error: Could not retrieve IMAP credentials for {email_address}. Please ensure the email is configured with IMAP/SMTP settings."
+        
+        host = credentials["imap_host"]
+        port = credentials["imap_port"]
+        password = credentials["password"]
 
     return email_service.search_emails(
         provider=provider,

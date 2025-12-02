@@ -370,6 +370,7 @@ class SMTPEmailProvider(EmailProvider):
             sender_address, receiver_address, subject, body,
             body_type, cc_recipients, bcc_recipients, attachments
         )
+        print("\n\nemail_service.py - send_email() - created email message\n")
         
         all_recipients = [receiver_address]
         if cc_recipients:
@@ -377,11 +378,17 @@ class SMTPEmailProvider(EmailProvider):
         if bcc_recipients:
             all_recipients.extend(bcc_recipients)
         
+        print(f"\n\nemail_service.py - send_email() - connecting to SMTP server at {self.host}:{self.port}\n")
         with smtplib.SMTP(self.host, self.port) as server:
+            print("\n\nemail_service.py - send_email() - connected, starting TLS\n")
             server.starttls()
+            print("\n\nemail_service.py - send_email() - TLS started\n")
             if self.username and self.password:
+                print("\n\nemail_service.py - send_email() - logging in to SMTP server\n")
                 server.login(self.username, self.password)
+                print("\n\nemail_service.py - send_email() - logged in to SMTP server\n")
             server.sendmail(sender_address, all_recipients, msg.as_string())
+            print("\n\nemail_service.py - send_email() - email sent\n")
         
         return f"Email sent to {receiver_address} with subject '{subject}'."
     
