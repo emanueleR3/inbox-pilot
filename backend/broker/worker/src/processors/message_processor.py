@@ -275,7 +275,8 @@ class EmailProcessor:
             "extended_summary": extended_summary,
             "no_reply": email_data.get("no_reply", False),
             "action": email_data.get("action"),
-            "summarizer_only": email_data.get("summarizer_only", False)
+            "summarizer_only": email_data.get("summarizer_only", False),
+            "original_thread_id": email_data.get("original_thread_id", None)
         }
         
         return automation_payload

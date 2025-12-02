@@ -732,7 +732,8 @@ def run_workflow(email_data: dict = None):
                     "provider": email_data.get("provider"),
                     "has_attachments": email_data.get("has_attachments", False),
                     "extended_summary": email_data.get("extended_summary"),
-                    "no_reply": email_data.get("no_reply", False)
+                    "no_reply": email_data.get("no_reply", False),
+                    "original_thread_id": email_data.get("original_thread_id", None)
                 },
                 "notification": None,
                 "user_config": None,

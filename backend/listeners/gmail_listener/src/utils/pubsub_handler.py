@@ -123,6 +123,10 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     message_id = headers_lower.get("message-id")
     if message_id:
         message_id = _clean_message_id(message_id)
+
+    thread_id = headers_lower.get("thread-id")
+    if thread_id:
+        thread_id = _clean_message_id(thread_id)
     
     # Cerca in-reply-to in modo case-insensitive e rimuovi < >
     reply_to_id = headers_lower.get("in-reply-to")
@@ -174,6 +178,7 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "attachments": attachments_metadata,
         "no_reply": is_no_reply,
         "is_sent": is_sent,
+        "original_thread_id": thread_id
     }
     return payload
 

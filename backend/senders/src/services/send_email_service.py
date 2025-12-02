@@ -143,7 +143,7 @@ class SendEmailService:
         subject: str, 
         body: str, 
         hashed_access_token: str,
-        reply_to_id: Optional[str] = None
+        message_id: Optional[str] = None
     ) -> dict:
         """
         Send an email using Microsoft Graph API and return RFC Message-ID (internetMessageId).
@@ -165,9 +165,9 @@ class SendEmailService:
             }
         
             # 1️⃣ CREA IL MESSAGGIO (DRAFT)
-            if reply_to_id:
+            if message_id:
                 # Caso REPLY: usiamo createReply per generare una bozza di risposta
-                create_url = f"https://graph.microsoft.com/v1.0/me/messages/{reply_to_id}/createReply"
+                create_url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/createReply"
                 # Per createReply, il corpo va in "comment" se vogliamo aggiungere testo
                 # Nota: createReply imposta automaticamente Subject (Re: ...) e To/Cc
                 reply_payload = {

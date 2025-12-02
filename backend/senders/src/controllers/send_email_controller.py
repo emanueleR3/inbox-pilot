@@ -23,7 +23,7 @@ class SendEmailController:
                 raise ValueError("Hashed access token is required")
 
             
-            thread_id = req.get("thread_id")
+            thread_id = req.get("original_thread_id")
             
             return self.send_email_service.send_email_gmail(email, subject, body, hashed_access_token, thread_id)
             
@@ -49,7 +49,7 @@ class SendEmailController:
             if not hashed_access_token:
                 raise ValueError("Hashed access token is required")
 
-            reply_to_id = req.get("reply_to_id")
+            reply_to_id = req.get("message_id")
 
             return self.send_email_service.send_email_microsoft(email, subject, body, hashed_access_token, reply_to_id)
             

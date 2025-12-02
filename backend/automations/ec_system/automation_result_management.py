@@ -65,6 +65,7 @@ def process_automation_result(workflow_result: dict):
     email_body = extracted_info.get("email_body", "")
     summary_attachments = workflow_result.get("summary_attachments", None)
     now_tz = datetime.now(timezone.utc).isoformat()
+    original_thread_id = workflow_result.get("original_thread_id", None)
 
     # ======= SUMMARIZER ONLY CHECK ======= ✅
     if workflow_result.get("summarizer_only", False):
@@ -704,7 +705,7 @@ def process_automation_result(workflow_result: dict):
                     payload = {
                         "email": sender_email,
                         "subject": subject,
-                        "body": response_body
+                        "body": response_body,
                     }
 
                     senders_url = os.getenv("SENDERS_URL")
@@ -713,11 +714,11 @@ def process_automation_result(workflow_result: dict):
                     if provider == "google":
                         endpoint = f"{senders_url}/send-email/send-gmail"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
-                        payload["thread_id"] = thread_id
+                        payload["original_thread_id"] = original_thread_id
                     elif provider == "microsoft":
                         endpoint = f"{senders_url}/send-email/send-microsoft"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
-                        payload["reply_to_id"] = message_id
+                        payload["message_id"] = message_id
                     elif provider == "imap":
                         endpoint = f"{senders_url}/send-email/send-smtp"
                         payload["smtp_server"] = email_service_data.get("smtp_server")
