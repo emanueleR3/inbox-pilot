@@ -540,9 +540,6 @@ def router_node(state):
     print(f"   📊 Confidence: {state.get('confidence_score', 'Not set')}")
     print(f"   📝 Mail Summary: {state.get('mail_summary', 'Not set')[:50]}...")
     
-    # DEBUG: Print all state keys to see what's available
-    print(f"   🔍 [DEBUG] State keys: {list(state.keys())}")
-    
     # For now, just return the state - routing logic will be in conditional edges
     # This is a placeholder until specific extraction nodes are implemented
     print(f"   ⚠️ [ROUTER] Extraction nodes not yet implemented - ending workflow")
@@ -585,14 +582,6 @@ def attachment_summarizer_node(state):
         
         print(f"✅ [ATTACHMENT_SUMMARIZER] Attachment summary generated successfully")
         print(f"📝 [ATTACHMENT_SUMMARIZER] Summary length: {len(summary_response.summary_attachments)} chars")
-        
-        # CONSOLE OUTPUT: Print the summary for debugging
-        print(f"")
-        print(f"📋 [ATTACHMENT_SUMMARY] GENERATED SUMMARY:")
-        print(f"=" * 80)
-        print(summary_response.summary_attachments)
-        print(f"=" * 80)
-        print()
         
         return state
         
@@ -709,10 +698,12 @@ def priority_controller_node(state):
         # Determine routing based on priority
         if priority_score >= priority_threshold:            
             # Mark for high priority handling
-            state["status"] = "END_HIGH_PRIORITY"
+            print(f"🔥 [PRIORITY_CONTROLLER] HIGH PRIORITY - Score {priority_score} >= threshold {priority_threshold}")
+            state["high_priority_email"] = True
             return state
         else:
             print(f"📋 [PRIORITY_CONTROLLER] Normal priority - Routing to subcategory handler")
+            state["high_priority_email"] = False
             # Continue to subcategory routing
             return state
             
@@ -1200,11 +1191,6 @@ def reader_node(state):
             print(f"✅ [READER] Email analysis completed successfully")
             print(f"   📊 Entities extracted: {len(reader_response.key_entities)} categories")
             print(f"   💬 Needs response: {reader_response.needs_response}")
-            
-            # Print entity details for debugging
-            for entity_type, values in reader_response.key_entities.items():
-                if values:
-                    print(f"   🏷️ {entity_type}: {len(values)} items")
         
         return state
         
@@ -1614,7 +1600,7 @@ def extractor_company_info_node(state):
 
         # DEBUG
         print(f"✅ [EXTRACTOR_COMPANY_INFO] Company information extracted successfully")
-        print(f"   📝 Chunked company informations extracted:\n {extraction_result.chunked_company_informations} ")
+        print(f"   📝 [DEBUG] Chunked company informations extracted:\n {extraction_result.chunked_company_informations} ")
         
         return state
         

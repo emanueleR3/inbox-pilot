@@ -20,6 +20,7 @@ class EmailState(TypedDict):
     summarizer_only: Optional[bool]  # Flag to run only summarizer workflow
     human_response: Optional[bool]  # Flag indicating if human response is needed
     original_thread_id: Optional[str]  # Original thread ID from email provider (e.g., Gmail thread ID)
+    high_priority_email: Optional[bool]  # Flag indicating if email is high priority
     # NEW: Separated workflow fields
     mail_summary: Optional[str]  # Summary of current email
     extended_summary: Optional[str]  # Extended conversation summary

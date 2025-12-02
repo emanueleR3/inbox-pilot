@@ -66,9 +66,6 @@ def process_automation_result(workflow_result: dict):
     summary_attachments = workflow_result.get("summary_attachments", None)
     now_tz = datetime.now(timezone.utc).isoformat()
     original_thread_id = workflow_result.get("original_thread_id", None)
-    
-    print(f"[DEBUG AUTOMATION] extracted original_thread_id: {original_thread_id}")
-    print(f"[DEBUG AUTOMATION] extracted message_id: {message_id}")
 
     # ======= SUMMARIZER ONLY CHECK ======= ✅
     if workflow_result.get("summarizer_only", False):   
@@ -163,7 +160,7 @@ def process_automation_result(workflow_result: dict):
         return
     
     # ======= HIGH PRIORITY EMAIL CHECK ======= ✅
-    if status == "END_HIGH_PRIORITY":
+    if workflow_result.get("high_priority_email", False):
         print(f"🔥 [WORKFLOW] HIGH PRIORITY EMAIL DETECTED!")
         
         service_id = None
@@ -185,6 +182,7 @@ def process_automation_result(workflow_result: dict):
 
         thread_data = {
             "category": category,
+            "subcategory": subcategory,
             "summary": summary,
             "extended_summary": extended_summary,
             "human_response": True,
@@ -719,11 +717,6 @@ def process_automation_result(workflow_result: dict):
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
                         payload["original_thread_id"] = original_thread_id
                         payload["message_id"] = message_id
-                        
-                        # DEBUG: Verify values
-                        print(f"[DEBUG] Gmail Payload - original_thread_id: {original_thread_id}")
-                        print(f"[DEBUG] Gmail Payload - message_id: {message_id}")
-                        print(f"[DEBUG] Gmail Payload - sender_email: {sender_email}")
                     elif provider == "microsoft":
                         endpoint = f"{senders_url}/send-email/send-microsoft"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
