@@ -31,6 +31,9 @@ class EmailWorkflowPayload(BaseModel):
     has_attachments: bool = Field(default=False, description="Whether email has attachments")
     extended_summary: Optional[str] = Field(None, description="Extended thread summary")
     no_reply: bool = Field(default=False, description="Whether this is a no-reply email")
+    action: Optional[str] = Field(None, description="Action type from broker (thread_created, send_to_summarizer, etc.)")
+    summarizer_only: bool = Field(default=False, description="Whether to only run summarizer without full workflow")
+    original_thread_id: Optional[str] = Field(None, description="Original thread ID from email provider (e.g., Gmail thread ID)")
 
     class Config:
         populate_by_name = True
@@ -73,7 +76,10 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
             "attachment_ids": payload.attachment_ids,
             "has_attachments": payload.has_attachments,
             "extended_summary": payload.extended_summary,
-            "no_reply": payload.no_reply
+            "no_reply": payload.no_reply,
+            "action": payload.action,
+            "summarizer_only": payload.summarizer_only,
+            "original_thread_id": payload.original_thread_id
         }
         
         # Execute the email classification workflow
