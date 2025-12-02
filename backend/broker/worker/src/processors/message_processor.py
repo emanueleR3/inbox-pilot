@@ -63,8 +63,46 @@ class EmailProcessor:
             email_data["action"] = action
             
             if action == "send_to_summarizer":
-                # TODO summarizer
-                return {}
+                print(f"📝 [PROCESSOR] Message sent to summarizer only")
+                thread_id = filter_result.get("thread_id")
+                needs_ai = filter_result.get("needs_ai", False)
+
+                if not needs_ai:
+                    print(f"❗ [PROCESSOR] Warning: Message marked for summarizer but no AI processing needed")
+                    return {
+                        "status": "skipped",
+                        "reason": "no_ai_needed_for_summarizer",
+                        "needs_ai_processing": False
+                    }
+                
+                try:
+                    # Process attachments for the summarizer
+                    if thread_id and email_data.get("attachments"):
+                        print(f"📎 [PROCESSOR] Processing attachments for summarizer in thread {thread_id}")
+                        try:
+                            processed_attachments = await self.attachment_service.process_attachments(
+                                email_data, thread_id
+                            )
+                            thread_data["attachments_processed"] = len(processed_attachments)
+                        except Exception as e:
+                            print(f"❌ [PROCESSOR] Attachment processing failed: {e}")
+                            thread_data["attachments_processed"] = 0
+                    
+                    automation_payload = self._prepare_automation_payload(
+                    email_data, {"thread_id": thread_id, "box_email": email_data.get("user_email")}, 
+                        processed_attachments if 'processed_attachments' in locals() else []
+                    )
+
+                    await self.send_to_automation()
+                except Exception as e:
+                    print(f"❌ [PROCESSOR] Failed to send to summarizer: {e}")
+
+                return {
+                    "status": "sent_to_summarizer",
+                    "thread_id": filter_result.get("thread_id"),
+                    "needs_ai_processing": False,
+                }
+
 
             if action == "thread_created":
                 # New thread was created
