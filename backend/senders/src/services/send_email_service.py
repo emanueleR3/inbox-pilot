@@ -38,10 +38,12 @@ class SendEmailService:
         subject: str, 
         body: str, 
         hashed_access_token: str,
-        thread_id: Optional[str] = None
+        thread_id: Optional[str] = None,
+        message_id: Optional[str] = None
     ) -> dict:
         """
         Send an email using Gmail API and return RFC Message-ID.
+        If thread_id and message_id are provided, the email will be sent as a reply.
         """
         try:
             logger.info(f"📤 Sending email via Gmail to {email}")
@@ -76,6 +78,11 @@ class SendEmailService:
             message = MIMEMultipart('alternative')
             message['To'] = email
             message['Subject'] = subject
+        
+            # Add threading headers for proper replies
+            if message_id:
+                message['In-Reply-To'] = message_id
+                message['References'] = message_id
         
             # Determine if body is HTML or plain text
             if body.strip().startswith('<') and body.strip().endswith('>'):

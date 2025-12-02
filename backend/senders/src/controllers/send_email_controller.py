@@ -24,8 +24,9 @@ class SendEmailController:
 
             
             thread_id = req.get("original_thread_id")
+            message_id = req.get("message_id")
             
-            return self.send_email_service.send_email_gmail(email, subject, body, hashed_access_token, thread_id)
+            return self.send_email_service.send_email_gmail(email, subject, body, hashed_access_token, thread_id, message_id)
             
         except Exception as e:
             raise HTTPException(
