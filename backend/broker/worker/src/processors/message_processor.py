@@ -64,7 +64,6 @@ class EmailProcessor:
             
             if action == "send_to_summarizer":
                 print(f"📝 [PROCESSOR] Message sent to summarizer only")
-                thread_id = filter_result.get("thread_id")
                 needs_ai = filter_result.get("needs_ai", False)
 
                 if not needs_ai:
@@ -75,7 +74,29 @@ class EmailProcessor:
                         "needs_ai_processing": False
                     }
                 
+                # Find thread_id using reply_to_id since this is a user reply
+                reply_to_id = email_data.get("reply_to_id")
+                box_email = email_data.get("user_email")
+                thread_id = None
+                
+                if reply_to_id and reply_to_id.lower() != "no":
+                    thread = self.thread_repo.find_thread_by_reply_to(reply_to_id, box_email)
+                    if thread:
+                        thread_id = thread.get("thread_id")
+                        print(f"🔍 [PROCESSOR] Found thread {thread_id} for summarizer using reply_to_id")
+                    else:
+                        print(f"⚠️ [PROCESSOR] No thread found for reply_to_id: {reply_to_id}")
+                
+                if not thread_id:
+                    print(f"❌ [PROCESSOR] Cannot send to summarizer without thread_id")
+                    return {
+                        "status": "skipped",
+                        "reason": "no_thread_found_for_summarizer",
+                        "needs_ai_processing": False
+                    }
+                
                 try:
+                    processed_attachments = []
                     # Process attachments for the summarizer
                     if thread_id and email_data.get("attachments"):
                         print(f"📎 [PROCESSOR] Processing attachments for summarizer in thread {thread_id}")
@@ -83,14 +104,12 @@ class EmailProcessor:
                             processed_attachments = await self.attachment_service.process_attachments(
                                 email_data, thread_id
                             )
-                            thread_data["attachments_processed"] = len(processed_attachments)
                         except Exception as e:
                             print(f"❌ [PROCESSOR] Attachment processing failed: {e}")
-                            thread_data["attachments_processed"] = 0
                     
                     automation_payload = self._prepare_automation_payload(
-                    email_data, {"thread_id": thread_id, "box_email": email_data.get("user_email")}, 
-                        processed_attachments if 'processed_attachments' in locals() else []
+                        email_data, {"thread_id": thread_id, "box_email": box_email}, 
+                        processed_attachments
                     )
 
                     await self.send_to_automation(automation_payload)
@@ -99,7 +118,7 @@ class EmailProcessor:
 
                 return {
                     "status": "sent_to_summarizer",
-                    "thread_id": filter_result.get("thread_id"),
+                    "thread_id": thread_id,
                     "needs_ai_processing": False,
                 }
 
