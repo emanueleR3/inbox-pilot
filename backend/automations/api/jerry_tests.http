@@ -7,8 +7,8 @@
 @userIdMarco = d886288a-4e31-4978-b89f-867d55622169
 @userIdLoris = 53642f12-3b5c-4ccb-90c8-88fa1157d033
 
-@threadId = user53642f12-3b5c-4ccb-90c8-88fa1157d033:convc147adcc-8bb3-429a-80a1-f00162d11ead
-
+@threadId = user53642f12-3b5c-4ccb-90c8-88fa1157d033:convb1e406bd-835a-4faa-9bb6-e76e119bf33a
+ 
 ###############################################
 # 1. Get Available Tools
 ###############################################
@@ -45,7 +45,7 @@ Content-Type: application/json
 
 {
     "user_id": "{{userIdLoris}}",
-    "message": "Si, inviala subito! Utilizza il tool send_email con provider 'imap'",
+    "message": "Puoi mandarla",
     "thread_id": "{{threadId}}"
 }
 
@@ -88,7 +88,7 @@ Content-Type: application/json
 
 {
     "tool_name": "send_email",
-    "tool_params": {C
+    "tool_params": {
         "sender_address": "dev4@example.com",
         "receiver_address": "customer@example.com",
         "subject": "Test Email from Jerry API",

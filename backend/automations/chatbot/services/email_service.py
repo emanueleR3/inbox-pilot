@@ -7,6 +7,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+from email.utils import formatdate
 from typing import Optional, List
 import httpx
 import json
@@ -319,6 +320,7 @@ class SMTPEmailProvider(EmailProvider):
                 msg['Subject'] = subject
                 msg['From'] = sender_address
                 msg['To'] = receiver_address
+                msg['Date'] = formatdate(localtime=True)
                 if cc_recipients:
                     msg['Cc'] = ', '.join(cc_recipients)
                 return msg
@@ -326,6 +328,7 @@ class SMTPEmailProvider(EmailProvider):
         msg['Subject'] = subject
         msg['From'] = sender_address
         msg['To'] = receiver_address
+        msg['Date'] = formatdate(localtime=True)
         
         if cc_recipients:
             msg['Cc'] = ', '.join(cc_recipients)
@@ -365,12 +368,10 @@ class SMTPEmailProvider(EmailProvider):
         **kwargs
     ) -> str:
         """Send an email using SMTP."""
-        print(f"\n\nemail_service.py - send_email() - parameters:\nsender_address: {sender_address}\nreceiver_address: {receiver_address}\nsubject: {subject}\nbody: {body}\nbody_type: {body_type}\ncc_recipients: {cc_recipients}\nbcc_recipients: {bcc_recipients}\nattachments: {attachments}\n")
         msg = self._create_message(
             sender_address, receiver_address, subject, body,
             body_type, cc_recipients, bcc_recipients, attachments
         )
-        print("\n\nemail_service.py - send_email() - created email message\n")
         
         all_recipients = [receiver_address]
         if cc_recipients:
@@ -378,17 +379,19 @@ class SMTPEmailProvider(EmailProvider):
         if bcc_recipients:
             all_recipients.extend(bcc_recipients)
         
-        print(f"\n\nemail_service.py - send_email() - connecting to SMTP server at {self.host}:{self.port}\n")
-        with smtplib.SMTP(self.host, self.port) as server:
-            print("\n\nemail_service.py - send_email() - connected, starting TLS\n")
-            server.starttls()
-            print("\n\nemail_service.py - send_email() - TLS started\n")
-            if self.username and self.password:
-                print("\n\nemail_service.py - send_email() - logging in to SMTP server\n")
-                server.login(self.username, self.password)
-                print("\n\nemail_service.py - send_email() - logged in to SMTP server\n")
-            server.sendmail(sender_address, all_recipients, msg.as_string())
-            print("\n\nemail_service.py - send_email() - email sent\n")
+        
+        # Use SMTP_SSL for port 465 (implicit SSL), SMTP + starttls for other ports
+        if self.port == 465:
+            with smtplib.SMTP_SSL(self.host, self.port, timeout=30) as server:
+                if self.username and self.password:
+                    server.login(self.username, self.password)
+                server.sendmail(sender_address, all_recipients, msg.as_string())
+        else:
+            with smtplib.SMTP(self.host, self.port, timeout=30) as server:
+                server.starttls()
+                if self.username and self.password:
+                    server.login(self.username, self.password)
+                server.sendmail(sender_address, all_recipients, msg.as_string())
         
         return f"Email sent to {receiver_address} with subject '{subject}'."
     
