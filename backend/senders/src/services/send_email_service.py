@@ -46,22 +46,30 @@ class SendEmailService:
         If thread_id and message_id are provided, the email will be sent as a reply.
         """
         try:
-            logger.info(f"📤 Sending email via Gmail to {email}")
-        
+            logger.info("📤 [GMAIL] Avvio invio email...")
+            logger.debug(f"➡️ Parametri ricevuti: email={email}, subject={subject}")
+            logger.debug(f"➡️ thread_id={thread_id}, message_id={message_id}")
+
             # Decrypt the access token
             access_token = decrypt(hashed_access_token, "token")
+            logger.debug(f"🔐 Access token decriptato? {'YES' if access_token else 'NO'}")
+
             if not access_token:
                 raise ValueError("Failed to decrypt access token")
 
             # Create credentials
             scopes_env = os.getenv("GOOGLE_SCOPES", "")
+            logger.debug(f"🌐 Env GOOGLE_SCOPES: {scopes_env}")
+
             if scopes_env:
                 scopes = [scope.strip() for scope in scopes_env.split() if scope.strip()]
             else:
                 scopes = [
                     "https://www.googleapis.com/auth/gmail.send",
-                    "https://www.googleapis.com/auth/gmail.modify",  # sufficiente per leggere il messaggio
+                    "https://www.googleapis.com/auth/gmail.modify",
                 ]
+
+            logger.debug(f"🔎 Scopes finali: {scopes}")
 
             creds = Credentials(
                 token=access_token,
@@ -73,76 +81,94 @@ class SendEmailService:
 
             # Build Gmail service
             service = build('gmail', 'v1', credentials=creds)
-        
+            logger.debug("📡 Gmail service creato con successo.")
+
             # Create the email message
             message = MIMEMultipart('alternative')
             message['To'] = email
             message['Subject'] = subject
-        
-            # Add threading headers for proper replies
+
+            # Handle reply headers
             if message_id:
+                logger.debug(f"📎 Aggiunta intestazione di Reply: In-Reply-To={message_id}")
                 message['In-Reply-To'] = message_id
                 message['References'] = message_id
-        
-            # Determine if body is HTML or plain text
+
+            # Detect body type
             if body.strip().startswith('<') and body.strip().endswith('>'):
-                html_part = MIMEText(body, 'html', 'utf-8')
-                message.attach(html_part)
+                logger.debug("📝 Corpo rilevato come HTML.")
+                part = MIMEText(body, 'html', 'utf-8')
             else:
-                text_part = MIMEText(body, 'plain', 'utf-8')
-                message.attach(text_part)
-        
-            # Encode the message
+                logger.debug("📝 Corpo rilevato come plain text.")
+                part = MIMEText(body, 'plain', 'utf-8')
+
+            message.attach(part)
+
+            # Encode message
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
-        
-            # Send the email
+            logger.debug(f"📨 RAW message creato (lunghezza: {len(raw_message)}).")
+
+            # Prepare body
             message_body = {'raw': raw_message}
             if thread_id:
+                logger.debug(f"🧵 Aggiunto threadId al body: thread_id={thread_id}")
                 message_body['threadId'] = thread_id
+            else:
+                logger.debug("⚠️ Nessun threadId fornito. Gmail creerà un nuovo thread.")
 
+            # Send email
+            logger.debug(f"🚀 Invio richiesta send() -> {message_body.keys()}")
+            
             send_result = service.users().messages().send(
                 userId='me',
                 body=message_body
             ).execute()
-        
+
+            logger.debug(f"📬 Risposta Gmail send(): {json.dumps(send_result, indent=2)}")
+
             gmail_internal_id = send_result.get('id')
-            logger.info(f"✅ Email sent successfully via Gmail. Gmail ID: {gmail_internal_id}")
-        
-            # 🔍 Recupero dell'RFC Message-ID dagli header
+            logger.info(f"📨 Email inviata. Gmail message.id = {gmail_internal_id}")
+
+            # Retrieve RFC message-id
             rfc_message_id = None
             try:
+                logger.debug("📑 Recupero metadata del messaggio inviata da Gmail...")
+
                 msg = service.users().messages().get(
                     userId='me',
                     id=gmail_internal_id,
                     format='metadata',
                     metadataHeaders=['Message-ID', 'Message-Id']
                 ).execute()
-            
+
+                logger.debug(f"📨 Risposta metadata Gmail: {json.dumps(msg, indent=2)}")
+
                 headers = msg.get('payload', {}).get('headers', [])
                 for h in headers:
                     if h.get('name', '').lower() == 'message-id':
                         rfc_message_id = h.get('value')
+                        logger.debug(f"📎 Trovato RFC Message-ID: {rfc_message_id}")
                         break
-            
-                logger.info(f"📎 Gmail RFC Message-ID: {rfc_message_id}")
+
             except Exception as meta_err:
-                logger.warning(f"⚠️ Could not retrieve RFC Message-ID from Gmail: {meta_err}", exc_info=True)
-        
+                logger.warning(f"⚠️ Impossibile recuperare l'RFC Message-ID: {meta_err}", exc_info=True)
+
             return {
                 "success": True,
                 "message": f"Email sent successfully via Gmail to {email}",
-                "notification_id": gmail_internal_id,  # id interno Gmail
-                "message_id": rfc_message_id          # RFC Message-ID, es. "<abc@domain>"
+                "notification_id": gmail_internal_id,
+                "message_id": rfc_message_id
             }
-        
+
         except Exception as e:
-            logger.error(f"❌ Failed to send email via Gmail: {str(e)}", exc_info=True)
+            logger.error(f"❌ ERRORE invio email: {str(e)}", exc_info=True)
             return {
                 "success": False,
                 "message": f"Failed to send email via Gmail: {str(e)}",
                 "notification_id": None,
                 "message_id": None
             }
+
     
     def send_email_microsoft(
         self, 
