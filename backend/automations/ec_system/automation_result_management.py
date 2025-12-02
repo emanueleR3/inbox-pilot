@@ -169,17 +169,6 @@ def process_automation_result(workflow_result: dict):
         except Exception as e:
             print(f"❌ [WORKFLOW] Error getting service_id: {e}")
 
-        ai_email_data = {
-            "thread_id": thread_id,
-            "response_at_id": message_id,
-            "processed_at": now_tz,
-            "duration": 0, #TODO calculate duration
-            "priority_score": priority_score,
-            "body": response_body,
-            "service_id": service_id,
-            "outcome": EmailOutcome.DRAFT.value
-        }
-
         thread_data = {
             "category": category,
             "subcategory": subcategory,
@@ -190,8 +179,21 @@ def process_automation_result(workflow_result: dict):
         }
 
         try:
-            save_ai_generated_email(ai_email_data)
             update_thread(thread_id, thread_data)
+
+            if workflow_result.get("needs_response", True):
+                ai_email_data = { 
+                    "thread_id": thread_id,
+                    "response_at_id": message_id,
+                    "processed_at": now_tz,
+                    "duration": 0, #TODO calculate duration
+                    "priority_score": priority_score,
+                    "body": response_body,
+                    "service_id": service_id,
+                    "outcome": EmailOutcome.DRAFT.value
+                }
+                save_ai_generated_email(ai_email_data)
+
         except Exception as e:
             print(f"❌ [WORKFLOW] Error saving AI generated email: {e}")
 
