@@ -17,6 +17,9 @@ class EmailState(TypedDict):
     user_config: Optional[Dict]  # User configuration with thresholds
     status: Optional[str] # State of the execution flow
     dangerous_email: Optional[bool]  # Flag indicating if email is dangerous
+    summarizer_only: Optional[bool]  # Flag to run only summarizer workflow
+    human_response: Optional[bool]  # Flag indicating if human response is needed
+    original_thread_id: Optional[str]  # Original thread ID from email provider (e.g., Gmail thread ID)
     # NEW: Separated workflow fields
     mail_summary: Optional[str]  # Summary of current email
     extended_summary: Optional[str]  # Extended conversation summary
@@ -73,6 +76,9 @@ def create_initial_state() -> EmailState:
         "extracted_info": None,
         "notification": None,
         "user_config": None,
+        "summarizer_only": False,
+        "human_response": False,
+        "original_thread_id": None,
         "mail_summary": None,
         "extended_summary": None,
         "confidence_score": None,

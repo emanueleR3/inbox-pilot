@@ -732,15 +732,15 @@ def run_workflow(email_data: dict = None):
                     "provider": email_data.get("provider"),
                     "has_attachments": email_data.get("has_attachments", False),
                     "extended_summary": email_data.get("extended_summary"),
-                    "no_reply": email_data.get("no_reply", False),
-                    "original_thread_id": email_data.get("original_thread_id", None)
+                    "no_reply": email_data.get("no_reply", False)
                 },
                 "notification": None,
                 "user_config": None,
                 "attachments_too_large": False,
                 "human_response": False,
                 "automation_executed": False,
-                "summarizer_only": email_data.get("summarizer_only", None),
+                "summarizer_only": email_data.get("summarizer_only", False),
+                "original_thread_id": email_data.get("original_thread_id", None),
                 "review_iteration": 0,
                 "edit_history": []
             }
@@ -748,7 +748,7 @@ def run_workflow(email_data: dict = None):
             # Create default initial state
             return {"status": "FAILED", "error": "No email data provided"}
             
-        print(f"🎯 [WORKFLOW] Starting with mode summarizer_only={initial_state.get('summarizer_only', False)} and original thread_id={email_data.get('original_thread_id', None)}")
+        print(f"🎯 [WORKFLOW] Starting with mode summarizer_only={initial_state.get('summarizer_only', False)} and original thread_id={initial_state.get('original_thread_id', None)}")
         
         # Compile and execute the workflow
         compiled_graph = graph.compile()

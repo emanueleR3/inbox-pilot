@@ -86,9 +86,11 @@ class SendEmailService:
             message['Subject'] = subject
 
             if message_id:
-                print(f"[DEBUG] Adding In-Reply-To and References headers -> {message_id}")
-                message['In-Reply-To'] = message_id
-                message['References'] = message_id
+                # Ensure message_id has angle brackets for RFC compliance
+                rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
+                print(f"[DEBUG] Adding In-Reply-To and References headers -> {rfc_message_id}")
+                message['In-Reply-To'] = rfc_message_id
+                message['References'] = rfc_message_id
             else:
                 print("[DEBUG] No message_id given — sending as NEW email")
 
@@ -320,9 +322,13 @@ class SendEmailService:
             message["Message-ID"] = msg_id
 
             if reply_to_id:
-                message["In-Reply-To"] = reply_to_id
+                # Ensure reply_to_id has angle brackets for RFC compliance
+                rfc_reply_to_id = reply_to_id if reply_to_id.startswith('<') else f"<{reply_to_id}>"
+                message["In-Reply-To"] = rfc_reply_to_id
             if message_id:
-                message["References"] = message_id
+                # Ensure message_id has angle brackets for RFC compliance
+                rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
+                message["References"] = rfc_message_id
 
             # HTML o testo
             if body.strip().startswith("<"):
