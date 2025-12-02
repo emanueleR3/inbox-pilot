@@ -12,6 +12,9 @@ from typing import Optional, List
 import httpx
 import json
 
+# Timeout for HTTP requests (in seconds)
+HTTP_TIMEOUT = 30.0
+
 
 class EmailProvider:
     """Base class for email providers."""
@@ -124,7 +127,7 @@ class GoogleEmailProvider(EmailProvider):
             body_type, cc_recipients, bcc_recipients, attachments
         )
         
-        with httpx.Client() as client:
+        with httpx.Client(timeout=HTTP_TIMEOUT) as client:
             response = client.post(
                 f"{self.base_url}/users/me/messages/send",
                 headers={
@@ -158,7 +161,7 @@ class GoogleEmailProvider(EmailProvider):
             body_type, cc_recipients, bcc_recipients, attachments
         )
         
-        with httpx.Client() as client:
+        with httpx.Client(timeout=HTTP_TIMEOUT) as client:
             response = client.post(
                 f"{self.base_url}/users/me/drafts",
                 headers={
@@ -240,7 +243,7 @@ class MicrosoftEmailProvider(EmailProvider):
             body_type, cc_recipients, bcc_recipients, attachments
         )
         
-        with httpx.Client() as client:
+        with httpx.Client(timeout=HTTP_TIMEOUT) as client:
             # Send mail directly
             response = client.post(
                 f"{self.base_url}/me/sendMail",
@@ -274,7 +277,7 @@ class MicrosoftEmailProvider(EmailProvider):
             body_type, cc_recipients, bcc_recipients, attachments
         )
         
-        with httpx.Client() as client:
+        with httpx.Client(timeout=HTTP_TIMEOUT) as client:
             response = client.post(
                 f"{self.base_url}/me/messages",
                 headers={
@@ -779,7 +782,7 @@ def _forward_microsoft_email(access_token: str, message_id: str, to_recipients: 
     if comment:
         request_body["comment"] = comment
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         response = client.post(
             f"{base_url}/me/messages/{message_id}/forward",
             headers={
@@ -835,7 +838,7 @@ def _reply_microsoft_email(
             ]
         }
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         response = client.post(
             f"{base_url}/me/messages/{message_id}/{endpoint}",
             headers={
@@ -871,7 +874,7 @@ def _forward_gmail_email(access_token: str, message_id: str, to_recipients: List
     """
     base_url = "https://gmail.googleapis.com/gmail/v1"
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         # Get the original message
         msg_response = client.get(
             f"{base_url}/users/me/messages/{message_id}",
@@ -962,7 +965,7 @@ def _reply_gmail_email(
     """
     base_url = "https://gmail.googleapis.com/gmail/v1"
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         # Get the original message
         msg_response = client.get(
             f"{base_url}/users/me/messages/{message_id}",
@@ -1073,7 +1076,7 @@ def _delete_gmail_emails(access_token: str, message_ids: List[str]) -> str:
     trashed_count = 0
     failed_ids = []
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         for msg_id in valid_ids:
             response = client.post(
                 f"{base_url}/users/me/messages/{msg_id}/trash",
@@ -1115,7 +1118,7 @@ def _delete_microsoft_emails(access_token: str, message_ids: List[str]) -> str:
     deleted_count = 0
     failed_ids = []
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         for msg_id in valid_ids:
             response = client.delete(
                 f"{base_url}/me/messages/{msg_id}",
@@ -1160,7 +1163,7 @@ def _get_gmail_thread(access_token: str, thread_id: str, format: str = "full") -
     if format not in valid_formats:
         format = "full"
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         response = client.get(
             f"{base_url}/users/me/threads/{thread_id}",
             headers={"Authorization": f"Bearer {access_token}"},
@@ -1249,7 +1252,7 @@ def _get_microsoft_conversation(access_token: str, conversation_id: str, group_i
     """
     base_url = "https://graph.microsoft.com/v1.0"
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         if group_id:
             # Use Group Threads API for group conversations
             return _get_microsoft_group_thread(client, access_token, base_url, group_id, conversation_id)
@@ -1325,30 +1328,61 @@ def _get_microsoft_mailbox_conversation(client: httpx.Client, access_token: str,
     """
     Retrieve all messages in a personal mailbox conversation.
     
-    Uses: GET /me/messages?$filter=conversationId eq '...'
+    For personal Microsoft accounts, filtering by conversationId is not fully supported.
+    Instead, we first try to get messages by conversationId, and if that fails,
+    we get the first message and find related messages by subject.
     """
-    # Filter messages by conversationId
+    # First, try to get a single message to find the conversation
+    # The conversation_id might actually be a message_id in some cases
+    
+    # Try getting messages without filter first, then filter in Python
+    # This is more reliable for personal accounts
     response = client.get(
         f"{base_url}/me/messages",
         headers={"Authorization": f"Bearer {access_token}"},
         params={
-            "$filter": f"conversationId eq '{conversation_id}'",
-            "$select": "from,subject,bodyPreview,receivedDateTime,toRecipients,ccRecipients,body,conversationId",
-            "$orderby": "receivedDateTime ASC",  # Chronological order
-            "$top": 50  # Get up to 50 messages in conversation
+            "$select": "id,from,subject,bodyPreview,receivedDateTime,toRecipients,ccRecipients,body,conversationId",
+            "$top": 100,
+            "$orderby": "receivedDateTime DESC"
         }
     )
     
     if response.status_code != 200:
-        raise Exception(f"Failed to retrieve conversation: {response.text}")
+        raise Exception(f"Failed to retrieve messages: {response.text}")
     
-    messages = response.json().get('value', [])
+    all_messages = response.json().get('value', [])
+    
+    # Filter messages by conversationId in Python
+    messages = [m for m in all_messages if m.get('conversationId') == conversation_id]
+    
+    # If no messages found by conversationId, the conversation_id might be a message_id
+    if not messages:
+        # Try to get the specific message
+        msg_response = client.get(
+            f"{base_url}/me/messages/{conversation_id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={
+                "$select": "id,from,subject,bodyPreview,receivedDateTime,toRecipients,ccRecipients,body,conversationId"
+            }
+        )
+        
+        if msg_response.status_code == 200:
+            target_msg = msg_response.json()
+            actual_conv_id = target_msg.get('conversationId')
+            if actual_conv_id:
+                messages = [m for m in all_messages if m.get('conversationId') == actual_conv_id]
+            if not messages:
+                messages = [target_msg]
     
     if not messages:
         return f"No messages found in conversation: {conversation_id}"
     
+    # Sort messages by receivedDateTime in chronological order
+    messages.sort(key=lambda m: m.get('receivedDateTime', ''))
+    
     # Format output
-    result = f"Conversation ID: {conversation_id}\n"
+    conv_id = messages[0].get('conversationId', conversation_id)
+    result = f"Conversation ID: {conv_id}\n"
     result += f"Total messages in conversation: {len(messages)}\n\n"
     
     for idx, msg in enumerate(messages, 1):
@@ -1359,6 +1393,7 @@ def _get_microsoft_mailbox_conversation(client: httpx.Client, access_token: str,
             body_text = msg.get('bodyPreview', body_text)
         
         result += f"--- Message {idx} of {len(messages)} ---\n"
+        result += f"Message ID: {msg.get('id', '')}\n"
         result += f"From: {msg.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')}\n"
         result += f"To: {', '.join([r.get('emailAddress', {}).get('address', '') for r in msg.get('toRecipients', [])])}\n"
         
@@ -1450,7 +1485,7 @@ def _search_gmail_emails(
     if label_ids:
         params["labelIds"] = label_ids
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         # Search for messages
         list_response = client.get(
             f"{base_url}/users/me/messages",
@@ -1536,96 +1571,122 @@ def _search_microsoft_emails(
     before_date: Optional[str] = None,
     max_results: int = 10
 ) -> str:
-    """Search emails using Microsoft Graph Search API.
+    """Search emails using Microsoft Graph API.
     
-    Uses the /search/query endpoint which provides:
-    - Full-text search across body and attachments
-    - Relevance ranking
-    - KQL (Keyword Query Language) support
+    Uses the /me/messages endpoint with OData $filter and $search parameters.
+    This works for both personal Microsoft accounts (MSA) and work/school accounts.
     """
     base_url = "https://graph.microsoft.com/v1.0"
     
-    # Build the search query string using KQL
-    search_query = _build_microsoft_search_query(
-        query=query,
-        sender=sender,
-        subject=subject,
-        keywords=keywords,
-        after_date=after_date,
-        before_date=before_date
-    )
+    # Build OData filter conditions
+    filter_parts = []
     
-    # Build the search request body
-    search_request = {
-        "requests": [
-            {
-                "entityTypes": ["message"],
-                "query": {
-                    "queryString": search_query
-                },
-                "from": 0,
-                "size": min(max_results, 25),  # Microsoft Search API max is 25 per request
-                "enableTopResults": True  # Sort by relevance
-            }
-        ]
+    # Add sender filter
+    if sender:
+        filter_parts.append(f"from/emailAddress/address eq '{sender}'")
+    
+    # Add date filters
+    if after_date:
+        formatted_date = after_date.replace('/', '-')
+        filter_parts.append(f"receivedDateTime ge {formatted_date}T00:00:00Z")
+    
+    if before_date:
+        formatted_date = before_date.replace('/', '-')
+        filter_parts.append(f"receivedDateTime lt {formatted_date}T00:00:00Z")
+    
+    # Build query parameters
+    params = {
+        "$top": min(max_results, 50),
+        "$select": "id,from,subject,bodyPreview,receivedDateTime,toRecipients,ccRecipients,hasAttachments,conversationId,body"
     }
     
-    with httpx.Client() as client:
-        response = client.post(
-            f"{base_url}/search/query",
+    # Add filter if we have conditions
+    if filter_parts:
+        params["$filter"] = " and ".join(filter_parts)
+    
+    # Use $search for subject and keywords (works with personal accounts)
+    # Note: $search cannot be combined with $orderby
+    search_terms = []
+    if subject:
+        search_terms.append(f'subject:"{subject}"')
+    if keywords:
+        for kw in keywords:
+            search_terms.append(f'"{kw}"')
+    if query:
+        search_terms.append(f'"{query}"')
+    
+    if search_terms:
+        params["$search"] = " AND ".join(search_terms)
+    else:
+        # Only add $orderby when not using $search
+        params["$orderby"] = "receivedDateTime DESC"
+    
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+        response = client.get(
+            f"{base_url}/me/messages",
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json"
             },
-            json=search_request
+            params=params
         )
         
         if response.status_code != 200:
             raise Exception(f"Failed to search emails: {response.text}")
         
         result = response.json()
+        messages = result.get('value', [])
         
-        # Parse the search response
-        hits_containers = result.get('value', [{}])[0].get('hitsContainers', [])
-        
-        if not hits_containers:
-            return f"No emails found matching the search criteria. Query: {search_query}"
-        
-        hits_container = hits_containers[0]
-        total = hits_container.get('total', 0)
-        more_available = hits_container.get('moreResultsAvailable', False)
-        hits = hits_container.get('hits', [])
-        
-        if not hits:
-            return f"No emails found matching the search criteria. Query: {search_query}"
+        if not messages:
+            search_desc = []
+            if sender:
+                search_desc.append(f"sender={sender}")
+            if subject:
+                search_desc.append(f"subject={subject}")
+            if keywords:
+                search_desc.append(f"keywords={keywords}")
+            if after_date:
+                search_desc.append(f"after={after_date}")
+            if before_date:
+                search_desc.append(f"before={before_date}")
+            return f"No emails found matching the search criteria. Filters: {', '.join(search_desc) or 'none'}"
         
         emails_data = []
-        for hit in hits:
-            resource = hit.get('resource', {})
-            summary = hit.get('summary', '')
-            
+        for msg in messages:
             # Extract sender info
-            sender_info = resource.get('sender', {}).get('emailAddress', {})
-            from_info = resource.get('from', {}).get('emailAddress', {})
-            sender_address = from_info.get('address') or sender_info.get('address', 'Unknown')
-            sender_name = from_info.get('name') or sender_info.get('name', '')
+            from_info = msg.get('from', {}).get('emailAddress', {})
+            sender_address = from_info.get('address', 'Unknown')
+            sender_name = from_info.get('name', '')
             
-            # Use bodyPreview or summary
-            body_text = resource.get('bodyPreview', summary)[:1000]
+            # Get body content
+            body_content = msg.get('body', {})
+            body_text = msg.get('bodyPreview', body_content.get('content', ''))[:1000]
+            
+            # Get recipients
+            to_recipients = msg.get('toRecipients', [])
+            cc_recipients = msg.get('ccRecipients', [])
             
             emails_data.append({
+                'message_id': msg.get('id', ''),
+                'conversation_id': msg.get('conversationId', ''),
                 'from': f"{sender_name} <{sender_address}>" if sender_name else sender_address,
-                'subject': resource.get('subject', 'No Subject'),
-                'date': resource.get('receivedDateTime', ''),
-                'to': '',  # Not included in search results by default
-                'cc': '',
+                'subject': msg.get('subject', 'No Subject'),
+                'date': msg.get('receivedDateTime', ''),
+                'to': ', '.join([r.get('emailAddress', {}).get('address', '') for r in to_recipients]),
+                'cc': ', '.join([r.get('emailAddress', {}).get('address', '') for r in cc_recipients]),
                 'body': body_text,
-                'rank': hit.get('rank', 0),
-                'has_attachments': resource.get('hasAttachments', False)
+                'has_attachments': msg.get('hasAttachments', False)
             })
         
         result_str = _format_emails_for_llm(emails_data)
-        result_str = f"Search query: {search_query}\nTotal results: {total}\nMore results available: {more_available}\n\n{result_str}"
+        search_desc = []
+        if sender:
+            search_desc.append(f"sender={sender}")
+        if subject:
+            search_desc.append(f"subject={subject}")
+        if keywords:
+            search_desc.append(f"keywords={keywords}")
+        result_str = f"Search filters: {', '.join(search_desc) or 'none'}\nResults found: {len(emails_data)}\n\n{result_str}"
         return result_str
 
 
@@ -1740,7 +1801,7 @@ def _retrieve_gmail_emails(access_token: str, n: int) -> str:
     """Retrieve emails from Gmail API."""
     base_url = "https://gmail.googleapis.com/gmail/v1"
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         # Get list of message IDs from INBOX
         list_response = client.get(
             f"{base_url}/users/me/messages",
@@ -1780,7 +1841,7 @@ def _retrieve_microsoft_emails(access_token: str, n: int) -> str:
     """Retrieve emails from Microsoft Graph API."""
     base_url = "https://graph.microsoft.com/v1.0"
     
-    with httpx.Client() as client:
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         response = client.get(
             f"{base_url}/me/messages",
             headers={"Authorization": f"Bearer {access_token}"},

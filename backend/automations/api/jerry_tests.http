@@ -7,7 +7,9 @@
 @userIdMarco = d886288a-4e31-4978-b89f-867d55622169
 @userIdLoris = 53642f12-3b5c-4ccb-90c8-88fa1157d033
 
-@threadId = user53642f12-3b5c-4ccb-90c8-88fa1157d033:convb1e406bd-835a-4faa-9bb6-e76e119bf33a
+@userMicrosoft = f14fb2a4-7cb5-4887-9d07-a28dbf9ff565
+
+@threadId = userf14fb2a4-7cb5-4887-9d07-a28dbf9ff565:conva5d6bd7d-2fd5-485b-bfe6-37802bf6986f
  
 ###############################################
 # 1. Get Available Tools
@@ -22,7 +24,7 @@ POST {{baseUrl}}/jerry/thread/create HTTP/1.1
 Content-Type: application/json
 
 {
-    "user_id": "{{userIdLoris}}"
+    "user_id": "{{userMicrosoft}}"
 }
 
 ###############################################
@@ -32,20 +34,21 @@ POST {{baseUrl}}/jerry/message HTTP/1.1
 Content-Type: application/json
 
 {
-    "user_id": "{{userIdLoris}}",
-    "message": "Manda una email a dev4@example.com per dirgli che deve sistemare il frontend assolutamente!!"
+    "user_id": "{{userMicrosoft}}",
+    "message": "dimmi tutto quello che sai su di me"
 }
 
 ###############################################
 # 4. Send an email (Existing Thread)
 # Note: Replace thread_id with actual thread ID from previous response
 ###############################################
+
 POST {{baseUrl}}/jerry/message HTTP/1.1
 Content-Type: application/json
 
 {
-    "user_id": "{{userIdLoris}}",
-    "message": "Puoi mandarla",
+    "user_id": "{{userMicrosoft}}",
+    "message": "elimina la mia ultima mail (use microsoft provider)",
     "thread_id": "{{threadId}}"
 }
 

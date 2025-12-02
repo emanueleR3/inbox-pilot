@@ -5,7 +5,38 @@ from automations.chatbot.db.db import get_supabase_client
 from automations.ec_system.utils.utils import decrypt
 import os
 import httpx
-from datetime import datetime, timedelta
+import base64
+import hashlib
+from cryptography.fernet import Fernet
+from datetime import datetime, timedelta, timezone
+from threading import Lock
+
+
+# Token refresh configuration
+MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+TOKEN_REFRESH_THRESHOLD_SECONDS = 300  # Refresh if token expires within 5 minutes
+
+# Cipher for token encryption (singleton pattern)
+_cipher = None
+_cipher_lock = Lock()
+
+
+def _get_cipher():
+    """Get the Fernet cipher for token encryption/decryption."""
+    global _cipher
+    if _cipher is None:
+        with _cipher_lock:
+            if _cipher is None:
+                encryption_key_str = os.getenv("ENCRYPTION_KEY_TOKEN")
+                if not encryption_key_str:
+                    raise ValueError("ENCRYPTION_KEY_TOKEN not found in environment variables")
+                
+                encryption_key = encryption_key_str.encode()
+                key_hash = hashlib.sha256(encryption_key).digest()
+                fernet_key = base64.urlsafe_b64encode(key_hash)
+                _cipher = Fernet(fernet_key)
+    return _cipher
 
 
 def _decrypt_token(encrypted_token: str) -> str:
@@ -13,6 +44,122 @@ def _decrypt_token(encrypted_token: str) -> str:
     if not encrypted_token:
         return ""
     return decrypt(encrypted_token, "token")
+
+
+def _encrypt_token(token: str) -> str:
+    """Encrypt a token for storage using Fernet (AES-256)."""
+    if not token:
+        return ""
+    cipher = _get_cipher()
+    return cipher.encrypt(token.encode()).decode()
+
+
+def _refresh_microsoft_token_sync(refresh_token: str) -> dict:
+    """
+    Synchronously refresh Microsoft access token using refresh token.
+    
+    Args:
+        refresh_token: The refresh token to use
+        
+    Returns:
+        dict with access_token, refresh_token (if rotated), and expires_in
+    """
+    client_id = os.getenv("MICROSOFT_APPLICATION_ID_CLIENT")
+    client_secret = os.getenv("MICROSOFT_CLIENT_SECRET_VALUE")
+    
+    if not client_id or not client_secret:
+        raise ValueError("Microsoft OAuth credentials not configured")
+    
+    data = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token"
+    }
+    
+    with httpx.Client(timeout=30.0) as client:
+        resp = client.post(MICROSOFT_TOKEN_URL, data=data)
+        if resp.status_code != 200:
+            raise Exception(f"Microsoft token refresh failed: {resp.text}")
+        return resp.json()
+
+
+def _refresh_google_token_sync(refresh_token: str) -> dict:
+    """
+    Synchronously refresh Google access token using refresh token.
+    
+    Args:
+        refresh_token: The refresh token to use
+        
+    Returns:
+        dict with access_token and expires_in
+    """
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    
+    if not client_id or not client_secret:
+        raise ValueError("Google OAuth credentials not configured")
+    
+    data = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token"
+    }
+    
+    with httpx.Client(timeout=30.0) as client:
+        resp = client.post(GOOGLE_TOKEN_URL, data=data)
+        if resp.status_code != 200:
+            raise Exception(f"Google token refresh failed: {resp.text}")
+        return resp.json()
+
+
+def _update_tokens_in_db(email: str, access_token: str, expires_in: int, refresh_token: str = None) -> bool:
+    """
+    Update tokens in the database after a refresh.
+    
+    Args:
+        email: User email
+        access_token: New access token
+        expires_in: Token validity in seconds
+        refresh_token: New refresh token (if provider rotated it)
+        
+    Returns:
+        bool: True if update successful
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Calculate new expiry time
+        new_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        new_expiry_iso = new_expiry.isoformat()
+        
+        # Encrypt tokens
+        encrypted_access_token = _encrypt_token(access_token)
+        
+        update_data = {
+            "hashed_access_token": encrypted_access_token,
+            "expiry_token": new_expiry_iso
+        }
+        
+        # Update refresh token if provided (Microsoft may rotate it)
+        if refresh_token:
+            encrypted_refresh_token = _encrypt_token(refresh_token)
+            update_data["hashed_refresh_token"] = encrypted_refresh_token
+        
+        response = supabase.table("subscription_services").update(update_data).eq("email", email.lower()).execute()
+        
+        if response.data:
+            print(f"✅ [TOKEN REFRESH] Tokens updated for {email}, expires at {new_expiry_iso}")
+            return True
+        else:
+            print(f"❌ [TOKEN REFRESH] Failed to update tokens for {email}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [TOKEN REFRESH] Error updating tokens for {email}: {str(e)}")
+        return False
+
 
 def _get_access_token_for_email(email: str) -> Optional[str]:
     """Retrieve and decrypt access token for a given email address. Refreshes if expired."""
@@ -27,22 +174,60 @@ def _get_access_token_for_email(email: str) -> Optional[str]:
             return None
         
         user_data = response.data[0]
+        provider = user_data.get("email_provider", "").lower()
         
         # Check if token is expired or expiring soon (within 5 minutes)
         expiry_token = user_data.get("expiry_token")
+        needs_refresh = False
+        
         if expiry_token:
             try:
                 expiry_time = datetime.fromisoformat(expiry_token.replace("Z", "+00:00"))
-                now = datetime.utcnow().replace(tzinfo=expiry_time.tzinfo)
+                now = datetime.now(timezone.utc)
                 time_until_expiry = expiry_time - now
                 
-                # If token expires in less than 5 minutes, log warning
-                if time_until_expiry.total_seconds() < 300:
-                    print(f"Warning: Token for {email} is expired or expiring soon. Refresh mechanism not implemented.")
+                # If token expires in less than 5 minutes, it needs refresh
+                if time_until_expiry.total_seconds() < TOKEN_REFRESH_THRESHOLD_SECONDS:
+                    needs_refresh = True
+                    print(f"🔄 [TOKEN REFRESH] Token for {email} expires in {int(time_until_expiry.total_seconds())} seconds, refreshing...")
             except Exception as e:
                 print(f"Error checking token expiry: {str(e)}")
         
-        # Return current access token
+        # Attempt token refresh if needed
+        if needs_refresh and user_data.get("hashed_refresh_token"):
+            refresh_token = _decrypt_token(user_data["hashed_refresh_token"])
+            
+            if refresh_token:
+                try:
+                    if provider == "microsoft":
+                        refreshed = _refresh_microsoft_token_sync(refresh_token)
+                    elif provider == "google":
+                        refreshed = _refresh_google_token_sync(refresh_token)
+                    else:
+                        print(f"⚠️ [TOKEN REFRESH] Unknown provider '{provider}' for {email}, cannot refresh")
+                        # Return current token even if expiring
+                        if user_data.get("hashed_access_token"):
+                            return _decrypt_token(user_data["hashed_access_token"])
+                        return None
+                    
+                    # Extract new tokens
+                    new_access_token = refreshed.get("access_token")
+                    expires_in = refreshed.get("expires_in", 3600)
+                    new_refresh_token = refreshed.get("refresh_token")  # Microsoft may rotate
+                    
+                    if new_access_token:
+                        # Update tokens in database
+                        _update_tokens_in_db(email, new_access_token, expires_in, new_refresh_token)
+                        print(f"✅ [TOKEN REFRESH] Successfully refreshed token for {email} ({provider})")
+                        return new_access_token
+                    else:
+                        print(f"❌ [TOKEN REFRESH] No access token in refresh response for {email}")
+                        
+                except Exception as refresh_error:
+                    print(f"❌ [TOKEN REFRESH] Failed to refresh token for {email}: {str(refresh_error)}")
+                    # Fall back to current token
+        
+        # Return current access token (either refresh not needed or refresh failed)
         if user_data.get("hashed_access_token"):
             return _decrypt_token(user_data["hashed_access_token"])
         
