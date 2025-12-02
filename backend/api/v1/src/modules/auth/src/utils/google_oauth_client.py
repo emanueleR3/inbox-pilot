@@ -72,6 +72,5 @@ def create_google_flow(services="all"):
     from src.core.logger import setup_logger
     logger = setup_logger()
     logger.info(f"Environment: {env}")
-    logger.info(f"OAUTHLIB_INSECURE_TRANSPORT set to: {os.environ.get('OAUTHLIB_INSECURE_TRANSPORT')}")
     
     return flow

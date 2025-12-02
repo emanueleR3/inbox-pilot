@@ -53,6 +53,7 @@ def process_automation_result(workflow_result: dict):
     sender_email = extracted_info.get("from", "unknown")
     subject = extracted_info.get("subject", "No subject")
     thread_id = extracted_info.get("thread_id", None)
+    replay_to_id = extracted_info.get("reply_to_id", None)
     summary = workflow_result.get("mail_summary", "")
     extended_summary = workflow_result.get("extended_summary", None)
     cc_emails = extracted_info.get("cc", "")
@@ -64,9 +65,10 @@ def process_automation_result(workflow_result: dict):
     email_body = extracted_info.get("email_body", "")
     summary_attachments = workflow_result.get("summary_attachments", None)
     now_tz = datetime.now(timezone.utc).isoformat()
+    original_thread_id = workflow_result.get("original_thread_id", None)
 
     # ======= SUMMARIZER ONLY CHECK ======= ✅
-    if workflow_result.get("summarizer_only", False):
+    if workflow_result.get("summarizer_only", False):   
         print(f"⚠️ [WORKFLOW] Summarizer only. - Saving summary and extended summary")
         if not thread_id:
             print(f"❌ [WORKFLOW] No thread_id found in workflow result")
@@ -158,7 +160,7 @@ def process_automation_result(workflow_result: dict):
         return
     
     # ======= HIGH PRIORITY EMAIL CHECK ======= ✅
-    if status == "END_HIGH_PRIORITY":
+    if workflow_result.get("high_priority_email", False):
         print(f"🔥 [WORKFLOW] HIGH PRIORITY EMAIL DETECTED!")
         
         service_id = None
@@ -167,19 +169,9 @@ def process_automation_result(workflow_result: dict):
         except Exception as e:
             print(f"❌ [WORKFLOW] Error getting service_id: {e}")
 
-        ai_email_data = {
-            "thread_id": thread_id,
-            "response_at_id": message_id,
-            "processed_at": now_tz,
-            "duration": 0, #TODO calculate duration
-            "priority_score": priority_score,
-            "body": response_body,
-            "service_id": service_id,
-            "outcome": EmailOutcome.DRAFT.value
-        }
-
         thread_data = {
             "category": category,
+            "subcategory": subcategory,
             "summary": summary,
             "extended_summary": extended_summary,
             "human_response": True,
@@ -187,8 +179,21 @@ def process_automation_result(workflow_result: dict):
         }
 
         try:
-            save_ai_generated_email(ai_email_data)
             update_thread(thread_id, thread_data)
+
+            if workflow_result.get("needs_response", True):
+                ai_email_data = { 
+                    "thread_id": thread_id,
+                    "response_at_id": message_id,
+                    "processed_at": now_tz,
+                    "duration": 0, #TODO calculate duration
+                    "priority_score": priority_score,
+                    "body": response_body,
+                    "service_id": service_id,
+                    "outcome": EmailOutcome.DRAFT.value
+                }
+                save_ai_generated_email(ai_email_data)
+
         except Exception as e:
             print(f"❌ [WORKFLOW] Error saving AI generated email: {e}")
 
@@ -703,7 +708,7 @@ def process_automation_result(workflow_result: dict):
                     payload = {
                         "email": sender_email,
                         "subject": subject,
-                        "body": response_body
+                        "body": response_body,
                     }
 
                     senders_url = os.getenv("SENDERS_URL")
@@ -712,15 +717,20 @@ def process_automation_result(workflow_result: dict):
                     if provider == "google":
                         endpoint = f"{senders_url}/send-email/send-gmail"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
+                        payload["original_thread_id"] = original_thread_id
+                        payload["message_id"] = message_id
                     elif provider == "microsoft":
                         endpoint = f"{senders_url}/send-email/send-microsoft"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
+                        payload["message_id"] = message_id
                     elif provider == "imap":
                         endpoint = f"{senders_url}/send-email/send-smtp"
                         payload["smtp_server"] = email_service_data.get("smtp_server")
                         payload["smtp_port"] = email_service_data.get("smtp_port")
                         payload["smtp_email"] = box_email
                         payload["hashed_password"] = email_service_data.get("hashed_password")
+                        payload["reply_to_id"] = replay_to_id
+                        payload["message_id"] = message_id
                     else:
                         raise Exception(f"Unknown email provider: {provider}")
 

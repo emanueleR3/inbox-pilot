@@ -24,6 +24,20 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
+def _clean_message_id(message_id: str) -> str:
+    """
+    Remove angle brackets from message ID if present.
+    Example: "<abc123@mail.gmail.com>" -> "abc123@mail.gmail.com"
+    """
+    if not message_id:
+        return message_id
+    
+    if message_id.startswith('<') and message_id.endswith('>'):
+        return message_id[1:-1]
+    
+    return message_id
+
+
 class SendEmailService:
     """Service for sending emails via Gmail, Microsoft, and SMTP."""
     
@@ -37,28 +51,37 @@ class SendEmailService:
         email: str, 
         subject: str, 
         body: str, 
-        hashed_access_token: str
+        hashed_access_token: str,
+        thread_id: Optional[str] = None,
+        message_id: Optional[str] = None
     ) -> dict:
-        """
-        Send an email using Gmail API and return RFC Message-ID.
-        """
         try:
-            logger.info(f"📤 Sending email via Gmail to {email}")
-        
+            print("\n=== SEND EMAIL VIA GMAIL ===")
+            print(f"TO: {email}")
+            print(f"SUBJECT: {subject}")
+            print(f"thread_id: {thread_id}")
+            print(f"message_id (RFC): {message_id}")
+            print("============================")
+
             # Decrypt the access token
             access_token = decrypt(hashed_access_token, "token")
+            print(f"[DEBUG] Access token decrypted: {bool(access_token)}")
+
             if not access_token:
                 raise ValueError("Failed to decrypt access token")
 
-            # Create credentials
             scopes_env = os.getenv("GOOGLE_SCOPES", "")
+            print(f"[DEBUG] GOOGLE_SCOPES env: {scopes_env}")
+
             if scopes_env:
                 scopes = [scope.strip() for scope in scopes_env.split() if scope.strip()]
             else:
                 scopes = [
                     "https://www.googleapis.com/auth/gmail.send",
-                    "https://www.googleapis.com/auth/gmail.modify",  # sufficiente per leggere il messaggio
+                    "https://www.googleapis.com/auth/gmail.modify",
                 ]
+
+            print(f"[DEBUG] Final scopes: {scopes}")
 
             creds = Credentials(
                 token=access_token,
@@ -68,76 +91,112 @@ class SendEmailService:
                 scopes=scopes
             )
 
-            # Build Gmail service
             service = build('gmail', 'v1', credentials=creds)
-        
-            # Create the email message
+            print("[DEBUG] Gmail service built successfully")
+
+            # Create email
             message = MIMEMultipart('alternative')
             message['To'] = email
             message['Subject'] = subject
-        
-            # Determine if body is HTML or plain text
-            if body.strip().startswith('<') and body.strip().endswith('>'):
-                html_part = MIMEText(body, 'html', 'utf-8')
-                message.attach(html_part)
+
+            if message_id:
+                # Ensure message_id has angle brackets for RFC compliance
+                rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
+                print(f"[DEBUG] Adding In-Reply-To and References headers -> {rfc_message_id}")
+                message['In-Reply-To'] = rfc_message_id
+                message['References'] = rfc_message_id
             else:
-                text_part = MIMEText(body, 'plain', 'utf-8')
-                message.attach(text_part)
-        
-            # Encode the message
+                print("[DEBUG] No message_id given — sending as NEW email")
+
+            # Detect body type
+            if body.strip().startswith("<") and body.strip().endswith(">"):
+                print("[DEBUG] Body detected as HTML")
+                part = MIMEText(body, 'html', 'utf-8')
+            else:
+                print("[DEBUG] Body detected as PLAIN TEXT")
+                part = MIMEText(body, 'plain', 'utf-8')
+
+            message.attach(part)
+
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
-        
-            # Send the email
+            print(f"[DEBUG] Raw message length: {len(raw_message)}")
+
+            message_body = {"raw": raw_message}
+
+            if thread_id:
+                print(f"[DEBUG] Adding threadId to send body: {thread_id}")
+                message_body["threadId"] = thread_id
+            else:
+                print("[DEBUG] No threadId given — Gmail may create new thread")
+
+            print("[DEBUG] Sending email...")
+
             send_result = service.users().messages().send(
                 userId='me',
-                body={'raw': raw_message}
+                body=message_body
             ).execute()
-        
-            gmail_internal_id = send_result.get('id')
-            logger.info(f"✅ Email sent successfully via Gmail. Gmail ID: {gmail_internal_id}")
-        
-            # 🔍 Recupero dell'RFC Message-ID dagli header
+
+            gmail_internal_id = send_result.get("id")
+            print(f"[DEBUG] Gmail send() result ID: {gmail_internal_id}")
+
+            # Retrieve RFC Message-ID
             rfc_message_id = None
+
             try:
+                print("[DEBUG] Fetching Message-ID from Gmail...")
+
                 msg = service.users().messages().get(
-                    userId='me',
+                    userId="me",
                     id=gmail_internal_id,
-                    format='metadata',
-                    metadataHeaders=['Message-ID', 'Message-Id']
+                    format="metadata",
+                    metadataHeaders=["Message-ID", "Message-Id"]
                 ).execute()
-            
-                headers = msg.get('payload', {}).get('headers', [])
-                for h in headers:
-                    if h.get('name', '').lower() == 'message-id':
-                        rfc_message_id = h.get('value')
-                        break
-            
-                logger.info(f"📎 Gmail RFC Message-ID: {rfc_message_id}")
-            except Exception as meta_err:
-                logger.warning(f"⚠️ Could not retrieve RFC Message-ID from Gmail: {meta_err}", exc_info=True)
-        
+
+                print("[DEBUG] Received metadata headers:")
+
+                for h in msg.get("payload", {}).get("headers", []):
+                    print(f"   - {h.get('name')}: {h.get('value')}")
+                    if h.get("name", "").lower() == "message-id":
+                        rfc_message_id = h.get("value")
+
+                print(f"[DEBUG] Extracted RFC Message-ID: {rfc_message_id}")
+
+            except Exception as err:
+                print(f"[DEBUG] Could not fetch RFC Message-ID: {err}")
+
+            print("=== EMAIL SENT SUCCESSFULLY ===\n")
+
+            # Clean message_id by removing angle brackets
+            cleaned_message_id = _clean_message_id(rfc_message_id)
+
             return {
                 "success": True,
-                "message": f"Email sent successfully via Gmail to {email}",
-                "notification_id": gmail_internal_id,  # id interno Gmail
-                "message_id": rfc_message_id          # RFC Message-ID, es. "<abc@domain>"
+                "message": f"Email sent to {email}",
+                "notification_id": gmail_internal_id,
+                "message_id": cleaned_message_id
             }
-        
+
         except Exception as e:
-            logger.error(f"❌ Failed to send email via Gmail: {str(e)}", exc_info=True)
+            print("\n❌ ERROR SENDING EMAIL ❌")
+            print(str(e))
+            print("==============================\n")
+
             return {
                 "success": False,
-                "message": f"Failed to send email via Gmail: {str(e)}",
+                "message": f"Failed to send email: {str(e)}",
                 "notification_id": None,
                 "message_id": None
             }
+
+
     
     def send_email_microsoft(
         self, 
         email: str, 
         subject: str, 
         body: str, 
-        hashed_access_token: str
+        hashed_access_token: str,
+        message_id: Optional[str] = None
     ) -> dict:
         """
         Send an email using Microsoft Graph API and return RFC Message-ID (internetMessageId).
@@ -159,24 +218,34 @@ class SendEmailService:
             }
         
             # 1️⃣ CREA IL MESSAGGIO (DRAFT)
-            create_url = "https://graph.microsoft.com/v1.0/me/messages"
-            email_message = {
-                "subject": subject,
-                "body": {
-                    "contentType": content_type,
-                    "content": body
-                },
-                "toRecipients": [
-                    {
-                        "emailAddress": {
-                            "address": email
+            if message_id:
+                # Caso REPLY: usiamo createReply per generare una bozza di risposta
+                create_url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/createReply"
+                # Per createReply, il corpo va in "comment" se vogliamo aggiungere testo
+                # Nota: createReply imposta automaticamente Subject (Re: ...) e To/Cc
+                reply_payload = {
+                    "comment": body
+                }
+                create_resp = requests.post(create_url, json=reply_payload, headers=headers)
+            else:
+                # Caso NUOVA EMAIL
+                create_url = "https://graph.microsoft.com/v1.0/me/messages"
+                email_message = {
+                    "subject": subject,
+                    "body": {
+                        "contentType": content_type,
+                        "content": body
+                    },
+                    "toRecipients": [
+                        {
+                            "emailAddress": {
+                                "address": email
+                            }
                         }
-                    }
-                ],
-                # opzionale: "saveToSentItems" non serve qui, il messaggio andrà automaticamente in Sent dopo il send
-            }
-        
-            create_resp = requests.post(create_url, json=email_message, headers=headers)
+                    ],
+                }
+                create_resp = requests.post(create_url, json=email_message, headers=headers)
+
             if create_resp.status_code not in (200, 201):
                 error_msg = f"Microsoft Graph create draft error: {create_resp.status_code} - {create_resp.text}"
                 logger.error(f"❌ {error_msg}")
@@ -229,11 +298,14 @@ class SendEmailService:
             except Exception as meta_err:
                 logger.warning(f"⚠️ Error retrieving internetMessageId: {meta_err}", exc_info=True)
         
+            # Clean message_id by removing angle brackets
+            cleaned_message_id = _clean_message_id(rfc_message_id)
+
             return {
                 "success": True,
                 "message": f"Email sent successfully via Microsoft to {email}",
                 "notification_id": msg_id,       # id interno Graph del messaggio
-                "message_id": rfc_message_id     # RFC Message-ID (internetMessageId)
+                "message_id": cleaned_message_id     # RFC Message-ID (cleaned)
             }
         
         except Exception as e:
@@ -253,7 +325,9 @@ class SendEmailService:
         smtp_port: int,
         smtp_server: str,
         smtp_email: str,
-        smtp_password: str
+        smtp_password: str,
+        reply_to_id: Optional[str] = None,
+        message_id: Optional[str] = None
     ) -> dict:
         try:
             sender_email = smtp_email
@@ -266,6 +340,15 @@ class SendEmailService:
             # 🆕 Genero Message-ID RFC e lo aggiungo all'header
             msg_id = make_msgid()
             message["Message-ID"] = msg_id
+
+            if reply_to_id:
+                # Ensure reply_to_id has angle brackets for RFC compliance
+                rfc_reply_to_id = reply_to_id if reply_to_id.startswith('<') else f"<{reply_to_id}>"
+                message["In-Reply-To"] = rfc_reply_to_id
+            if message_id:
+                # Ensure message_id has angle brackets for RFC compliance
+                rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
+                message["References"] = rfc_message_id
 
             # HTML o testo
             if body.strip().startswith("<"):
@@ -317,11 +400,14 @@ class SendEmailService:
                     "message_id": None
                 }
 
+            # Clean message_id by removing angle brackets
+            cleaned_message_id = _clean_message_id(msg_id)
+
             return {
                 "success": True,
                 "message": "Email sent",
-                "message_id": msg_id,     # 🆕 RFC Message-ID
-                "notification_id": msg_id  # Per uniformità con gli altri metodi
+                "message_id": cleaned_message_id,     # RFC Message-ID (cleaned)
+                "notification_id": cleaned_message_id  # Per uniformità con gli altri metodi
             }
 
         except Exception as e:

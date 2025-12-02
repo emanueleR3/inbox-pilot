@@ -53,6 +53,9 @@ class EmailProcessor:
             
             # Step 2: Apply advanced filtering
             filter_result = await self.filter.process_message(email_data)
+
+            print(f"📝 [DEBUG-PROCESSOR] Filter result: {filter_result}")
+            print(f"📝 [DEBUG-PROCESSOR] email_data result: {email_data}")
             
             if not filter_result:
                 print(f"🚫 [PROCESSOR] Message filtered out")
@@ -60,11 +63,70 @@ class EmailProcessor:
             
             # Step 3: Handle the result based on filter outcome
             action = filter_result.get("action")
+            summarizer_only = filter_result.get("summarizer_only", False)
             email_data["action"] = action
+            email_data["summarizer_only"] = summarizer_only
             
             if action == "send_to_summarizer":
-                # TODO summarizer
-                return {}
+                print(f"📝 [PROCESSOR] Message sent to summarizer only")
+                needs_ai = filter_result.get("needs_ai", False)
+
+                if not needs_ai:
+                    print(f"❗ [PROCESSOR] Warning: Message marked for summarizer but no AI processing needed")
+                    return {
+                        "status": "skipped",
+                        "reason": "no_ai_needed_for_summarizer",
+                        "needs_ai_processing": False
+                    }
+                
+                # Find thread_id using reply_to_id since this is a user reply
+                reply_to_id = email_data.get("reply_to_id")
+                box_email = email_data.get("user_email")
+                thread_id = None
+                
+                if reply_to_id and reply_to_id.lower() != "no":
+                    thread = self.thread_repo.find_thread_by_reply_to(reply_to_id, box_email)
+                    if thread:
+                        thread_id = thread.get("thread_id")
+                        print(f"🔍 [PROCESSOR] Found thread {thread_id} for summarizer using reply_to_id")
+                    else:
+                        print(f"⚠️ [PROCESSOR] No thread found for reply_to_id: {reply_to_id}")
+                
+                if not thread_id:
+                    print(f"❌ [PROCESSOR] Cannot send to summarizer without thread_id")
+                    return {
+                        "status": "skipped",
+                        "reason": "no_thread_found_for_summarizer",
+                        "needs_ai_processing": False
+                    }
+                
+                try:
+                    processed_attachments = []
+                    # Process attachments for the summarizer
+                    if thread_id and email_data.get("attachments"):
+                        print(f"📎 [PROCESSOR] Processing attachments for summarizer in thread {thread_id}")
+                        try:
+                            processed_attachments = await self.attachment_service.process_attachments(
+                                email_data, thread_id
+                            )
+                        except Exception as e:
+                            print(f"❌ [PROCESSOR] Attachment processing failed: {e}")
+                    
+                    automation_payload = self._prepare_automation_payload(
+                        email_data, {"thread_id": thread_id, "box_email": box_email}, 
+                        processed_attachments
+                    )
+
+                    await self.send_to_automation(automation_payload)
+                except Exception as e:
+                    print(f"❌ [PROCESSOR] Failed to send to summarizer: {e}")
+
+                return {
+                    "status": "sent_to_summarizer",
+                    "thread_id": thread_id,
+                    "needs_ai_processing": False,
+                }
+
 
             if action == "thread_created":
                 # New thread was created
@@ -275,7 +337,8 @@ class EmailProcessor:
             "extended_summary": extended_summary,
             "no_reply": email_data.get("no_reply", False),
             "action": email_data.get("action"),
-            "summarizer_only": email_data.get("summarizer_only", False)
+            "summarizer_only": email_data.get("summarizer_only", False),
+            "original_thread_id": email_data.get("original_thread_id", None)
         }
         
         return automation_payload

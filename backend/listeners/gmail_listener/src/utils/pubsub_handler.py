@@ -53,37 +53,8 @@ async def process_pubsub_message(data: dict):
         payload = _serialize_gmail_message(email, msg, history_id)
         sender_email = _extract_email_from_header(payload.get('from', ''))
         labels = payload.get('labels', [])
-        
-        # Se il mittente è la stessa email dell'account o ha label SENT, salta questo messaggio
-        '''
-        if (sender_email and sender_email.lower() == email.lower()) or 'SENT' in labels:
-            print(f"🚫 Messaggio saltato - inviato dalla stessa email o label SENT: {payload.get('subject', 'N/A')}")
-            continue
-        '''
 
-        # TODO CONTROLLARE ID
-        '''
-        -> Esiste il campo In-Reply-To ?
-        TRUE { vedere in history a quale thread fa riferimento
-          -> il message_id è in history ?
-           - TRUE {
-            -- scarta
-           }
-           - FALSE {
-             -> Il sender della mail è uguale alla mail admin ?
-               - TRUE { 
-                 -- set human_response a true e notifica
-                 -- aggiorna summary e category (IA) e i vari campi
-               }
-               - FALSE {
-                 -- aggiorna campi e lancia l'automazione
-               }	 
-           }
-        }
-        FALSE { 
-           -- salvo thread_id, started_at, history, subject, sender_email, cc_emails, [SUMMARY DOPO AUTO], last_message_id, last_message_at, attachment_emails_id, [CATEGORY DOPO AUTO], human_response, last_sender_email
-        }
-        '''
+        print(f"\n\n===========\nDEBUG:\nSender Payload: {payload}\n===========\n\n")
 
         # Salta i messaggi con label DRAFT (bozze)
         if 'DRAFT' in labels:
@@ -123,13 +94,25 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     message_id = headers_lower.get("message-id")
     if message_id:
         message_id = _clean_message_id(message_id)
+
+    thread_id = message.get("threadId")
+    
+    # DEBUG: Mostra tutti gli header disponibili
+    print(f"\n\n===========\nDEBUG - ALL HEADERS:")
+    for key, value in headers_lower.items():
+        print(f"  {key}: {value}")
+    print("===========\n\n")
     
     # Cerca in-reply-to in modo case-insensitive e rimuovi < >
     reply_to_id = headers_lower.get("in-reply-to")
+    print(f"[DEBUG] In-Reply-To header value: {reply_to_id}")
+    
     if reply_to_id:
         reply_to_id = _clean_message_id(reply_to_id)
+        print(f"[DEBUG] Cleaned In-Reply-To: {reply_to_id}")
     else:
         reply_to_id = "no"
+        print(f"[DEBUG] No In-Reply-To header found, setting to 'no'")
     
     # Determina se è un'email no-reply
     is_no_reply = _is_no_reply_email(headers_lower.get("from", ""))
@@ -174,6 +157,7 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "attachments": attachments_metadata,
         "no_reply": is_no_reply,
         "is_sent": is_sent,
+        "original_thread_id": thread_id
     }
     return payload
 

@@ -269,30 +269,20 @@ def create_email_classification_graph():
         }
     )
     
-    # Conditional edge from priority controller: check priority score
-    def should_continue_after_priority_check(state):
-        """Check if workflow should end (high priority) or continue to subcategory routing."""
-        status = state.get("status", "")
-        
-        if status == "END_HIGH_PRIORITY":
-            return NodeNames.READER
-        else:
-            return NodeNames.SUBCATEGORY_ROUTER
-    
-    graph.add_conditional_edges(
-        NodeNames.PRIORITY_CONTROLLER,
-        should_continue_after_priority_check,
-        {
-            NodeNames.SUBCATEGORY_ROUTER: NodeNames.SUBCATEGORY_ROUTER,
-            NodeNames.READER: NodeNames.READER
-        }
-    )
+    graph.add_edge(NodeNames.PRIORITY_CONTROLLER, NodeNames.SUBCATEGORY_ROUTER)
     
     # Subcategory routing function
     def route_to_subcategory(state):
         """Route to appropriate subcategory handler based on subcategory."""
         subcategory = state.get("subcategory", "SPAM_OR_UNKNOWN")
         
+        if state.get("high_priority_email") and subcategory in [
+            "REQUEST_APPOINTMENT",
+            "REQUEST_APPOINTMENT_CHANGE",
+            "CANCEL_APPOINTMENT"
+        ]:
+            return END # TODO valutare di continuare i flussi con scheduler
+
         # Map subcategories to node names
         subcategory_mapping = {
             "OFFER_PROMOTION": NodeNames.HANDLE_OFFER_PROMOTION,
@@ -367,6 +357,7 @@ def create_email_classification_graph():
         NodeNames.HANDLE_INTERNAL_NOTE: NodeNames.HANDLE_INTERNAL_NOTE,
         NodeNames.HANDLE_SPAM_OR_UNKNOWN: NodeNames.HANDLE_SPAM_OR_UNKNOWN,
         NodeNames.HANDLE_UNRELATED_CONTENT: NodeNames.HANDLE_UNRELATED_CONTENT,
+        END: END
     }
     
     # Add conditional edge for subcategory routing
@@ -460,10 +451,6 @@ def create_email_classification_graph():
         """
         needs_response = state.get("needs_response", True)
         subcategory = state.get("subcategory", "")
-        workflow_decision = state.get("workflow_decision", "END_HIGH_PRIORITY")
-        
-        if workflow_decision == "END_HIGH_PRIORITY":
-            return NodeNames.EXTRACTOR_COMPANY_INFO
 
         # Special routing for REQUEST_APPOINTMENT - goes to SCHEDULER
         if subcategory == "REQUEST_APPOINTMENT":
@@ -740,6 +727,7 @@ def run_workflow(email_data: dict = None):
                 "human_response": False,
                 "automation_executed": False,
                 "summarizer_only": email_data.get("summarizer_only", False),
+                "original_thread_id": email_data.get("original_thread_id", None),
                 "review_iteration": 0,
                 "edit_history": []
             }
@@ -747,11 +735,7 @@ def run_workflow(email_data: dict = None):
             # Create default initial state
             return {"status": "FAILED", "error": "No email data provided"}
             
-        print(f"🎯 [WORKFLOW] Starting with initial state:")
-        print(f"   📧 Body: {initial_state.get('email_body', 'None')[:100]}...")
-        print(f"   📎 Attachments: {len(initial_state.get('attachments', []))}")
-        print(f"   🏷️ Category: {initial_state.get('category')}")
-        print(f"   🧵 Thread ID: {initial_state.get('extracted_info', {}).get('thread_id')}")
+        print(f"🎯 [WORKFLOW] Starting with mode summarizer_only={initial_state.get('summarizer_only', False)} and original thread_id={initial_state.get('original_thread_id', None)}")
         
         # Compile and execute the workflow
         compiled_graph = graph.compile()

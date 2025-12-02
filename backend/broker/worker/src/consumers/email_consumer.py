@@ -29,6 +29,7 @@ async def process_email(email_data):
             print(f"📧 Is Sent: {email_data.get('is_sent', False)}")
             print(f"📧 Reply To ID: {email_data.get('reply_to_id', 'N/A')}")
             print(f"📧 Message ID: {email_data.get('message_id', 'N/A')}")
+            print(f"📧 Thread ID: {email_data.get('original_thread_id', 'N/A')}")
             
             # Process through the new architecture
             result = await email_processor.process_message(email_data)

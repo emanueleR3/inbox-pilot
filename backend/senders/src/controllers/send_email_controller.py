@@ -23,7 +23,10 @@ class SendEmailController:
                 raise ValueError("Hashed access token is required")
 
             
-            return self.send_email_service.send_email_gmail(email, subject, body, hashed_access_token)
+            thread_id = req.get("original_thread_id")
+            message_id = req.get("message_id")
+            
+            return self.send_email_service.send_email_gmail(email, subject, body, hashed_access_token, thread_id, message_id)
             
         except Exception as e:
             raise HTTPException(
@@ -47,7 +50,9 @@ class SendEmailController:
             if not hashed_access_token:
                 raise ValueError("Hashed access token is required")
 
-            return self.send_email_service.send_email_microsoft(email, subject, body, hashed_access_token)
+            reply_to_id = req.get("message_id")
+
+            return self.send_email_service.send_email_microsoft(email, subject, body, hashed_access_token, reply_to_id)
             
         except Exception as e:
             raise HTTPException(
@@ -80,7 +85,12 @@ class SendEmailController:
             if not smtp_password:
                 raise ValueError("Smtp password is required")
 
-            return self.send_email_service.send_email_smtp(email, subject, body, smtp_port, smtp_server, smtp_email, smtp_password)
+            reply_to_id = req.get("reply_to_id")
+            message_id = req.get("message_id")
+
+            return self.send_email_service.send_email_smtp(
+                email, subject, body, smtp_port, smtp_server, smtp_email, smtp_password, reply_to_id, message_id
+            )
             
         except Exception as e:
             raise HTTPException(
