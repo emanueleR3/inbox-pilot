@@ -96,16 +96,23 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         message_id = _clean_message_id(message_id)
 
     thread_id = message.get("threadId")
-    if thread_id:
-        # thread_id = _clean_message_id(thread_id) # Non serve pulire il threadId di solito, ma se vuoi mantenerlo:
-        print(f"\n\n===========\nDEBUG:\nThread ID: {thread_id}\n===========\n\n")
+    
+    # DEBUG: Mostra tutti gli header disponibili
+    print(f"\n\n===========\nDEBUG - ALL HEADERS:")
+    for key, value in headers_lower.items():
+        print(f"  {key}: {value}")
+    print("===========\n\n")
     
     # Cerca in-reply-to in modo case-insensitive e rimuovi < >
     reply_to_id = headers_lower.get("in-reply-to")
+    print(f"[DEBUG] In-Reply-To header value: {reply_to_id}")
+    
     if reply_to_id:
         reply_to_id = _clean_message_id(reply_to_id)
+        print(f"[DEBUG] Cleaned In-Reply-To: {reply_to_id}")
     else:
         reply_to_id = "no"
+        print(f"[DEBUG] No In-Reply-To header found, setting to 'no'")
     
     # Determina se è un'email no-reply
     is_no_reply = _is_no_reply_email(headers_lower.get("from", ""))

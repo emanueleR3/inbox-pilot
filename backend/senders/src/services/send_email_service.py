@@ -41,25 +41,23 @@ class SendEmailService:
         thread_id: Optional[str] = None,
         message_id: Optional[str] = None
     ) -> dict:
-        """
-        Send an email using Gmail API and return RFC Message-ID.
-        If thread_id and message_id are provided, the email will be sent as a reply.
-        """
         try:
-            logger.info("📤 [GMAIL] Avvio invio email...")
-            logger.debug(f"➡️ Parametri ricevuti: email={email}, subject={subject}")
-            logger.debug(f"➡️ thread_id={thread_id}, message_id={message_id}")
+            print("\n=== SEND EMAIL VIA GMAIL ===")
+            print(f"TO: {email}")
+            print(f"SUBJECT: {subject}")
+            print(f"thread_id: {thread_id}")
+            print(f"message_id (RFC): {message_id}")
+            print("============================")
 
             # Decrypt the access token
             access_token = decrypt(hashed_access_token, "token")
-            logger.debug(f"🔐 Access token decriptato? {'YES' if access_token else 'NO'}")
+            print(f"[DEBUG] Access token decrypted: {bool(access_token)}")
 
             if not access_token:
                 raise ValueError("Failed to decrypt access token")
 
-            # Create credentials
             scopes_env = os.getenv("GOOGLE_SCOPES", "")
-            logger.debug(f"🌐 Env GOOGLE_SCOPES: {scopes_env}")
+            print(f"[DEBUG] GOOGLE_SCOPES env: {scopes_env}")
 
             if scopes_env:
                 scopes = [scope.strip() for scope in scopes_env.split() if scope.strip()]
@@ -69,7 +67,7 @@ class SendEmailService:
                     "https://www.googleapis.com/auth/gmail.modify",
                 ]
 
-            logger.debug(f"🔎 Scopes finali: {scopes}")
+            print(f"[DEBUG] Final scopes: {scopes}")
 
             creds = Credentials(
                 token=access_token,
@@ -79,95 +77,98 @@ class SendEmailService:
                 scopes=scopes
             )
 
-            # Build Gmail service
             service = build('gmail', 'v1', credentials=creds)
-            logger.debug("📡 Gmail service creato con successo.")
+            print("[DEBUG] Gmail service built successfully")
 
-            # Create the email message
+            # Create email
             message = MIMEMultipart('alternative')
             message['To'] = email
             message['Subject'] = subject
 
-            # Handle reply headers
             if message_id:
-                logger.debug(f"📎 Aggiunta intestazione di Reply: In-Reply-To={message_id}")
+                print(f"[DEBUG] Adding In-Reply-To and References headers -> {message_id}")
                 message['In-Reply-To'] = message_id
                 message['References'] = message_id
+            else:
+                print("[DEBUG] No message_id given — sending as NEW email")
 
             # Detect body type
-            if body.strip().startswith('<') and body.strip().endswith('>'):
-                logger.debug("📝 Corpo rilevato come HTML.")
+            if body.strip().startswith("<") and body.strip().endswith(">"):
+                print("[DEBUG] Body detected as HTML")
                 part = MIMEText(body, 'html', 'utf-8')
             else:
-                logger.debug("📝 Corpo rilevato come plain text.")
+                print("[DEBUG] Body detected as PLAIN TEXT")
                 part = MIMEText(body, 'plain', 'utf-8')
 
             message.attach(part)
 
-            # Encode message
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
-            logger.debug(f"📨 RAW message creato (lunghezza: {len(raw_message)}).")
+            print(f"[DEBUG] Raw message length: {len(raw_message)}")
 
-            # Prepare body
-            message_body = {'raw': raw_message}
+            message_body = {"raw": raw_message}
+
             if thread_id:
-                logger.debug(f"🧵 Aggiunto threadId al body: thread_id={thread_id}")
-                message_body['threadId'] = thread_id
+                print(f"[DEBUG] Adding threadId to send body: {thread_id}")
+                message_body["threadId"] = thread_id
             else:
-                logger.debug("⚠️ Nessun threadId fornito. Gmail creerà un nuovo thread.")
+                print("[DEBUG] No threadId given — Gmail may create new thread")
 
-            # Send email
-            logger.debug(f"🚀 Invio richiesta send() -> {message_body.keys()}")
-            
+            print("[DEBUG] Sending email...")
+
             send_result = service.users().messages().send(
                 userId='me',
                 body=message_body
             ).execute()
 
-            logger.debug(f"📬 Risposta Gmail send(): {json.dumps(send_result, indent=2)}")
+            gmail_internal_id = send_result.get("id")
+            print(f"[DEBUG] Gmail send() result ID: {gmail_internal_id}")
 
-            gmail_internal_id = send_result.get('id')
-            logger.info(f"📨 Email inviata. Gmail message.id = {gmail_internal_id}")
-
-            # Retrieve RFC message-id
+            # Retrieve RFC Message-ID
             rfc_message_id = None
+
             try:
-                logger.debug("📑 Recupero metadata del messaggio inviata da Gmail...")
+                print("[DEBUG] Fetching Message-ID from Gmail...")
 
                 msg = service.users().messages().get(
-                    userId='me',
+                    userId="me",
                     id=gmail_internal_id,
-                    format='metadata',
-                    metadataHeaders=['Message-ID', 'Message-Id']
+                    format="metadata",
+                    metadataHeaders=["Message-ID", "Message-Id"]
                 ).execute()
 
-                logger.debug(f"📨 Risposta metadata Gmail: {json.dumps(msg, indent=2)}")
+                print("[DEBUG] Received metadata headers:")
 
-                headers = msg.get('payload', {}).get('headers', [])
-                for h in headers:
-                    if h.get('name', '').lower() == 'message-id':
-                        rfc_message_id = h.get('value')
-                        logger.debug(f"📎 Trovato RFC Message-ID: {rfc_message_id}")
-                        break
+                for h in msg.get("payload", {}).get("headers", []):
+                    print(f"   - {h.get('name')}: {h.get('value')}")
+                    if h.get("name", "").lower() == "message-id":
+                        rfc_message_id = h.get("value")
 
-            except Exception as meta_err:
-                logger.warning(f"⚠️ Impossibile recuperare l'RFC Message-ID: {meta_err}", exc_info=True)
+                print(f"[DEBUG] Extracted RFC Message-ID: {rfc_message_id}")
+
+            except Exception as err:
+                print(f"[DEBUG] Could not fetch RFC Message-ID: {err}")
+
+            print("=== EMAIL SENT SUCCESSFULLY ===\n")
 
             return {
                 "success": True,
-                "message": f"Email sent successfully via Gmail to {email}",
+                "message": f"Email sent to {email}",
                 "notification_id": gmail_internal_id,
                 "message_id": rfc_message_id
             }
 
         except Exception as e:
-            logger.error(f"❌ ERRORE invio email: {str(e)}", exc_info=True)
+            print("\n❌ ERROR SENDING EMAIL ❌")
+            print(str(e))
+            print("==============================\n")
+
             return {
                 "success": False,
-                "message": f"Failed to send email via Gmail: {str(e)}",
+                "message": f"Failed to send email: {str(e)}",
                 "notification_id": None,
                 "message_id": None
             }
+
 
     
     def send_email_microsoft(
