@@ -242,9 +242,7 @@ def _decrypt_password(encrypted_password: str) -> str:
     if not encrypted_password:
         return ""
     try:
-        print(f"Attempting to decrypt password (encrypted length: {len(encrypted_password)})")
         decrypted = decrypt(encrypted_password, "pass")
-        print(f"Password decrypted successfully")
         return decrypted
     except Exception as e:
         import traceback
@@ -313,7 +311,77 @@ def _get_imap_smtp_credentials(email: str) -> Optional[dict]:
         print(f"Traceback: {traceback.format_exc()}")
         return None
 
-@tool
+@tool(
+        name_or_callable="send_email",
+        description="Send an email using Google OAuth, Microsoft OAuth, IMAP/SMTP, or plain SMTP. "
+                    "Use 'google' provider if the email is a Google account. "
+                    "For 'imap' or 'smtp' provider, credentials will be automatically retrieved from the system. ",
+        args_schema=(
+            {
+                "type": "object",
+                "properties": {
+                    "sender_address": {
+                        "type": "string",
+                        "description": "Email address of the sender"
+                    },
+                    "receiver_address": {
+                        "type": "string",
+                        "description": "Email address of the recipient"
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "Email subject"
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Email body content"
+                    },
+                    "provider": {
+                        "type": "string",
+                        "description": "'google' (default), 'microsoft', 'imap', or 'smtp'. Use 'imap' for configured IMAP/SMTP accounts. Use 'smtp' only with manual host/password credentials.",
+                        "default": "google"
+                    },
+                    "password": {
+                        "type": ["string", "null"],
+                        "description": "Password or app password (REQUIRED for 'smtp', auto-retrieved for 'imap')"
+                    },
+                    "host": {
+                        "type": ["string", "null"],
+                        "description": "SMTP host like 'smtp.gmail.com' (REQUIRED for 'smtp', auto-retrieved for 'imap')"
+                    },
+                    "body_type": {
+                        "type": "string",
+                        "description": "'text' or 'html' (default: 'text')",
+                        "default": "text"
+                    },
+                    "cc_recipients": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                        "description": "List of CC email addresses"
+                    },
+                    "bcc_recipients": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                        "description": "List of BCC email addresses"
+                    },
+                    "attachments": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                        "description": "List of file paths to attach"
+                    },
+                    "access_token": {
+                        "type": ["string", "null"],
+                        "description": "OAuth access token (automatically retrieved for google/microsoft)"
+                    },
+                    "port": {
+                        "type": ["integer", "null"],
+                        "description": "SMTP port like 587 or 465 (optional, defaults to 587)"
+                    }
+                },
+                "required": ["sender_address", "receiver_address", "subject", "body"]
+            }
+        )
+)
 def send_email(
     sender_address: str,
     receiver_address: str,
@@ -329,30 +397,6 @@ def send_email(
     access_token: Optional[str] = None,
     port: Optional[int] = None
 ) -> str:
-    """
-    Send an email using Google OAuth, Microsoft OAuth, IMAP/SMTP, or plain SMTP.
-    
-    IMPORTANT: Use 'google' provider (default) unless you have specific SMTP credentials.
-    For 'imap' provider, credentials are automatically retrieved from the system.
-    For 'smtp' provider, you MUST provide both 'host' and 'password' parameters.
-    
-    Args:
-        sender_address: Email address of the sender
-        receiver_address: Email address of the recipient
-        subject: Email subject
-        body: Email body content
-        provider: 'google' (default), 'microsoft', 'imap', or 'smtp'. 
-                  Use 'imap' for configured IMAP/SMTP accounts.
-                  Use 'smtp' only with manual host/password credentials.
-        password: Password or app password (REQUIRED for 'smtp', auto-retrieved for 'imap')
-        host: SMTP host like 'smtp.gmail.com' (REQUIRED for 'smtp', auto-retrieved for 'imap')
-        body_type: 'text' or 'html' (default: 'text')
-        cc_recipients: List of CC email addresses
-        bcc_recipients: List of BCC email addresses
-        attachments: List of file paths to attach
-        access_token: OAuth access token (automatically retrieved for google/microsoft)
-        port: SMTP port like 587 or 465 (optional, defaults to 587)
-    """
     
     # Auto-fetch access token for Google/Microsoft if not provided
     if provider in ['google', 'microsoft'] and not access_token:
@@ -361,8 +405,8 @@ def send_email(
         if not access_token:
             return f"Error: Could not retrieve access token for {sender_address}. Please ensure the email is configured in the system."
     
-    # Auto-fetch IMAP/SMTP credentials if provider is 'imap'
-    if provider == 'imap':
+    # Auto-fetch IMAP/SMTP credentials if provider is 'imap' or 'smtp'
+    if provider == 'imap' or provider == 'smtp':
         print(f"Fetching IMAP/SMTP credentials for {sender_address}...")
         credentials = _get_imap_smtp_credentials(sender_address)
         if not credentials:
@@ -391,7 +435,73 @@ def send_email(
         port=port
     )
     
-@tool
+@tool(
+    name_or_callable="create_draft_email",
+    description="""Create an email draft in the user's mailbox without sending it. Use this when the user wants to prepare an email for later review or editing before sending.
+
+Supported providers: 'google' (Gmail) and 'microsoft' (Outlook/Microsoft 365).
+Access tokens are automatically retrieved from the system - you don't need to provide them.
+
+When to use this tool:
+- User wants to draft an email for later review
+- User wants to prepare a response but not send immediately
+- User asks to "save" or "draft" an email
+
+Returns: A confirmation message with the draft ID if successful, or an error message if failed.""",
+    args_schema=(
+        {
+            "type": "object",
+            "properties": {
+                "sender_address": {
+                    "type": "string",
+                    "description": "The email address of the sender. Must be a configured email in the system (e.g., 'user@gmail.com' or 'user@outlook.com')"
+                },
+                "receiver_address": {
+                    "type": "string",
+                    "description": "The primary recipient's email address (e.g., 'recipient@example.com')"
+                },
+                "subject": {
+                    "type": "string",
+                    "description": "The email subject line. Should be clear and descriptive."
+                },
+                "body": {
+                    "type": "string",
+                    "description": "The main content of the email. Can be plain text or HTML based on body_type parameter."
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Email provider: 'google' for Gmail accounts, 'microsoft' for Outlook/Microsoft 365. Default: 'google'",
+                    "default": "google"
+                },
+                "access_token": {
+                    "type": ["string", "null"],
+                    "description": "OAuth access token. Leave empty - automatically retrieved from system based on sender_address."
+                },
+                "body_type": {
+                    "type": "string",
+                    "description": "Content type: 'text' for plain text, 'html' for HTML formatted emails. Default: 'text'",
+                    "default": "text"
+                },
+                "cc_recipients": {
+                    "type": ["array", "null"],
+                    "items": {"type": "string"},
+                    "description": "List of CC (carbon copy) recipient email addresses. Optional."
+                },
+                "bcc_recipients": {
+                    "type": ["array", "null"],
+                    "items": {"type": "string"},
+                    "description": "List of BCC (blind carbon copy) recipient email addresses. Optional."
+                },
+                "attachments": {
+                    "type": ["array", "null"],
+                    "items": {"type": "string"},
+                    "description": "List of file paths to attach to the draft. Optional."
+                }
+            },
+            "required": ["sender_address", "receiver_address", "subject", "body"]
+        }
+    )
+)
 def create_draft_email(
     sender_address: str,
     receiver_address: str,
@@ -404,12 +514,6 @@ def create_draft_email(
     bcc_recipients: Optional[List[str]] = None,
     attachments: Optional[List[str]] = None
 ) -> str:
-    """
-    Create an email draft using Google or Microsoft providers.
-
-    If `access_token` is not provided for 'google' or 'microsoft', the function
-    will attempt to retrieve and decrypt it from storage.
-    """
     if provider in ['google', 'microsoft'] and not access_token:
         print(f"Fetching access token for {sender_address} to create draft...")
         access_token = _get_access_token_for_email(sender_address)
@@ -430,7 +534,62 @@ def create_draft_email(
     )
 
 
-@tool
+@tool(
+    name_or_callable="retrieve_last_n_emails",
+    description="""Retrieve the most recent N emails from a user's mailbox. Use this to get an overview of recent email activity, find recent conversations, or gather context about the user's inbox.
+
+Supported providers: 'google' (Gmail), 'microsoft' (Outlook/Microsoft 365), and 'imap' (generic IMAP servers).
+All credentials are automatically retrieved from the system - you don't need to provide them.
+
+When to use this tool:
+- User asks "what are my recent emails?"
+- User wants to check their inbox
+- You need context about recent email conversations
+- User asks to summarize recent emails
+
+IMPORTANT: The results include message IDs and thread IDs that can be used with other tools like get_thread_messages, reply_to_email, forward_email, or delete_emails.
+
+Returns: A formatted string containing email details (sender, subject, date, snippet, message_id, thread_id) for each retrieved email.""",
+    args_schema=(
+        {
+            "type": "object",
+            "properties": {
+                "email_address": {
+                    "type": "string",
+                    "description": "The email address to retrieve emails from. Must be configured in the system."
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Number of recent emails to retrieve. Default: 10, Maximum: 20. Use smaller values for quick overviews.",
+                    "default": 10
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365, 'imap' for other providers. Default: 'google'",
+                    "default": "google"
+                },
+                "access_token": {
+                    "type": ["string", "null"],
+                    "description": "OAuth access token. Leave empty - automatically retrieved for google/microsoft providers."
+                },
+                "host": {
+                    "type": ["string", "null"],
+                    "description": "IMAP server hostname. Leave empty - automatically retrieved for 'imap' provider."
+                },
+                "password": {
+                    "type": ["string", "null"],
+                    "description": "Email password. Leave empty - automatically retrieved for 'imap' provider."
+                },
+                "port": {
+                    "type": ["integer", "null"],
+                    "description": "IMAP port number. Default: 993 (SSL). Only used for 'imap' provider.",
+                    "default": 993
+                }
+            },
+            "required": ["email_address"]
+        }
+    )
+)
 def retrieve_last_n_emails(
     email_address: str,
     n: int = 10,
@@ -440,24 +599,6 @@ def retrieve_last_n_emails(
     password: Optional[str] = None,
     port: Optional[int] = 993
 ) -> str:
-    """
-    Retrieve the last N emails from a mailbox. Useful for summarization, searching recent conversations, or context gathering.
-
-    For 'google' or 'microsoft' providers, the access token is automatically retrieved if not provided.
-    For 'imap' provider, credentials are automatically retrieved from the system if not provided.
-
-    Args:
-        email_address: The email address to retrieve emails from (also used as username for IMAP)
-        n: Number of emails to retrieve (default: 10, max: 20)
-        provider: 'google' (default), 'microsoft', or 'imap'
-        access_token: OAuth access token (automatically retrieved for google/microsoft if not provided)
-        host: IMAP host like 'imap.gmail.com' (auto-retrieved for configured 'imap' accounts)
-        password: Email password (auto-retrieved for configured 'imap' accounts)
-        port: IMAP port (default: 993, only used for 'imap' provider)
-
-    Returns:
-        A formatted string containing the retrieved emails, ready for LLM processing/summarization.
-    """
     # Auto-fetch access token for Google/Microsoft if not provided
     if provider in ['google', 'microsoft'] and not access_token:
         print(f"Fetching access token for {email_address} to retrieve emails...")
@@ -487,7 +628,97 @@ def retrieve_last_n_emails(
     )
 
 
-@tool
+@tool(
+    name_or_callable="search_emails",
+    description="""Search for emails matching specified criteria. Use this to find specific emails by sender, subject, keywords, date range, or raw search queries.
+
+Supported providers: 'google' (Gmail), 'microsoft' (Outlook/Microsoft 365), and 'imap' (generic IMAP servers).
+All credentials are automatically retrieved from the system - you don't need to provide them.
+
+When to use this tool:
+- User wants to find emails from a specific person
+- User wants to find emails about a specific topic
+- User wants to find emails within a date range
+- User asks "find emails about...", "search for emails from...", etc.
+
+IMPORTANT: The results include message IDs and thread IDs that can be used with other tools like get_thread_messages, reply_to_email, forward_email, or delete_emails.
+
+Returns: A formatted string containing matching emails with details (sender, subject, date, snippet, message_id, thread_id).""",
+    args_schema=(
+        {
+            "type": "object",
+            "properties": {
+                "email_address": {
+                    "type": "string",
+                    "description": "The email address to search in. Must be configured in the system."
+                },
+                "query": {
+                    "type": ["string", "null"],
+                    "description": "Raw search query. For Gmail: use format like 'from:user@example.com is:unread'. For general search, just use keywords."
+                },
+                "sender": {
+                    "type": ["string", "null"],
+                    "description": "Filter by sender email address (e.g., 'boss@company.com'). Finds all emails from this sender."
+                },
+                "subject": {
+                    "type": ["string", "null"],
+                    "description": "Filter by subject line keywords (e.g., 'meeting notes'). Matches partial subject text."
+                },
+                "keywords": {
+                    "type": ["array", "null"],
+                    "items": {"type": "string"},
+                    "description": "List of keywords to search for in email body/subject (e.g., ['invoice', 'payment'])."
+                },
+                "after_date": {
+                    "type": ["string", "null"],
+                    "description": "Only return emails after this date. Format: 'YYYY/MM/DD' or 'YYYY-MM-DD' (e.g., '2024/01/01')."
+                },
+                "before_date": {
+                    "type": ["string", "null"],
+                    "description": "Only return emails before this date. Format: 'YYYY/MM/DD' or 'YYYY-MM-DD' (e.g., '2024/12/31')."
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365, 'imap' for other providers. Default: 'google'",
+                    "default": "google"
+                },
+                "access_token": {
+                    "type": ["string", "null"],
+                    "description": "OAuth access token. Leave empty - automatically retrieved for google/microsoft providers."
+                },
+                "label_ids": {
+                    "type": ["array", "null"],
+                    "items": {"type": "string"},
+                    "description": "Gmail only: List of label IDs to filter by (e.g., ['INBOX', 'IMPORTANT', 'STARRED'])."
+                },
+                "include_spam_trash": {
+                    "type": "boolean",
+                    "description": "Include spam and trash folders in search results. Default: false",
+                    "default": False
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return. Default: 10, Maximum: 50.",
+                    "default": 10
+                },
+                "host": {
+                    "type": ["string", "null"],
+                    "description": "IMAP server hostname. Leave empty - automatically retrieved for 'imap' provider."
+                },
+                "password": {
+                    "type": ["string", "null"],
+                    "description": "Email password. Leave empty - automatically retrieved for 'imap' provider."
+                },
+                "port": {
+                    "type": ["integer", "null"],
+                    "description": "IMAP port number. Default: 993 (SSL). Only used for 'imap' provider.",
+                    "default": 993
+                }
+            },
+            "required": ["email_address"]
+        }
+    )
+)
 def search_emails(
     email_address: str,
     query: Optional[str] = None,
@@ -505,40 +736,6 @@ def search_emails(
     password: Optional[str] = None,
     port: Optional[int] = 993
 ) -> str:
-    """
-    Search for emails matching specified criteria. Useful for finding specific conversations,
-    emails from a particular sender, or messages within a date range.
-
-    For 'google' or 'microsoft' providers, the access token is automatically retrieved if not provided.
-    For 'imap' provider, credentials are automatically retrieved from the system if not provided.
-
-    Args:
-        email_address: The email address to search in (also used as username for IMAP)
-        query: Raw search query (Gmail format: "from:user@example.com is:unread", or keywords)
-        sender: Filter by sender email address (e.g., "boss@company.com")
-        subject: Filter by subject keywords (e.g., "meeting notes")
-        keywords: List of keywords to search for in email body/subject
-        after_date: Only return emails after this date (format: YYYY/MM/DD or YYYY-MM-DD)
-        before_date: Only return emails before this date (format: YYYY/MM/DD or YYYY-MM-DD)
-        provider: 'google' (default), 'microsoft', or 'imap'
-        access_token: OAuth access token (automatically retrieved for google/microsoft if not provided)
-        label_ids: List of Gmail label IDs to filter by (e.g., ["INBOX", "IMPORTANT"]) - Gmail only
-        include_spam_trash: Include spam and trash folders in search results (default: False)
-        max_results: Maximum number of results to return (default: 10, max: 50)
-        host: IMAP host like 'imap.gmail.com' (auto-retrieved for configured 'imap' accounts)
-        password: Email password (auto-retrieved for configured 'imap' accounts)
-        port: IMAP port (default: 993, only used for 'imap' provider)
-
-    Returns:
-        A formatted string containing matching emails, ready for LLM processing.
-
-    Examples:
-        - Search emails from a specific sender: sender="john@example.com"
-        - Search by date range: after_date="2024/01/01", before_date="2024/02/01"
-        - Search by keywords: keywords=["invoice", "payment"]
-        - Raw Gmail query: query="is:unread from:support@company.com"
-        - Combine filters: sender="hr@company.com", subject="policy", after_date="2024/06/01"
-    """
     # Auto-fetch access token for Google/Microsoft if not provided
     if provider in ['google', 'microsoft'] and not access_token:
         print(f"Fetching access token for {email_address} to search emails...")
@@ -576,7 +773,56 @@ def search_emails(
     )
 
 
-@tool
+@tool(
+    name_or_callable="get_thread_messages",
+    description="""Retrieve all messages in an email thread/conversation. Use this to get the full context of an email conversation, see the complete history of an exchange, or understand the discussion before replying.
+
+Supported providers: 'google' (Gmail) and 'microsoft' (Outlook/Microsoft 365).
+All credentials are automatically retrieved from the system.
+
+When to use this tool:
+- User wants to see the full email conversation
+- You need context before replying to an email
+- User asks to "show the thread" or "show the conversation"
+
+IMPORTANT: You MUST first use search_emails or retrieve_last_n_emails to get a valid thread_id. Do NOT make up or guess thread IDs - they must come from actual email data.
+
+Returns: A formatted string containing all messages in the thread in chronological order.""",
+    args_schema=(
+        {
+            "type": "object",
+            "properties": {
+                "email_address": {
+                    "type": "string",
+                    "description": "The email address to retrieve the thread from. Must be configured in the system."
+                },
+                "thread_id": {
+                    "type": "string",
+                    "description": "The thread/conversation ID. MUST be obtained from search_emails or retrieve_last_n_emails results. For Gmail: hexadecimal string like '18abc123def456gh'. For Microsoft: use the conversationId field."
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365. Default: 'google'",
+                    "default": "google"
+                },
+                "access_token": {
+                    "type": ["string", "null"],
+                    "description": "OAuth access token. Leave empty - automatically retrieved."
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Gmail only - Message format: 'full' (complete with body), 'metadata' (headers only), 'minimal' (IDs only). Default: 'full'",
+                    "default": "full"
+                },
+                "group_id": {
+                    "type": ["string", "null"],
+                    "description": "Microsoft only - Microsoft 365 Group ID. If provided, retrieves thread from a Group conversation instead of personal mailbox."
+                }
+            },
+            "required": ["email_address", "thread_id"]
+        }
+    )
+)
 def get_thread_messages(
     email_address: str,
     thread_id: str,
@@ -585,38 +831,6 @@ def get_thread_messages(
     format: str = "full",
     group_id: Optional[str] = None
 ) -> str:
-    """
-    Retrieve all messages in an email thread/conversation. Useful for getting the full context
-    of a conversation, following up on discussions, or understanding the history of an email exchange.
-
-    IMPORTANT: You must first use search_emails or retrieve_last_n_emails to get valid thread IDs.
-    Do NOT make up or guess thread IDs - they must come from actual email data.
-
-    For 'google' or 'microsoft' providers, the access token is automatically retrieved if not provided.
-
-    Args:
-        email_address: The email address to retrieve the thread from
-        thread_id: The ID of the thread/conversation to retrieve. 
-                   MUST be obtained from search_emails or retrieve_last_n_emails results.
-                   For Gmail: Thread IDs look like '18abc123def456gh' (hexadecimal string).
-                   For Microsoft: Use the conversationId from a message.
-        provider: 'google' (default) or 'microsoft'
-        access_token: OAuth access token (automatically retrieved if not provided)
-        format: Format for messages (Gmail only):
-                - 'full': Complete message with body content (default)
-                - 'metadata': Only headers and labels, no body
-                - 'minimal': Only message IDs and labels
-        group_id: Microsoft 365 Group ID (optional). If provided, retrieves thread from a
-                  Microsoft 365 Group conversation instead of personal mailbox.
-
-    Returns:
-        A formatted string containing all messages in the thread in chronological order,
-        ready for LLM processing.
-
-    Workflow:
-        1. First, use search_emails to find emails and get their thread IDs
-        2. Then, use this tool with the thread_id from the search results
-    """
     # Auto-fetch access token for Google/Microsoft if not provided
     if provider in ['google', 'microsoft'] and not access_token:
         print(f"Fetching access token for {email_address} to retrieve thread...")
@@ -633,7 +847,61 @@ def get_thread_messages(
     )
 
 
-@tool
+@tool(
+    name_or_callable="forward_email",
+    description="""Forward an existing email to one or more recipients. Use this when the user wants to share an email with someone else.
+
+Supported providers: 'google' (Gmail) and 'microsoft' (Outlook/Microsoft 365).
+All credentials are automatically retrieved from the system.
+
+When to use this tool:
+- User asks to "forward" an email
+- User wants to share an email with someone
+- User says "send this to..." referring to an existing email
+
+IMPORTANT: You MUST first use search_emails or retrieve_last_n_emails to get a valid message_id. Do NOT make up or guess message IDs - they must come from actual email data.
+
+Workflow:
+1. First use search_emails to find the email
+2. Get the message_id from the results
+3. Use this tool with the message_id and recipient list
+
+Returns: A confirmation message indicating the email was forwarded successfully.""",
+    args_schema=(
+        {
+            "type": "object",
+            "properties": {
+                "email_address": {
+                    "type": "string",
+                    "description": "The email address to forward from. Must be configured in the system."
+                },
+                "message_id": {
+                    "type": "string",
+                    "description": "The ID of the message to forward. MUST be obtained from search_emails or retrieve_last_n_emails results."
+                },
+                "to_recipients": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of email addresses to forward the message to (e.g., ['colleague@company.com', 'team@company.com'])."
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365. Default: 'google'",
+                    "default": "google"
+                },
+                "access_token": {
+                    "type": ["string", "null"],
+                    "description": "OAuth access token. Leave empty - automatically retrieved."
+                },
+                "comment": {
+                    "type": ["string", "null"],
+                    "description": "Optional comment to add at the top of the forwarded email (e.g., 'FYI - please review this.')."
+                }
+            },
+            "required": ["email_address", "message_id", "to_recipients"]
+        }
+    )
+)
 def forward_email(
     email_address: str,
     message_id: str,
@@ -642,36 +910,6 @@ def forward_email(
     access_token: Optional[str] = None,
     comment: Optional[str] = None
 ) -> str:
-    """
-    Forward an email to one or more recipients.
-
-    IMPORTANT: You must first use search_emails or retrieve_last_n_emails to get valid message IDs.
-    Do NOT make up or guess message IDs - they must come from actual email data.
-
-    For 'google' or 'microsoft' providers, the access token is automatically retrieved if not provided.
-
-    Args:
-        email_address: The email address to forward from (must be configured in the system)
-        message_id: The ID of the message to forward.
-                    MUST be obtained from search_emails or retrieve_last_n_emails results.
-        to_recipients: List of email addresses to forward the message to
-        provider: 'google' (default) or 'microsoft'
-        access_token: OAuth access token (automatically retrieved if not provided)
-        comment: Optional comment to include at the top of the forwarded message
-
-    Returns:
-        A confirmation message indicating the email was forwarded.
-
-    Workflow:
-        1. First, use search_emails to find the email you want to forward
-        2. Get the message_id from the search results
-        3. Use this tool with the message_id and recipient list
-
-    Examples:
-        - Forward to one person: to_recipients=["colleague@company.com"]
-        - Forward to multiple: to_recipients=["person1@email.com", "person2@email.com"]
-        - Forward with comment: comment="FYI - please review this."
-    """
     # Auto-fetch access token for Google/Microsoft if not provided
     if provider in ['google', 'microsoft'] and not access_token:
         print(f"Fetching access token for {email_address} to forward email...")
@@ -688,7 +926,66 @@ def forward_email(
     )
 
 
-@tool
+@tool(
+    name_or_callable="reply_to_email",
+    description="""Reply to an existing email. Can reply to just the sender or to all recipients (reply all).
+
+Supported providers: 'google' (Gmail) and 'microsoft' (Outlook/Microsoft 365).
+All credentials are automatically retrieved from the system.
+
+When to use this tool:
+- User wants to reply to an email
+- User says "respond to...", "answer...", or "reply to..."
+- User wants to continue an email conversation
+
+IMPORTANT: You MUST first use search_emails or retrieve_last_n_emails to get a valid message_id. Do NOT make up or guess message IDs - they must come from actual email data.
+
+Workflow:
+1. First use search_emails or retrieve_last_n_emails to find the email
+2. Get the message_id from the results
+3. Use this tool with the message_id and reply content
+
+Returns: A confirmation message indicating the reply was sent successfully.""",
+    args_schema=(
+        {
+            "type": "object",
+            "properties": {
+                "email_address": {
+                    "type": "string",
+                    "description": "The email address to reply from. Must be configured in the system."
+                },
+                "message_id": {
+                    "type": "string",
+                    "description": "The ID of the message to reply to. MUST be obtained from search_emails or retrieve_last_n_emails results."
+                },
+                "body": {
+                    "type": "string",
+                    "description": "The reply message content. This is the text that will be sent as the reply."
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365. Default: 'google'",
+                    "default": "google"
+                },
+                "access_token": {
+                    "type": ["string", "null"],
+                    "description": "OAuth access token. Leave empty - automatically retrieved."
+                },
+                "reply_all": {
+                    "type": "boolean",
+                    "description": "If true, reply to all recipients (sender + To + Cc). If false, reply only to sender. Default: false",
+                    "default": False
+                },
+                "additional_recipients": {
+                    "type": ["array", "null"],
+                    "items": {"type": "string"},
+                    "description": "Optional list of additional email addresses to include in the reply (e.g., ['manager@company.com'])."
+                }
+            },
+            "required": ["email_address", "message_id", "body"]
+        }
+    )
+)
 def reply_to_email(
     email_address: str,
     message_id: str,
@@ -698,38 +995,6 @@ def reply_to_email(
     reply_all: bool = False,
     additional_recipients: Optional[List[str]] = None
 ) -> str:
-    """
-    Reply to an email. Can reply only to the sender or to all recipients.
-
-    IMPORTANT: You must first use search_emails or retrieve_last_n_emails to get valid message IDs.
-    Do NOT make up or guess message IDs - they must come from actual email data.
-
-    For 'google' or 'microsoft' providers, the access token is automatically retrieved if not provided.
-
-    Args:
-        email_address: The email address to reply from (must be configured in the system)
-        message_id: The ID of the message to reply to.
-                    MUST be obtained from search_emails or retrieve_last_n_emails results.
-        body: The reply message content
-        provider: 'google' (default) or 'microsoft'
-        access_token: OAuth access token (automatically retrieved if not provided)
-        reply_all: If True, reply to all recipients (sender, To, and Cc). 
-                   If False (default), reply only to the sender.
-        additional_recipients: Optional list of additional email addresses to include in the reply
-
-    Returns:
-        A confirmation message indicating the reply was sent.
-
-    Workflow:
-        1. First, use search_emails or retrieve_last_n_emails to find the email you want to reply to
-        2. Get the message_id from the results
-        3. Use this tool with the message_id and your reply message
-
-    Examples:
-        - Simple reply: body="Thank you for the information!"
-        - Reply all: body="Thanks everyone!", reply_all=True
-        - Add recipients: body="Adding John to this thread.", additional_recipients=["john@company.com"]
-    """
     # Auto-fetch access token for Google/Microsoft if not provided
     if provider in ['google', 'microsoft'] and not access_token:
         print(f"Fetching access token for {email_address} to reply to email...")
@@ -747,44 +1012,63 @@ def reply_to_email(
     )
 
 
-@tool
+@tool(
+    name_or_callable="delete_emails",
+    description="""Permanently delete one or more emails. THIS ACTION CANNOT BE UNDONE.
+
+Supported providers: 'google' (Gmail) and 'microsoft' (Outlook/Microsoft 365).
+All credentials are automatically retrieved from the system.
+
+When to use this tool:
+- User explicitly asks to delete emails
+- User wants to remove unwanted emails
+- User says "delete", "remove", or "trash" referring to emails
+
+IMPORTANT SAFETY RULES:
+1. You MUST first use search_emails or retrieve_last_n_emails to get valid message_ids
+2. Do NOT make up or guess message IDs - they must come from actual email data
+3. ALWAYS confirm with the user before deleting - show them which emails will be deleted
+4. This action is PERMANENT and cannot be undone
+
+Workflow:
+1. First use search_emails to find the emails to delete
+2. Show the user which emails will be deleted and get explicit confirmation
+3. Only then use this tool with the message_ids
+
+Returns: A confirmation message indicating how many emails were deleted.""",
+    args_schema=(
+        {
+            "type": "object",
+            "properties": {
+                "email_address": {
+                    "type": "string",
+                    "description": "The email address to delete emails from. Must be configured in the system."
+                },
+                "message_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of message IDs to delete. MUST be obtained from search_emails or retrieve_last_n_emails results. For Gmail: hexadecimal strings. For Microsoft: message id strings."
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Email provider: 'google' for Gmail, 'microsoft' for Outlook/M365. Default: 'google'",
+                    "default": "google"
+                },
+                "access_token": {
+                    "type": ["string", "null"],
+                    "description": "OAuth access token. Leave empty - automatically retrieved."
+                }
+            },
+            "required": ["email_address", "message_ids"]
+        }
+    )
+)
 def delete_emails(
     email_address: str,
     message_ids: List[str],
     provider: str = "google",
     access_token: Optional[str] = None
 ) -> str:
-    """
-    Delete one or more emails by their message IDs. This action is PERMANENT and cannot be undone.
-
-    IMPORTANT: 
-    - You must first use search_emails or retrieve_last_n_emails to get valid message IDs.
-    - Do NOT make up or guess message IDs - they must come from actual email data.
-    - Always confirm with the user before deleting emails.
-
-    For 'google' or 'microsoft' providers, the access token is automatically retrieved if not provided.
-
-    Args:
-        email_address: The email address to delete emails from
-        message_ids: List of message IDs to delete. 
-                     MUST be obtained from search_emails or retrieve_last_n_emails results.
-                     For Gmail: Message IDs look like '18abc123def456gh' (hexadecimal string).
-                     For Microsoft: Use the message id from search/retrieve results.
-        provider: 'google' (default) or 'microsoft'
-        access_token: OAuth access token (automatically retrieved if not provided)
-
-    Returns:
-        A confirmation message indicating how many emails were deleted.
-
-    Workflow:
-        1. First, use search_emails to find the emails you want to delete
-        2. Show the user which emails will be deleted and get confirmation
-        3. Use this tool with the message_ids from the search results
-
-    Examples:
-        - Delete a single email: message_ids=["18abc123def456"]
-        - Delete multiple emails: message_ids=["18abc123def456", "18xyz789abc123"]
-    """
     # Auto-fetch access token for Google/Microsoft if not provided
     if provider in ['google', 'microsoft'] and not access_token:
         print(f"Fetching access token for {email_address} to delete emails...")
