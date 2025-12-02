@@ -65,10 +65,10 @@ def process_automation_result(workflow_result: dict):
     email_body = extracted_info.get("email_body", "")
     summary_attachments = workflow_result.get("summary_attachments", None)
     now_tz = datetime.now(timezone.utc).isoformat()
-    original_thread_id = workflow_result.get("original_thread_id", None)
+    original_thread_id = extracted_info.get("original_thread_id", None)
 
     # ======= SUMMARIZER ONLY CHECK ======= ✅
-    if workflow_result.get("summarizer_only", False):
+    if workflow_result.get("summarizer_only", False):   
         print(f"⚠️ [WORKFLOW] Summarizer only. - Saving summary and extended summary")
         if not thread_id:
             print(f"❌ [WORKFLOW] No thread_id found in workflow result")
@@ -715,7 +715,7 @@ def process_automation_result(workflow_result: dict):
                         endpoint = f"{senders_url}/send-email/send-gmail"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
                         payload["original_thread_id"] = original_thread_id
-                        payload["message_id"] = message_id  # Required for In-Reply-To and References headers
+                        payload["message_id"] = message_id
                     elif provider == "microsoft":
                         endpoint = f"{senders_url}/send-email/send-microsoft"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
