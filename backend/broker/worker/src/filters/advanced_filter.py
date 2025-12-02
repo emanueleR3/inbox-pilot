@@ -43,8 +43,7 @@ class AdvancedEmailFilter:
             if sender_email.lower() == email_data.get("user_email").lower():
                 email_data["action"] = "send_to_summarizer"
                 email_data["summarizer_only"] = True
-                #email_data["needs_ai"] = email_data.get("reply_to_id").lower() != "no"
-                email_data["needs_ai"] = True # TODO forzato per testing ^^^ abilitare su
+                email_data["needs_ai"] = email_data.get("reply_to_id").lower() != "no"
                 return email_data
             
             # Check for duplicate message_id first

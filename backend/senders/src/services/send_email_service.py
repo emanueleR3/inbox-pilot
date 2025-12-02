@@ -24,6 +24,20 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
+def _clean_message_id(message_id: str) -> str:
+    """
+    Remove angle brackets from message ID if present.
+    Example: "<abc123@mail.gmail.com>" -> "abc123@mail.gmail.com"
+    """
+    if not message_id:
+        return message_id
+    
+    if message_id.startswith('<') and message_id.endswith('>'):
+        return message_id[1:-1]
+    
+    return message_id
+
+
 class SendEmailService:
     """Service for sending emails via Gmail, Microsoft, and SMTP."""
     
@@ -152,11 +166,14 @@ class SendEmailService:
 
             print("=== EMAIL SENT SUCCESSFULLY ===\n")
 
+            # Clean message_id by removing angle brackets
+            cleaned_message_id = _clean_message_id(rfc_message_id)
+
             return {
                 "success": True,
                 "message": f"Email sent to {email}",
                 "notification_id": gmail_internal_id,
-                "message_id": rfc_message_id
+                "message_id": cleaned_message_id
             }
 
         except Exception as e:
@@ -281,11 +298,14 @@ class SendEmailService:
             except Exception as meta_err:
                 logger.warning(f"⚠️ Error retrieving internetMessageId: {meta_err}", exc_info=True)
         
+            # Clean message_id by removing angle brackets
+            cleaned_message_id = _clean_message_id(rfc_message_id)
+
             return {
                 "success": True,
                 "message": f"Email sent successfully via Microsoft to {email}",
                 "notification_id": msg_id,       # id interno Graph del messaggio
-                "message_id": rfc_message_id     # RFC Message-ID (internetMessageId)
+                "message_id": cleaned_message_id     # RFC Message-ID (cleaned)
             }
         
         except Exception as e:
@@ -380,11 +400,14 @@ class SendEmailService:
                     "message_id": None
                 }
 
+            # Clean message_id by removing angle brackets
+            cleaned_message_id = _clean_message_id(msg_id)
+
             return {
                 "success": True,
                 "message": "Email sent",
-                "message_id": msg_id,     # 🆕 RFC Message-ID
-                "notification_id": msg_id  # Per uniformità con gli altri metodi
+                "message_id": cleaned_message_id,     # RFC Message-ID (cleaned)
+                "notification_id": cleaned_message_id  # Per uniformità con gli altri metodi
             }
 
         except Exception as e:
