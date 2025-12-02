@@ -740,7 +740,7 @@ def run_workflow(email_data: dict = None):
                 "attachments_too_large": False,
                 "human_response": False,
                 "automation_executed": False,
-                "summarizer_only": email_data.get("summarizer_only", False),
+                "summarizer_only": email_data.get("summarizer_only", None),
                 "review_iteration": 0,
                 "edit_history": []
             }
@@ -748,11 +748,7 @@ def run_workflow(email_data: dict = None):
             # Create default initial state
             return {"status": "FAILED", "error": "No email data provided"}
             
-        print(f"🎯 [WORKFLOW] Starting with initial state:")
-        print(f"   📧 Body: {initial_state.get('email_body', 'None')[:100]}...")
-        print(f"   📎 Attachments: {len(initial_state.get('attachments', []))}")
-        print(f"   🏷️ Category: {initial_state.get('category')}")
-        print(f"   🧵 Thread ID: {initial_state.get('extracted_info', {}).get('thread_id')}")
+        print(f"🎯 [WORKFLOW] Starting with mode summarizer_only={initial_state.get('summarizer_only', False)} and original thread id {email_data.get("original_thread_id", None)}")
         
         # Compile and execute the workflow
         compiled_graph = graph.compile()
