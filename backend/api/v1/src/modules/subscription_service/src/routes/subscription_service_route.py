@@ -55,6 +55,30 @@ controller = SubscriptionServiceController()
                 }
             }
         }
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "ID sottoscrizione richiesto"}
+                }
+            }
+        },
+        404: {
+            "description": "Configurazione non trovata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Configurazione con ID {subscription_id} non trovata"}
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante il recupero della configurazione"}
+                }
+            }
+        }
     },
 )
 def get_configuration(subscription_id: str):
@@ -90,6 +114,47 @@ def get_configuration(subscription_id: str):
                     }
                 }
             },
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_id": {
+                            "value": {"detail": "ID sottoscrizione richiesto"}
+                        },
+                        "missing_updates": {
+                            "value": {"detail": "Nessun aggiornamento fornito"}
+                        },
+                        "invalid_fields": {
+                            "value": {"detail": "Campi non validi per l'aggiornamento"}
+                        },
+                        "invalid_values": {
+                            "value": {"detail": "I valori devono essere numeri tra 0 e 1"}
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Configurazione non trovata",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Configurazione con ID {subscription_id} non trovata"
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Errore durante l'aggiornamento della configurazione"
+                    }
+                }
+            }
         },
         400: {
             "description": "Richiesta non valida",

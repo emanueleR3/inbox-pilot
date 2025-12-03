@@ -38,6 +38,8 @@ def get_user_by_email(email: str):
     responses={
         201: {
             "description": "Account creato con successo",
+        201: {
+            "description": "Account creato con successo",
             "content": {
                 "application/json": {
                     "example": {
@@ -98,6 +100,19 @@ def get_user_by_email(email: str):
 def create_user_with_sub(
     payload: dict = Body(
         ...,
+        example={
+            "email": "user@example.com", 
+            "password": "strongpassword123",
+            "subscription": {
+                "name": "TechVision Srl",
+                "vat_number": "IT12345678901",
+                "city": "Milano",
+                "address": "Via Roma 42",
+                "active": True,
+                "current_period_end": "2025-12-31T23:59:59Z",
+                "plan": "premium",
+            }
+        },
         example={
             "email": "user@example.com", 
             "password": "strongpassword123",
@@ -296,6 +311,13 @@ def get_users_by_subscription(subscription_id: str):
 @router.post(
     "/login",
     summary="Login utente",
+    description="""
+    Esegue il login di un utente fornendo email e password.
+    
+    - Richiede email e password validi
+    - Verifica le credenziali contro Supabase Auth
+    - Restituisce un token di sessione in caso di successo
+    """,
     description="""
     Esegue il login di un utente fornendo email e password.
     
