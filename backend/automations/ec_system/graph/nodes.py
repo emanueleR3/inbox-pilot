@@ -1792,9 +1792,30 @@ def reviewer_node(state):
         edit_history = state.get("edit_history", [])
         language = state.get("language", "ITA")
         
+        # Build appointment context if applicable
+        appointment_context = None
+        subcategory = state.get("subcategory")
+        
+        # Check if this is an appointment-related subcategory
+        appointment_subcategories = [
+            "REQUEST_APPOINTMENT", "REQUEST_APPOINTMENT_CHANGE", "CANCEL_APPOINTMENT" # valutare confirmation appointment
+        ]
+        
+        # Get subcategory value (handle enum or string)
+        subcategory_value = subcategory.value if hasattr(subcategory, 'value') else subcategory
+        
+        if subcategory_value in appointment_subcategories:
+            appointment_context = {
+                "scheduled": state.get("appointment_scheduled"),
+                "event_code": state.get("appointment_event_code"),
+                "proposed_slots": state.get("appointment_proposed_slots"),
+                "overlap": state.get("appointment_overlap"),
+                "change_event_code": state.get("change_event_code"),
+                "cancellation_event_code": state.get("cancellation_event_code"),
+            }
+            print(f"   📅 Appointment context built for subcategory: {subcategory_value}")
+        
         print(f"   🔢 Review iteration: {state['review_iteration']}")
-        print(f"   📄 Written email length: {len(written_email_body)}")
-        print(f"   🗓️ Edit history entries: {len(edit_history)}")
         
         # Call LLM to review the email
         review_response = llm_client.review_email(
@@ -1803,7 +1824,8 @@ def reviewer_node(state):
             extended_summary=extended_summary,
             mail_summary=mail_summary,
             edit_history=edit_history,
-            language=language
+            language=language,
+            appointment_context=appointment_context
         )
         
         # Update state with review results

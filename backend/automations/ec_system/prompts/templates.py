@@ -1640,6 +1640,9 @@ Riassunto email corrente: {mail_summary}
 INFORMAZIONI AZIENDALI RILEVANTI:
 {chunked_company_info}
 
+CONTESTO APPUNTAMENTO (se applicabile):
+{appointment_context}
+
 STORICO MODIFICHE PRECEDENTI:
 {edit_history_text}
 
@@ -1668,6 +1671,13 @@ ISTRUZIONI PER LA REVISIONE:
    - Se presente uno storico di modifiche precedenti, verifica che le correzioni siano state applicate correttamente
    - Non ripetere le stesse correzioni già fatte nelle iterazioni precedenti
    - Identifica nuovi problemi non evidenziati prima
+
+5. IMPORTANTE - GESTIONE SLOT APPUNTAMENTO:
+   - Se nel "CONTESTO APPUNTAMENTO" sono presenti degli slot proposti, questi sono stati calcolati dal sistema di scheduling in base alla disponibilità reale del calendario
+   - NON segnalare come errore se gli slot proposti nell'email differiscono dagli orari di apertura generali nelle informazioni aziendali
+   - Gli slot proposti sono disponibilità specifiche e corrette, NON devono essere modificati per allinearli agli orari di apertura generali
+   - Verifica solo che gli slot scritti nell'email corrispondano a quelli nel "CONTESTO APPUNTAMENTO"
+   - Segnala errore SOLO se l'utente ha chiesto esplicitamente gli orari di apertura E l'email non li fornisce
 
 OUTPUT RICHIESTO:
 
@@ -1707,6 +1717,9 @@ Current email summary: {mail_summary}
 RELEVANT COMPANY INFORMATION:
 {chunked_company_info}
 
+APPOINTMENT CONTEXT (if applicable):
+{appointment_context}
+
 PREVIOUS EDIT HISTORY:
 {edit_history_text}
 
@@ -1735,6 +1748,13 @@ REVIEW INSTRUCTIONS:
    - If previous edit history exists, verify that corrections were applied correctly
    - Do not repeat the same corrections already made in previous iterations
    - Identify new problems not highlighted before
+
+5. IMPORTANT - APPOINTMENT SLOTS HANDLING:
+   - If "APPOINTMENT CONTEXT" contains proposed slots, these were calculated by the scheduling system based on actual calendar availability
+   - DO NOT flag as error if proposed slots in the email differ from general opening hours in company information
+   - Proposed slots are specific and correct availabilities, they MUST NOT be modified to align with general opening hours
+   - Only verify that slots written in the email match those in "APPOINTMENT CONTEXT"
+   - Flag as error ONLY if the user explicitly asked for opening hours AND the email doesn't provide them
 
 REQUIRED OUTPUT:
 

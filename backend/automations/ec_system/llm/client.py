@@ -2000,7 +2000,8 @@ class LLMClient:
         extended_summary: str,
         mail_summary: str,
         edit_history: list,
-        language: str = "ITA"
+        language: str = "ITA",
+        appointment_context: dict = None
     ):
         """
         Review a written email body and provide feedback.
@@ -2012,6 +2013,7 @@ class LLMClient:
             mail_summary: Current email summary
             edit_history: History of previous editing iterations
             language: Language (ITA or ENG)
+            appointment_context: Optional appointment-related context (scheduled, event_code, proposed_slots, etc.)
             
         Returns:
             ReviewerResponse with needs_review, correctness_score, and guidelines
@@ -2038,18 +2040,32 @@ class LLMClient:
             import json
             company_info_str = json.dumps(chunked_company_info, ensure_ascii=False, indent=2) if chunked_company_info else "{}"
             
+            # Format appointment context
+            if appointment_context:
+                if language == "ITA":
+                    appointment_context_text = self._format_appointment_context_ita(appointment_context)
+                else:
+                    appointment_context_text = self._format_appointment_context_eng(appointment_context)
+            else:
+                if language == "ITA":
+                    appointment_context_text = "Nessun contesto appuntamento applicabile."
+                else:
+                    appointment_context_text = "No appointment context applicable."
+            
             # Build the prompt
             prompt = prompt_template.format(
                 extended_summary=extended_summary or "",
                 mail_summary=mail_summary or "",
                 chunked_company_info=company_info_str,
                 edit_history_text=edit_history_text,
-                written_email_body=written_email_body
+                written_email_body=written_email_body,
+                appointment_context=appointment_context_text
             )
             
             print(f"   📊 Email length: {len(written_email_body)} characters")
             print(f"   🗣️ Language: {language}")
             print(f"   📝 Edit history entries: {len(edit_history)}")
+            print(f"   📅 Appointment context: {'Yes' if appointment_context else 'No'}")
             
             # Use structured completion to get ReviewerResponse
             response = self.structured_completion(prompt, ReviewerResponse)
@@ -2069,6 +2085,62 @@ class LLMClient:
                 correctness_score=0.8,
                 guidelines=[]
             )
+    
+    def _format_appointment_context_ita(self, ctx: dict) -> str:
+        """Format appointment context for Italian reviewer prompt."""
+        lines = []
+        
+        if ctx.get("scheduled"):
+            lines.append(f"- Appuntamento prenotato: Sì")
+            if ctx.get("event_code"):
+                lines.append(f"- Codice evento: {ctx['event_code']}")
+        else:
+            lines.append(f"- Appuntamento prenotato: No")
+        
+        if ctx.get("proposed_slots"):
+            lines.append(f"- Slot proposti dal sistema di scheduling (disponibilità reali del calendario):")
+            for slot in ctx["proposed_slots"]:
+                lines.append(f"  • {slot}")
+            lines.append("  NOTA: Questi slot sono calcolati in base alla disponibilità effettiva e NON devono essere confusi con gli orari di apertura generali.")
+        
+        if ctx.get("overlap"):
+            lines.append(f"- Sovrapposizione con altri eventi: Sì")
+        
+        if ctx.get("change_event_code"):
+            lines.append(f"- Codice evento da modificare: {ctx['change_event_code']}")
+        
+        if ctx.get("cancellation_event_code"):
+            lines.append(f"- Codice evento da cancellare: {ctx['cancellation_event_code']}")
+        
+        return "\n".join(lines) if lines else "Nessun contesto appuntamento applicabile."
+    
+    def _format_appointment_context_eng(self, ctx: dict) -> str:
+        """Format appointment context for English reviewer prompt."""
+        lines = []
+        
+        if ctx.get("scheduled"):
+            lines.append(f"- Appointment booked: Yes")
+            if ctx.get("event_code"):
+                lines.append(f"- Event code: {ctx['event_code']}")
+        else:
+            lines.append(f"- Appointment booked: No")
+        
+        if ctx.get("proposed_slots"):
+            lines.append(f"- Slots proposed by scheduling system (actual calendar availability):")
+            for slot in ctx["proposed_slots"]:
+                lines.append(f"  • {slot}")
+            lines.append("  NOTE: These slots are calculated based on actual availability and MUST NOT be confused with general opening hours.")
+        
+        if ctx.get("overlap"):
+            lines.append(f"- Overlap with other events: Yes")
+        
+        if ctx.get("change_event_code"):
+            lines.append(f"- Event code to modify: {ctx['change_event_code']}")
+        
+        if ctx.get("cancellation_event_code"):
+            lines.append(f"- Event code to cancel: {ctx['cancellation_event_code']}")
+        
+        return "\n".join(lines) if lines else "No appointment context applicable."
 
         
 
