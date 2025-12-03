@@ -53,9 +53,6 @@ class EmailProcessor:
             
             # Step 2: Apply advanced filtering
             filter_result = await self.filter.process_message(email_data)
-
-            print(f"📝 [DEBUG-PROCESSOR] Filter result: {filter_result}")
-            print(f"📝 [DEBUG-PROCESSOR] email_data result: {email_data}")
             
             if not filter_result:
                 print(f"🚫 [PROCESSOR] Message filtered out")

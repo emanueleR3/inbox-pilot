@@ -43,6 +43,81 @@ COUNTRY_TIMEZONE_MAP = {
     "Iceland": "Atlantic/Reykjavik",
 }
 
+EUROPEAN_IANA_TIMEZONES = set(COUNTRY_TIMEZONE_MAP.values())
+
+EMAIL_TLD_TO_COUNTRY = {
+    "it": "Italy",
+    "fr": "France",
+    "de": "Germany",
+    "es": "Spain",
+    "pt": "Portugal",
+    "nl": "Netherlands",
+    "be": "Belgium",
+    "at": "Austria",
+    "ch": "Switzerland",
+    "gr": "Greece",
+    "pl": "Poland",
+    "cz": "Czech Republic",
+    "hu": "Hungary",
+    "ro": "Romania",
+    "se": "Sweden",
+    "no": "Norway",
+    "dk": "Denmark",
+    "fi": "Finland",
+    "ie": "Ireland",
+    "hr": "Croatia",
+    "bg": "Bulgaria",
+    "sk": "Slovakia",
+    "si": "Slovenia",
+    "lt": "Lithuania",
+    "lv": "Latvia",
+    "ee": "Estonia",
+    "lu": "Luxembourg",
+    "mt": "Malta",
+    "cy": "Cyprus",
+    "uk": "United Kingdom",
+    "gb": "United Kingdom",
+    "is": "Iceland",
+}
+
+
+def _infer_timezone_from_email_domain(user_email: Optional[str]) -> Optional[str]:
+    if not user_email or "@" not in user_email:
+        return None
+    domain = user_email.split("@")[-1].lower()
+    if not domain:
+        return None
+    tld = domain.split(".")[-1]
+    country = EMAIL_TLD_TO_COUNTRY.get(tld)
+    if not country:
+        return None
+    return COUNTRY_TIMEZONE_MAP.get(country)
+
+
+def _apply_timezone_hint(
+    candidate: Optional[str],
+    hint_timezone: Optional[str],
+    source: str,
+    allow_hint_fallback: bool = False
+) -> Optional[str]:
+    if candidate:
+        if (
+            hint_timezone
+            and hint_timezone in EUROPEAN_IANA_TIMEZONES
+            and candidate not in EUROPEAN_IANA_TIMEZONES
+        ):
+            print(
+                f"⚠️ [{source}] Timezone '{candidate}' conflicts with domain hint '{hint_timezone}'. Using hint."
+            )
+            return hint_timezone
+        return candidate
+    if allow_hint_fallback and hint_timezone:
+        print(
+            f"ℹ️ [{source}] Microsoft APIs returned no usable timezone. Falling back to domain-based timezone '{hint_timezone}'."
+        )
+        return hint_timezone
+    return None
+
 def get_timezone_from_country(country: str) -> str:
     """
     Get timezone string from country name.
@@ -126,6 +201,7 @@ def get_microsoft_calendar_timezone(token: str, user_email: Optional[str] = None
     headers = {
         "Authorization": f"Bearer {token}"
     }
+    timezone_hint = _infer_timezone_from_email_domain(user_email)
 
     # Method 1: Use getSchedule to retrieve working hours timezone
     # This works even if the user has no calendar events, as long as we know their email address
@@ -165,6 +241,9 @@ def get_microsoft_calendar_timezone(token: str, user_email: Optional[str] = None
                         print(f"⚠️ Microsoft timezone '{ms_timezone}' not in mapping, using default Europe/Rome")
                         iana_timezone = "Europe/Rome"
                     print(f"   Converted to IANA: {iana_timezone}")
+                    resolved_timezone = _apply_timezone_hint(iana_timezone, timezone_hint, "WorkingHours")
+                    if resolved_timezone:
+                        return resolved_timezone
                     return iana_timezone
             else:
                 print("⚠️ getSchedule returned no working hours data")
@@ -204,13 +283,16 @@ def get_microsoft_calendar_timezone(token: str, user_email: Optional[str] = None
                     iana_timezone = "Europe/Rome"
                 
                 print(f"   Converted to IANA: {iana_timezone}")
+                resolved_timezone = _apply_timezone_hint(iana_timezone, timezone_hint, "CalendarEvent")
+                if resolved_timezone:
+                    return resolved_timezone
                 return iana_timezone
         else:
             print(f"⚠️ No calendar events found to infer timezone")
     except Exception as e:
         print(f"⚠️ Could not get timezone from events: {e}")
     
-    # Method 2: Try mailbox settings as fallback (requires MailboxSettings.Read permission)
+    # Method 3: Try mailbox settings as fallback (requires MailboxSettings.Read permission)
     try:
         mailbox_url = "https://graph.microsoft.com/v1.0/me/mailboxSettings"
         response = httpx.get(mailbox_url, headers=headers)
@@ -225,11 +307,17 @@ def get_microsoft_calendar_timezone(token: str, user_email: Optional[str] = None
             print(f"⚠️ Microsoft timezone '{ms_timezone}' not in mapping, using default Europe/Rome")
         
         print(f"   Converted to IANA: {iana_timezone}")
+        resolved_timezone = _apply_timezone_hint(iana_timezone, timezone_hint, "MailboxSettings")
+        if resolved_timezone:
+            return resolved_timezone
         return iana_timezone
     except Exception as e:
         print(f"⚠️ Could not get mailboxSettings (likely missing MailboxSettings.Read permission): {e}")
     
-    # Fallback to default
+    # Fallback to domain-based hint or default
+    resolved_timezone = _apply_timezone_hint(None, timezone_hint, "DomainHint", allow_hint_fallback=True)
+    if resolved_timezone:
+        return resolved_timezone
     print(f"⚠️ Could not determine Microsoft timezone, using default: Europe/Rome")
     return "Europe/Rome"
 

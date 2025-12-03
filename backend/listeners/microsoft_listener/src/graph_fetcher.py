@@ -212,15 +212,6 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
         headers = {}
         if internet_message_headers:
             headers = {h.get("name", "").lower(): h.get("value", "") for h in internet_message_headers}
-            log_info(f"📧 [MICROSOFT] Found {len(headers)} internet message headers")
-            #print all headers for debugging
-            for header_name, header_value in headers.items():
-                log_info(f"   📧 Header: {header_name} => {header_value}")
-            # Log specific headers for debugging
-            if "in-reply-to" in headers:
-                log_info(f"📧 [MICROSOFT] In-Reply-To header found: {headers['in-reply-to']}")
-            if "references" in headers:
-                log_info(f"📧 [MICROSOFT] References header found: {headers['references']}")
         
         # Usa internetMessageId come Message-ID standard
         message_id = graph_data.get("internetMessageId", "")

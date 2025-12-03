@@ -51,8 +51,8 @@ async def process_email(email_data):
                 print("\n📄 CORPO DEL MESSAGGIO:")
                 print("-" * 40)
                 # Mostra massimo 500 caratteri per non intasare i log
-                if len(body) > 500:
-                    print(f"{body[:500]}...")
+                if len(body) > 100:
+                    print(f"{body[:100]}...")
                     print(f"[... troncato - lunghezza totale: {len(body)} caratteri]")
                 else:
                     print(body)
