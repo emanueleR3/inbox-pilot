@@ -1605,8 +1605,7 @@ def extractor_company_info_node(state):
 
         # DEBUG
         print(f"✅ [EXTRACTOR_COMPANY_INFO] Company information extracted successfully")
-        print(f"   📝 [DEBUG] Chunked company informations extracted:\n {extraction_result.chunked_company_informations} ")
-        
+
         return state
         
     except Exception as e:

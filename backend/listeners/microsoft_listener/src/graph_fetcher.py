@@ -366,6 +366,13 @@ async def fetch_new_message(subscription_id: str, message_id: str, actual_user_i
             else:
                 is_sent_message = await _is_sent_message(graph_data, access_token, actual_user_id)
             
+            # For sent messages (outbound), Microsoft Graph doesn't return internetMessageHeaders
+            # So we need to find the In-Reply-To by looking up the previous message in the conversation
+            if is_sent_message:
+                graph_data = await _enrich_sent_message_with_reply_to(
+                    graph_data, access_token, actual_user_id, client
+                )
+            
             # Converte nel formato standard
             parsed_message = parse_microsoft_message(graph_data, user_email, is_sent_message)
             
@@ -379,6 +386,106 @@ async def fetch_new_message(subscription_id: str, message_id: str, actual_user_i
     except Exception as e:
         log_error(f"❌ MICROSOFT - Errore nel recupero messaggio {message_id} per subscription {subscription_id}: {str(e)}", e)
         return None
+
+
+async def _enrich_sent_message_with_reply_to(graph_data: dict, access_token: str, user_id: str, client: httpx.AsyncClient) -> dict:
+    """
+    For sent messages, Microsoft Graph doesn't return internetMessageHeaders.
+    This function finds the previous message in the conversation to get the In-Reply-To value.
+    
+    Args:
+        graph_data: The original message data from Graph API
+        access_token: Microsoft access token
+        user_id: Microsoft user ID
+        client: httpx AsyncClient instance
+        
+    Returns:
+        Enriched graph_data with internetMessageHeaders if found
+    """
+    try:
+        conversation_id = graph_data.get("conversationId")
+        current_message_id = graph_data.get("id")
+        subject = graph_data.get("subject", "")
+        
+        # Only process if it looks like a reply and we have a conversation ID
+        is_reply = subject.upper().startswith(("RE:", "FW:", "R:", "I:"))
+        if not conversation_id or not is_reply:
+            log_info(f"📧 [MICROSOFT] Not a reply or no conversation ID, skipping reply-to enrichment")
+            return graph_data
+        
+        log_info(f"📧 [MICROSOFT] Sent message detected - searching for parent message in conversation: {conversation_id}")
+        
+        # Search for other messages in the same conversation
+        # Filter to get messages before this one (by receivedDateTime) that are NOT from the sent folder
+        search_url = f"{GRAPH_BASE_URL}/users/{user_id}/messages"
+        params = {
+            "$filter": f"conversationId eq '{conversation_id}'",
+            "$select": "id,internetMessageId,receivedDateTime,sentDateTime,parentFolderId,subject",
+            "$orderby": "receivedDateTime desc",
+            "$top": "10"  # Get recent messages in conversation
+        }
+        
+        resp = await client.get(search_url, headers={"Authorization": f"Bearer {access_token}"}, params=params)
+        
+        if resp.status_code != 200:
+            log_info(f"⚠️ [MICROSOFT] Could not search conversation messages: {resp.status_code}")
+            return graph_data
+        
+        conversation_messages = resp.json().get("value", [])
+        log_info(f"📧 [MICROSOFT] Found {len(conversation_messages)} messages in conversation")
+        
+        # Find the most recent message that is NOT the current sent message
+        # and is likely the message being replied to (received message, not sent)
+        parent_internet_message_id = None
+        
+        for msg in conversation_messages:
+            msg_id = msg.get("id")
+            
+            # Skip the current message
+            if msg_id == current_message_id:
+                continue
+            
+            # Check if this is a received message (not in sent folder)
+            parent_folder_id = msg.get("parentFolderId")
+            if parent_folder_id:
+                # Quick check - get folder info
+                folder_url = f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{parent_folder_id}"
+                folder_resp = await client.get(folder_url, headers={"Authorization": f"Bearer {access_token}"})
+                
+                if folder_resp.status_code == 200:
+                    folder_data = folder_resp.json()
+                    well_known_name = folder_data.get("wellKnownName", "").lower()
+                    
+                    # Skip sent items - we want the received message
+                    if well_known_name in ["sentitems", "outbox", "drafts"]:
+                        continue
+            
+            # Found a candidate - get its internetMessageId
+            internet_msg_id = msg.get("internetMessageId", "")
+            if internet_msg_id:
+                parent_internet_message_id = internet_msg_id
+                log_info(f"📧 [MICROSOFT] Found parent message: {internet_msg_id}")
+                break
+        
+        if parent_internet_message_id:
+            # Enrich the graph_data with a synthetic In-Reply-To header
+            if "internetMessageHeaders" not in graph_data:
+                graph_data["internetMessageHeaders"] = []
+            
+            # Add the In-Reply-To header
+            graph_data["internetMessageHeaders"].append({
+                "name": "In-Reply-To",
+                "value": parent_internet_message_id
+            })
+            log_info(f"✅ [MICROSOFT] Enriched sent message with In-Reply-To: {parent_internet_message_id}")
+        else:
+            log_info(f"⚠️ [MICROSOFT] Could not find parent message in conversation")
+        
+        return graph_data
+        
+    except Exception as e:
+        log_error(f"⚠️ [MICROSOFT] Error enriching sent message with reply-to: {e}")
+        return graph_data
 
 async def _is_sent_message(graph_data: dict, access_token: str, user_id: str) -> bool:
     """

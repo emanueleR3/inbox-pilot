@@ -65,13 +65,11 @@ class SendEmailService:
 
             # Decrypt the access token
             access_token = decrypt(hashed_access_token, "token")
-            print(f"[DEBUG] Access token decrypted: {bool(access_token)}")
 
             if not access_token:
                 raise ValueError("Failed to decrypt access token")
 
             scopes_env = os.getenv("GOOGLE_SCOPES", "")
-            print(f"[DEBUG] GOOGLE_SCOPES env: {scopes_env}")
 
             if scopes_env:
                 scopes = [scope.strip() for scope in scopes_env.split() if scope.strip()]
@@ -80,8 +78,6 @@ class SendEmailService:
                     "https://www.googleapis.com/auth/gmail.send",
                     "https://www.googleapis.com/auth/gmail.modify",
                 ]
-
-            print(f"[DEBUG] Final scopes: {scopes}")
 
             creds = Credentials(
                 token=access_token,
@@ -92,7 +88,6 @@ class SendEmailService:
             )
 
             service = build('gmail', 'v1', credentials=creds)
-            print("[DEBUG] Gmail service built successfully")
 
             # Create email
             message = MIMEMultipart('alternative')
@@ -102,34 +97,23 @@ class SendEmailService:
             if message_id:
                 # Ensure message_id has angle brackets for RFC compliance
                 rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
-                print(f"[DEBUG] Adding In-Reply-To and References headers -> {rfc_message_id}")
                 message['In-Reply-To'] = rfc_message_id
                 message['References'] = rfc_message_id
-            else:
-                print("[DEBUG] No message_id given — sending as NEW email")
 
             # Detect body type
             if body.strip().startswith("<") and body.strip().endswith(">"):
-                print("[DEBUG] Body detected as HTML")
                 part = MIMEText(body, 'html', 'utf-8')
             else:
-                print("[DEBUG] Body detected as PLAIN TEXT")
                 part = MIMEText(body, 'plain', 'utf-8')
 
             message.attach(part)
 
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
-            print(f"[DEBUG] Raw message length: {len(raw_message)}")
 
             message_body = {"raw": raw_message}
 
             if thread_id:
-                print(f"[DEBUG] Adding threadId to send body: {thread_id}")
                 message_body["threadId"] = thread_id
-            else:
-                print("[DEBUG] No threadId given — Gmail may create new thread")
-
-            print("[DEBUG] Sending email...")
 
             send_result = service.users().messages().send(
                 userId='me',
@@ -137,14 +121,11 @@ class SendEmailService:
             ).execute()
 
             gmail_internal_id = send_result.get("id")
-            print(f"[DEBUG] Gmail send() result ID: {gmail_internal_id}")
 
             # Retrieve RFC Message-ID
             rfc_message_id = None
 
             try:
-                print("[DEBUG] Fetching Message-ID from Gmail...")
-
                 msg = service.users().messages().get(
                     userId="me",
                     id=gmail_internal_id,
@@ -152,14 +133,10 @@ class SendEmailService:
                     metadataHeaders=["Message-ID", "Message-Id"]
                 ).execute()
 
-                print("[DEBUG] Received metadata headers:")
-
                 for h in msg.get("payload", {}).get("headers", []):
                     print(f"   - {h.get('name')}: {h.get('value')}")
                     if h.get("name", "").lower() == "message-id":
                         rfc_message_id = h.get("value")
-
-                print(f"[DEBUG] Extracted RFC Message-ID: {rfc_message_id}")
 
             except Exception as err:
                 print(f"[DEBUG] Could not fetch RFC Message-ID: {err}")
