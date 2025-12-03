@@ -1409,12 +1409,13 @@ class LLMClient:
         token = service_data["access_token"]
         business_hours = service_data["business_hours"]
         appointment_duration = service_data["appointment_duration"]
+        mailbox_email = service_data.get("email")
         
         # Get timezone from calendar provider API
         if calendar_provider == "google":
             user_timezone = utils.get_google_calendar_timezone(token)
         elif calendar_provider == "microsoft":
-            user_timezone = utils.get_microsoft_calendar_timezone(token)
+            user_timezone = utils.get_microsoft_calendar_timezone(token, mailbox_email)
         else:
             print(f"⚠️ Unknown calendar provider: {calendar_provider}, using default Europe/Rome")
             user_timezone = "Europe/Rome"
@@ -1518,12 +1519,13 @@ class LLMClient:
         
         calendar_provider = service_data["calendar_provider"]
         token = service_data["access_token"]
+        mailbox_email = service_data.get("email")
         
         # Get user timezone from calendar API
         if calendar_provider == "google":
             user_timezone = utils.get_google_calendar_timezone(token)
         elif calendar_provider == "microsoft":
-            user_timezone = utils.get_microsoft_calendar_timezone(token)
+            user_timezone = utils.get_microsoft_calendar_timezone(token, mailbox_email)
         else:
             user_timezone = "Europe/Rome"  # Default fallback
         
@@ -1684,12 +1686,13 @@ class LLMClient:
         
         calendar_provider = service_data["calendar_provider"]
         token = service_data["access_token"]
+        mailbox_email = service_data.get("email")
         
         # Get user timezone
         if calendar_provider == "google":
             user_timezone = utils.get_google_calendar_timezone(token)
         elif calendar_provider == "microsoft":
-            user_timezone = utils.get_microsoft_calendar_timezone(token)
+            user_timezone = utils.get_microsoft_calendar_timezone(token, mailbox_email)
         else:
             user_timezone = "Europe/Rome"
         

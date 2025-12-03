@@ -4,6 +4,13 @@ from src.utils.logger import log_info, log_error
 
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
+
+def _escape_odata_string(value: str) -> str:
+    """Escape single quotes for use inside OData filter literals."""
+    if not value:
+        return value
+    return value.replace("'", "''")
+
 def _extract_body_content(body_content: dict) -> str:
     """
     Estrae il contenuto del corpo del messaggio da Microsoft Graph.
@@ -418,8 +425,9 @@ async def _enrich_sent_message_with_reply_to(graph_data: dict, access_token: str
         # Search for other messages in the same conversation
         # Filter to get messages before this one (by receivedDateTime) that are NOT from the sent folder
         search_url = f"{GRAPH_BASE_URL}/users/{user_id}/messages"
+        escaped_conversation_id = _escape_odata_string(conversation_id)
         params = {
-            "$filter": f"conversationId eq '{conversation_id}'",
+            "$filter": f"conversationId eq '{escaped_conversation_id}'",
             "$select": "id,internetMessageId,receivedDateTime,sentDateTime,parentFolderId,subject",
             "$orderby": "receivedDateTime desc",
             "$top": "10"  # Get recent messages in conversation
@@ -428,7 +436,7 @@ async def _enrich_sent_message_with_reply_to(graph_data: dict, access_token: str
         resp = await client.get(search_url, headers={"Authorization": f"Bearer {access_token}"}, params=params)
         
         if resp.status_code != 200:
-            log_info(f"⚠️ [MICROSOFT] Could not search conversation messages: {resp.status_code}")
+            log_info(f"⚠️ [MICROSOFT] Could not search conversation messages: {resp.status_code} -> {resp.text}")
             return graph_data
         
         conversation_messages = resp.json().get("value", [])
@@ -449,7 +457,7 @@ async def _enrich_sent_message_with_reply_to(graph_data: dict, access_token: str
             parent_folder_id = msg.get("parentFolderId")
             if parent_folder_id:
                 # Quick check - get folder info
-                folder_url = f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{parent_folder_id}"
+                folder_url = f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{parent_folder_id}?$select=displayName,wellKnownName"
                 folder_resp = await client.get(folder_url, headers={"Authorization": f"Bearer {access_token}"})
                 
                 if folder_resp.status_code == 200:

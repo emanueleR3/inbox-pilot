@@ -106,17 +106,19 @@ MICROSOFT_TIMEZONE_MAP = {
 }
 
 
-def get_microsoft_calendar_timezone(token: str) -> str:
+def get_microsoft_calendar_timezone(token: str, user_email: Optional[str] = None) -> str:
     """
     Retrieve timezone from Microsoft Calendar settings.
     
     The Calendar object in Microsoft Graph does NOT have a timeZone property.
     The timezone can only be obtained from:
-    1. Calendar events (start.timeZone) - requires Calendars.Read/ReadWrite
-    2. Mailbox settings - requires MailboxSettings.Read permission
+    1. Working hours via getSchedule (returns workingHours.timeZone)
+    2. Calendar events (start.timeZone) - requires Calendars.Read/ReadWrite
+    3. Mailbox settings - requires MailboxSettings.Read permission
     
     Args:
         token: Microsoft access token
+        user_email: SMTP address of the mailbox owner (required for getSchedule)
         
     Returns:
         Timezone string in IANA format (e.g., "Europe/Rome"). Defaults to "Europe/Rome" on error.
@@ -124,8 +126,52 @@ def get_microsoft_calendar_timezone(token: str) -> str:
     headers = {
         "Authorization": f"Bearer {token}"
     }
+
+    # Method 1: Use getSchedule to retrieve working hours timezone
+    # This works even if the user has no calendar events, as long as we know their email address
+    if user_email:
+        try:
+            schedule_url = "https://graph.microsoft.com/v1.0/me/calendar/getSchedule"
+            start_time = datetime.now(timezone.utc)
+            end_time = start_time + timedelta(days=7)
+            payload = {
+                "schedules": [user_email],
+                "startTime": {
+                    "dateTime": start_time.isoformat().replace("+00:00", "Z"),
+                    "timeZone": "UTC"
+                },
+                "endTime": {
+                    "dateTime": end_time.isoformat().replace("+00:00", "Z"),
+                    "timeZone": "UTC"
+                },
+                "availabilityViewInterval": 60
+            }
+            schedule_headers = headers.copy()
+            schedule_headers["Content-Type"] = "application/json"
+            response = httpx.post(schedule_url, headers=schedule_headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            schedule_info = (data.get("value") or [])
+            if schedule_info:
+                working_hours = schedule_info[0].get("workingHours", {})
+                time_zone_info = working_hours.get("timeZone", {})
+                ms_timezone = time_zone_info.get("name")
+                if ms_timezone:
+                    print(f"🌍 Retrieved Microsoft timezone from working hours: {ms_timezone}")
+                    iana_timezone = MICROSOFT_TIMEZONE_MAP.get(ms_timezone, ms_timezone)
+                    if "/" in ms_timezone:
+                        iana_timezone = ms_timezone
+                    elif ms_timezone not in MICROSOFT_TIMEZONE_MAP:
+                        print(f"⚠️ Microsoft timezone '{ms_timezone}' not in mapping, using default Europe/Rome")
+                        iana_timezone = "Europe/Rome"
+                    print(f"   Converted to IANA: {iana_timezone}")
+                    return iana_timezone
+            else:
+                print("⚠️ getSchedule returned no working hours data")
+        except Exception as e:
+            print(f"⚠️ Could not get timezone from working hours: {e}")
     
-    # Method 1: Get timezone from a recent calendar event
+    # Method 2: Get timezone from a recent calendar event
     # Calendar events always contain the timezone in start.timeZone
     # This works with Calendars.Read or Calendars.ReadWrite permission
     try:

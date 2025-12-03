@@ -156,7 +156,7 @@ def _get_user_timezone(box_email: str) -> str:
         if calendar_provider == "google":
             user_timezone = get_google_calendar_timezone(access_token)
         elif calendar_provider == "microsoft":
-            user_timezone = get_microsoft_calendar_timezone(access_token)
+            user_timezone = get_microsoft_calendar_timezone(access_token, box_email)
         else:
             print(f"⚠️ [TIMEZONE] Unknown calendar provider: {calendar_provider}, using default Europe/Rome")
             return "Europe/Rome"
