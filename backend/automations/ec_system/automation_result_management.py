@@ -49,22 +49,77 @@ def _get_ai_disclaimer() -> str:
         <span>Questa email è stata generata automaticamente da un sistema AI in base ai contenuti della conversazione.</span>
     </p>
 </div>
-
 """
+
+
+def _convert_plain_text_to_html(text: str) -> str:
+    """
+    Converts plain text email content to HTML format.
+    Preserves line breaks and basic formatting.
+    
+    Args:
+        text: Plain text content
+        
+    Returns:
+        HTML formatted content
+    """
+    import html
+    
+    # Escape HTML special characters to prevent injection
+    escaped_text = html.escape(text)
+    
+    # Convert line breaks to <br> tags
+    # Handle both \r\n (Windows) and \n (Unix) line endings
+    html_text = escaped_text.replace('\r\n', '<br>').replace('\n', '<br>')
+    
+    # Wrap in a styled div for consistent formatting
+    return f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;font-size:14px;line-height:1.6;color:#333333">{html_text}</div>'
 
 
 def _wrap_body_with_disclaimer(body: str) -> str:
     """
     Wraps an email body with the AI disclaimer at the top.
+    Converts plain text body to HTML format for proper rendering.
     
     Args:
-        body: The original email body content
+        body: The original email body content (plain text or HTML)
         
     Returns:
-        The body with the AI disclaimer prepended
+        Full HTML email with disclaimer prepended
     """
     disclaimer = _get_ai_disclaimer()
-    return f"{disclaimer}{body}"
+    
+    # Check if body is already HTML
+    stripped_body = body.strip()
+    is_html = (
+        stripped_body.startswith('<') and 
+        (stripped_body.startswith('<!DOCTYPE') or 
+         stripped_body.startswith('<html') or 
+         stripped_body.startswith('<div') or
+         stripped_body.startswith('<p'))
+    )
+    
+    if is_html:
+        # Body is already HTML, just prepend disclaimer
+        html_body = body
+    else:
+        # Convert plain text to HTML
+        html_body = _convert_plain_text_to_html(body)
+    
+    # Wrap everything in a complete HTML structure
+    full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:20px;background-color:#ffffff">
+{disclaimer}
+{html_body}
+</body>
+</html>"""
+    
+    return full_html
 
 
 def _get_user_timezone(box_email: str) -> str:
