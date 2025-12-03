@@ -205,6 +205,15 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
         headers = {}
         if internet_message_headers:
             headers = {h.get("name", "").lower(): h.get("value", "") for h in internet_message_headers}
+            log_info(f"📧 [MICROSOFT] Found {len(headers)} internet message headers")
+            #print all headers for debugging
+            for header_name, header_value in headers.items():
+                log_info(f"   📧 Header: {header_name} => {header_value}")
+            # Log specific headers for debugging
+            if "in-reply-to" in headers:
+                log_info(f"📧 [MICROSOFT] In-Reply-To header found: {headers['in-reply-to']}")
+            if "references" in headers:
+                log_info(f"📧 [MICROSOFT] References header found: {headers['references']}")
         
         # Usa internetMessageId come Message-ID standard
         message_id = graph_data.get("internetMessageId", "")
@@ -218,8 +227,44 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
         reply_to_id = headers.get("in-reply-to", "")
         if reply_to_id and reply_to_id.startswith('<') and reply_to_id.endswith('>'):
             reply_to_id = reply_to_id[1:-1]
+        
+        # Se In-Reply-To non è presente, prova con References (l'ultimo ID nella catena)
         if not reply_to_id:
-            reply_to_id = "no"
+            references = headers.get("references", "")
+            if references:
+                # References contiene una lista di Message-IDs separati da spazi
+                # L'ultimo è il messaggio a cui si risponde direttamente
+                ref_list = references.strip().split()
+                if ref_list:
+                    last_ref = ref_list[-1]
+                    if last_ref.startswith('<') and last_ref.endswith('>'):
+                        reply_to_id = last_ref[1:-1]
+                    else:
+                        reply_to_id = last_ref
+                    log_info(f"📧 [MICROSOFT] Using References header for reply_to_id: {reply_to_id}")
+        
+        # Se ancora non abbiamo reply_to_id, controlla se è una risposta dal subject (RE: o FW:)
+        # e se fa parte di una conversazione
+        if not reply_to_id:
+            conversation_id = graph_data.get("conversationId", "")
+            is_reply_or_forward = subject.upper().startswith(("RE:", "FW:", "R:", "I:"))
+            if conversation_id and is_reply_or_forward:
+                log_info(f"📧 [MICROSOFT] Message appears to be a reply (subject: {subject[:50]}...) but no In-Reply-To header found")
+                log_info(f"📧 [MICROSOFT] Conversation ID: {conversation_id}")
+                # Non possiamo determinare il reply_to_id esatto senza gli headers
+                # Lasciamo vuoto invece di "no" per indicare che è sconosciuto ma potrebbe essere una risposta
+                reply_to_id = ""
+        
+        # Solo se non è una risposta, impostiamo "no"
+        if not reply_to_id:
+            # Controlla se sembra essere un messaggio originale (non una risposta)
+            is_likely_original = not subject.upper().startswith(("RE:", "FW:", "R:", "I:", "Re:"))
+            if is_likely_original:
+                reply_to_id = "no"
+            else:
+                # È probabilmente una risposta ma non abbiamo l'header - lasciamo vuoto
+                reply_to_id = ""
+                log_info(f"📧 [MICROSOFT] Reply detected but In-Reply-To header not available")
         
         # Simula le labels per essere consistente con Gmail
         labels = []
@@ -234,6 +279,9 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
         # Estrai metadata degli allegati senza scaricarli
         attachments_metadata = _extract_microsoft_attachments_metadata(graph_data)
         
+        # Estrai anche il conversationId per il threading
+        conversation_id = graph_data.get("conversationId", "")
+        
         return {
             "provider": "microsoft",
             "user_email": user_email,
@@ -247,6 +295,7 @@ def parse_microsoft_message(graph_data: dict, user_email: str, is_sent_message: 
             "message_id": message_id,
             "microsoft_message_id": microsoft_message_id,  # ID interno per Microsoft Graph API
             "reply_to_id": reply_to_id,
+            "conversation_id": conversation_id,  # Microsoft conversation ID for threading
             "labels": labels,  # Aggiungi SENT per messaggi inviati
             "timestamp": message_datetime,
             "is_sent": is_sent_message,  # Flag aggiuntivo per identificare messaggi inviati
@@ -280,9 +329,30 @@ async def fetch_new_message(subscription_id: str, message_id: str, actual_user_i
         access_token = credentials.get("access_token")
         user_email = credentials.get("email", actual_user_id)
 
-        # Aggiungi parentFolderId per capire se è un messaggio inviato o ricevuto
-        # Includi anche attachments per ottenere i metadata degli allegati
-        url = f"{GRAPH_BASE_URL}/users/{actual_user_id}/messages/{message_id}?$select=*,internetMessageHeaders,parentFolderId&$expand=attachments"
+        # Request all standard properties plus internetMessageHeaders and parentFolderId
+        # Note: internetMessageHeaders must be explicitly requested and is NOT included in $select=*
+        # We need to list the properties we want explicitly
+        select_fields = [
+            "id",
+            "subject", 
+            "body",
+            "sender",
+            "from",
+            "toRecipients",
+            "ccRecipients",
+            "bccRecipients",
+            "receivedDateTime",
+            "sentDateTime",
+            "internetMessageId",
+            "internetMessageHeaders",  # Required for In-Reply-To and References headers
+            "conversationId",
+            "parentFolderId",
+            "hasAttachments"
+        ]
+        select_param = ",".join(select_fields)
+        url = f"{GRAPH_BASE_URL}/users/{actual_user_id}/messages/{message_id}?$select={select_param}&$expand=attachments"
+        
+        log_info(f"📧 [MICROSOFT] Fetching message with URL: {url[:100]}...")
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, headers={"Authorization": f"Bearer {access_token}"})

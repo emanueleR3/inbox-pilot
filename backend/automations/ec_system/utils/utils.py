@@ -111,9 +111,10 @@ def get_microsoft_calendar_timezone(token: str) -> str:
     Retrieve timezone from Microsoft Calendar settings.
     
     Tries multiple endpoints in order of preference:
-    1. Calendar settings (requires Calendars.Read)
-    2. Mailbox settings (requires MailboxSettings.Read)
-    3. Default to Europe/Rome
+    1. Default calendar settings (requires Calendars.Read/ReadWrite)
+    2. Recent calendar events (requires Calendars.Read/ReadWrite)
+    3. Mailbox settings (requires MailboxSettings.Read)
+    4. Default to Europe/Rome
     
     Args:
         token: Microsoft access token
@@ -125,41 +126,36 @@ def get_microsoft_calendar_timezone(token: str) -> str:
         "Authorization": f"Bearer {token}"
     }
     
-    # Method 1: Try to get timezone from default calendar
+    # Method 1: Get timezone directly from the user's default calendar
+    # The calendar object has a "timeZone" property (requires Calendars.Read or Calendars.ReadWrite)
     try:
-        calendar_url = "https://graph.microsoft.com/v1.0/me/calendar"
+        # Request the calendar with specific properties including timeZone
+        calendar_url = "https://graph.microsoft.com/v1.0/me/calendar?$select=id,name,timeZone"
         response = httpx.get(calendar_url, headers=headers)
         response.raise_for_status()
         data = response.json()
         
-        # The calendar object contains the default timezone
-        ms_timezone = data.get("defaultOnlineMeetingProvider")  # Not what we need
-        
-        # Actually, we need to check events or use a different approach
-        # Let's try getting calendar preferences via outlook settings
+        # The calendar object contains the timeZone property
+        ms_timezone = data.get("timeZone")
+        if ms_timezone:
+            print(f"🌍 Retrieved Microsoft timezone from calendar: {ms_timezone}")
+            
+            # Convert Microsoft timezone to IANA format
+            iana_timezone = MICROSOFT_TIMEZONE_MAP.get(ms_timezone, ms_timezone)
+            
+            # If it's already IANA format (contains /), use it directly
+            if "/" in ms_timezone:
+                iana_timezone = ms_timezone
+            elif ms_timezone not in MICROSOFT_TIMEZONE_MAP:
+                print(f"⚠️ Microsoft timezone '{ms_timezone}' not in mapping, using as-is or default")
+                iana_timezone = "Europe/Rome"
+            
+            print(f"   Converted to IANA: {iana_timezone}")
+            return iana_timezone
     except Exception as e:
-        print(f"⚠️ Could not get calendar info: {e}")
+        print(f"⚠️ Could not get timezone from calendar: {e}")
     
-    # Method 2: Try mailbox settings (requires MailboxSettings.Read permission)
-    try:
-        mailbox_url = "https://graph.microsoft.com/v1.0/me/mailboxSettings"
-        response = httpx.get(mailbox_url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        ms_timezone = data.get("timeZone", "W. Europe Standard Time")
-        print(f"🌍 Retrieved Microsoft timezone from mailboxSettings: {ms_timezone}")
-        
-        # Convert Microsoft timezone to IANA format
-        iana_timezone = MICROSOFT_TIMEZONE_MAP.get(ms_timezone, "Europe/Rome")
-        if ms_timezone not in MICROSOFT_TIMEZONE_MAP:
-            print(f"⚠️ Microsoft timezone '{ms_timezone}' not in mapping, using default Europe/Rome")
-        
-        print(f"   Converted to IANA: {iana_timezone}")
-        return iana_timezone
-    except Exception as e:
-        print(f"⚠️ Could not get mailboxSettings (likely missing MailboxSettings.Read permission): {e}")
-    
-    # Method 3: Try to infer timezone from a recent calendar event
+    # Method 2: Try to infer timezone from a recent calendar event
     try:
         events_url = "https://graph.microsoft.com/v1.0/me/calendar/events"
         params = {
@@ -184,8 +180,29 @@ def get_microsoft_calendar_timezone(token: str) -> str:
                     iana_timezone = event_tz
                 print(f"   Timezone: {iana_timezone}")
                 return iana_timezone
+        else:
+            print(f"⚠️ No calendar events found to infer timezone")
     except Exception as e:
         print(f"⚠️ Could not infer timezone from events: {e}")
+    
+    # Method 3: Try mailbox settings as last resort (requires MailboxSettings.Read permission)
+    try:
+        mailbox_url = "https://graph.microsoft.com/v1.0/me/mailboxSettings"
+        response = httpx.get(mailbox_url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        ms_timezone = data.get("timeZone", "W. Europe Standard Time")
+        print(f"🌍 Retrieved Microsoft timezone from mailboxSettings: {ms_timezone}")
+        
+        # Convert Microsoft timezone to IANA format
+        iana_timezone = MICROSOFT_TIMEZONE_MAP.get(ms_timezone, "Europe/Rome")
+        if ms_timezone not in MICROSOFT_TIMEZONE_MAP:
+            print(f"⚠️ Microsoft timezone '{ms_timezone}' not in mapping, using default Europe/Rome")
+        
+        print(f"   Converted to IANA: {iana_timezone}")
+        return iana_timezone
+    except Exception as e:
+        print(f"⚠️ Could not get mailboxSettings (likely missing MailboxSettings.Read permission): {e}")
     
     # Fallback to default
     print(f"⚠️ Could not determine Microsoft timezone, using default: Europe/Rome")
