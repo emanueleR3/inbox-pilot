@@ -838,7 +838,7 @@ READER_APPOINTMENT_PROMPT_ITA = """Sei un assistente esperto nell'analisi di ema
 
 Analizza attentamente la seguente email con richiesta di appuntamento ed estrai tutte le informazioni necessarie.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 CORPO EMAIL:
 {filtered_body}
@@ -890,7 +890,7 @@ READER_APPOINTMENT_PROMPT_ENG = """You are an expert assistant in analyzing emai
 
 Carefully analyze the following appointment request email and extract all necessary information.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 EMAIL BODY:
 {filtered_body}
@@ -943,7 +943,7 @@ SCHEDULER_PROMPT_ITA = """Sei un assistente esperto nella gestione di appuntamen
 
 Analizza la conversazione e determina l'azione appropriata per gestire la richiesta di appuntamento.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 RIASSUNTO MAIL CORRENTE:
 {mail_summary}
@@ -981,7 +981,7 @@ SCHEDULER_PROMPT_ENG = """You are an expert assistant in appointment management.
 
 Analyze the conversation and determine the appropriate action to handle the appointment request.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 CURRENT MAIL SUMMARY:
 {mail_summary}
@@ -1020,7 +1020,7 @@ READER_APPOINTMENT_CHANGE_PROMPT_ITA = """Sei un assistente esperto nell'analisi
 
 Analizza attentamente la seguente email di richiesta modifica appuntamento ed estrai tutte le informazioni necessarie.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 CORPO EMAIL:
 {filtered_body}
@@ -1081,7 +1081,7 @@ READER_APPOINTMENT_CHANGE_PROMPT_ENG = """You are an expert assistant in analyzi
 
 Carefully analyze the following appointment change request email and extract all necessary information.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 EMAIL BODY:
 {filtered_body}
@@ -1142,7 +1142,7 @@ RESCHEDULER_PROMPT_ITA = """Sei un assistente esperto nella gestione di modifich
 
 Analizza la conversazione e determina l'azione appropriata per gestire la richiesta di modifica appuntamento.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 RIASSUNTO MAIL CORRENTE:
 {mail_summary}
@@ -1182,7 +1182,7 @@ RESCHEDULER_PROMPT_ENG = """You are an expert assistant in managing appointment 
 
 Analyze the conversation and determine the appropriate action to handle the appointment change request.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 CURRENT MAIL SUMMARY:
 {mail_summary}
@@ -1223,7 +1223,7 @@ READER_CANCELLATION_PROMPT_ITA = """Sei un assistente esperto nell'analisi di em
 
 Analizza attentamente la seguente email di richiesta cancellazione appuntamento ed estrai tutte le informazioni necessarie.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 CORPO EMAIL:
 {filtered_body}
@@ -1260,7 +1260,7 @@ READER_CANCELLATION_PROMPT_ENG = """You are an expert assistant in analyzing ema
 
 Carefully analyze the following appointment cancellation request email and extract all necessary information.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 EMAIL BODY:
 {filtered_body}

@@ -1075,7 +1075,8 @@ def reader_node(state):
             extended_summary = state.get("extended_summary", "")
             extracted_info = state.get("extracted_info", {})
             sender_email = extracted_info.get("from", "mail not available")
-            current_timestamp = datetime.now().isoformat()
+            now = datetime.now()
+            current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
             
             # Analyze appointment request using specialized LLM method
             appointment_response = llm_client.read_appointment_request(
@@ -1115,7 +1116,8 @@ def reader_node(state):
             mail_summary = state.get("mail_summary", "")
             extracted_info = state.get("extracted_info", {})
             sender_email = extracted_info.get("from", "mail not available")
-            current_timestamp = datetime.now().isoformat()
+            now = datetime.now()
+            current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
             
             # Analyze appointment change request using specialized LLM method
             change_response = llm_client.read_appointment_change_request(
@@ -1157,7 +1159,8 @@ def reader_node(state):
             mail_summary = state.get("mail_summary", "")
             extracted_info = state.get("extracted_info", {})
             sender_email = extracted_info.get("from", "mail not available")
-            current_timestamp = datetime.now().isoformat()
+            now = datetime.now()
+            current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
             
             # Analyze cancellation request using specialized LLM method
             cancellation_response = llm_client.read_cancellation_request(
@@ -1266,8 +1269,9 @@ def scheduler_node(state):
         print(f"   🔑 Service ID: {service_id}")
         print(f"   👤 Created by: {created_by}")
         
-        # Get current timestamp
-        current_timestamp = datetime.now().isoformat()
+        # Get current timestamp with day of week
+        now = datetime.now()
+        current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
         
         # Get appointment details from state (for booking)
         appointment_info = {
@@ -1388,8 +1392,9 @@ def rescheduler_node(state):
         print(f"   🔑 Service ID: {service_id}")
         print(f"   🔑 Event code: {event_code}")
         
-        # Get current timestamp
-        current_timestamp = datetime.now().isoformat()
+        # Get current timestamp with day of week
+        now = datetime.now()
+        current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
         
         # Get appointment change details from state
         appointment_info = {
