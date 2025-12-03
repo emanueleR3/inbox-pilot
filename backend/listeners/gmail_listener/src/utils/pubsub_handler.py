@@ -1,8 +1,3 @@
-import asyncio
-import json
-import os
-import re
-import html
 from src.gmail_fetcher import fetch_messages_for_user
 from src.broker_client import RabbitMQPublisher 
 from src.utils.logger import log_info 
@@ -51,10 +46,7 @@ async def process_pubsub_message(data: dict):
     
     for msg in messages:
         payload = _serialize_gmail_message(email, msg, history_id)
-        sender_email = _extract_email_from_header(payload.get('from', ''))
         labels = payload.get('labels', [])
-
-        print(f"\n\n===========\nDEBUG:\nSender Payload: {payload}\n===========\n\n")
 
         # Salta i messaggi con label DRAFT (bozze)
         if 'DRAFT' in labels:
@@ -96,12 +88,6 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         message_id = _clean_message_id(message_id)
 
     thread_id = message.get("threadId")
-    
-    # DEBUG: Mostra tutti gli header disponibili
-    print(f"\n\n===========\nDEBUG - ALL HEADERS:")
-    for key, value in headers_lower.items():
-        print(f"  {key}: {value}")
-    print("===========\n\n")
     
     # Cerca in-reply-to in modo case-insensitive e rimuovi < >
     reply_to_id = headers_lower.get("in-reply-to")

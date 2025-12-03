@@ -429,7 +429,6 @@ async def _enrich_sent_message_with_reply_to(graph_data: dict, access_token: str
         params = {
             "$filter": f"conversationId eq '{escaped_conversation_id}'",
             "$select": "id,internetMessageId,receivedDateTime,sentDateTime,parentFolderId,subject",
-            "$orderby": "receivedDateTime desc",
             "$top": "10"  # Get recent messages in conversation
         }
         
@@ -440,6 +439,10 @@ async def _enrich_sent_message_with_reply_to(graph_data: dict, access_token: str
             return graph_data
         
         conversation_messages = resp.json().get("value", [])
+        conversation_messages.sort(
+            key=lambda msg: msg.get("receivedDateTime") or msg.get("sentDateTime") or "",
+            reverse=True
+        )
         log_info(f"📧 [MICROSOFT] Found {len(conversation_messages)} messages in conversation")
         
         # Find the most recent message that is NOT the current sent message
