@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 import requests
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,27 @@ class NotificationType:
     LOW_CONFIDENCE_WRITER = "LOW_CONFIDENCE_WRITER"
 
 
+def _convert_timestamp_to_timezone(user_timezone: str = "Europe/Rome") -> str:
+    """
+    Generate current timestamp converted to user's timezone.
+    
+    Args:
+        user_timezone: User timezone string (e.g., "Europe/Rome")
+        
+    Returns:
+        ISO format timestamp in user's timezone
+    """
+    try:
+        now_utc = datetime.now(timezone.utc)
+        target_tz = ZoneInfo(user_timezone)
+        now_local = now_utc.astimezone(target_tz)
+        return now_local.isoformat()
+    except Exception as e:
+        logger.warning(f"Failed to convert timestamp to timezone {user_timezone}: {e}")
+        # Fallback to UTC
+        return datetime.now(timezone.utc).isoformat()
+
+
 def send_notification(
     notification_type: str,
     sender_email: str,
@@ -51,7 +73,7 @@ def send_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
-        timestamp: Timestamp with timezone (defaults to current time)
+        timestamp: Timestamp already in user's local timezone (defaults to current UTC time)
         overlap: Whether appointment has overlap (for APPOINTMENT_NOT_SCHEDULED)
         
     Returns:
@@ -107,7 +129,8 @@ def send_event_followup_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send an event follow-up notification.
@@ -118,6 +141,7 @@ def send_event_followup_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -128,7 +152,8 @@ def send_event_followup_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 def send_high_priority_notification(
@@ -136,7 +161,8 @@ def send_high_priority_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send a high priority notification.
@@ -147,6 +173,7 @@ def send_high_priority_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -157,7 +184,8 @@ def send_high_priority_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 
@@ -166,7 +194,8 @@ def send_low_confidence_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send a low confidence classification notification.
@@ -177,6 +206,7 @@ def send_low_confidence_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -187,7 +217,8 @@ def send_low_confidence_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 
@@ -196,7 +227,8 @@ def send_event_invite_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send an event invite received notification.
@@ -207,6 +239,7 @@ def send_event_invite_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -217,7 +250,8 @@ def send_event_invite_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 
@@ -227,7 +261,8 @@ def send_appointment_not_scheduled_notification(
     subject: str,
     body: str,
     summary_attachment: Optional[str] = None,
-    overlap: Optional[bool] = None
+    overlap: Optional[bool] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send an appointment not scheduled notification.
@@ -239,6 +274,7 @@ def send_appointment_not_scheduled_notification(
         body: Email body content
         summary_attachment: Summary of attachments if present
         overlap: Whether there was an overlap with existing appointments
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -250,7 +286,8 @@ def send_appointment_not_scheduled_notification(
         subject=subject,
         body=body,
         summary_attachment=summary_attachment,
-        overlap=overlap
+        overlap=overlap,
+        timestamp=timestamp
     )
 
 
@@ -259,7 +296,8 @@ def send_information_not_present_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send a notification when company information is not present in the database.
@@ -270,6 +308,7 @@ def send_information_not_present_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -280,7 +319,8 @@ def send_information_not_present_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 
@@ -289,7 +329,8 @@ def send_no_available_slots_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send a notification when no available slots are found for appointment.
@@ -300,6 +341,7 @@ def send_no_available_slots_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -310,7 +352,8 @@ def send_no_available_slots_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 
@@ -319,7 +362,8 @@ def send_appointment_not_rescheduled_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send a notification when appointment could not be rescheduled.
@@ -330,6 +374,7 @@ def send_appointment_not_rescheduled_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -340,7 +385,8 @@ def send_appointment_not_rescheduled_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 
@@ -349,7 +395,8 @@ def send_event_code_not_found_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send a notification when event code is not found in database.
@@ -360,6 +407,7 @@ def send_event_code_not_found_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -370,7 +418,8 @@ def send_event_code_not_found_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 
@@ -379,7 +428,8 @@ def send_calendar_service_not_found_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send a notification when calendar service is not found for user.
@@ -390,6 +440,7 @@ def send_calendar_service_not_found_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -400,7 +451,8 @@ def send_calendar_service_not_found_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 
@@ -409,7 +461,8 @@ def send_event_deletion_failed_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send a notification when event deletion fails.
@@ -420,6 +473,7 @@ def send_event_deletion_failed_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -430,7 +484,8 @@ def send_event_deletion_failed_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 
@@ -439,7 +494,8 @@ def send_email_not_sent_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send a notification when an email could not be sent.
@@ -450,6 +506,7 @@ def send_email_not_sent_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -460,7 +517,8 @@ def send_email_not_sent_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
 
 
@@ -469,7 +527,8 @@ def send_low_confidence_writer_notification(
     box_email: str,
     subject: str,
     body: str,
-    summary_attachment: Optional[str] = None
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
 ) -> bool:
     """
     Send a notification when the writer has low confidence.
@@ -480,6 +539,7 @@ def send_low_confidence_writer_notification(
         subject: Email subject
         body: Email body content
         summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
         
     Returns:
         bool: True if notification was sent successfully
@@ -490,5 +550,6 @@ def send_low_confidence_writer_notification(
         box_email=box_email,
         subject=subject,
         body=body,
-        summary_attachment=summary_attachment
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
     )
