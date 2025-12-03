@@ -1,8 +1,3 @@
-import asyncio
-import json
-import os
-import re
-import html
 from src.gmail_fetcher import fetch_messages_for_user
 from src.broker_client import RabbitMQPublisher 
 from src.utils.logger import log_info 
@@ -51,10 +46,7 @@ async def process_pubsub_message(data: dict):
     
     for msg in messages:
         payload = _serialize_gmail_message(email, msg, history_id)
-        sender_email = _extract_email_from_header(payload.get('from', ''))
         labels = payload.get('labels', [])
-
-        print(f"\n\n===========\nDEBUG:\nSender Payload: {payload}\n===========\n\n")
 
         # Salta i messaggi con label DRAFT (bozze)
         if 'DRAFT' in labels:
@@ -97,22 +89,13 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
 
     thread_id = message.get("threadId")
     
-    # DEBUG: Mostra tutti gli header disponibili
-    print(f"\n\n===========\nDEBUG - ALL HEADERS:")
-    for key, value in headers_lower.items():
-        print(f"  {key}: {value}")
-    print("===========\n\n")
-    
     # Cerca in-reply-to in modo case-insensitive e rimuovi < >
     reply_to_id = headers_lower.get("in-reply-to")
-    print(f"[DEBUG] In-Reply-To header value: {reply_to_id}")
     
     if reply_to_id:
         reply_to_id = _clean_message_id(reply_to_id)
-        print(f"[DEBUG] Cleaned In-Reply-To: {reply_to_id}")
     else:
         reply_to_id = "no"
-        print(f"[DEBUG] No In-Reply-To header found, setting to 'no'")
     
     # Determina se è un'email no-reply
     is_no_reply = _is_no_reply_email(headers_lower.get("from", ""))

@@ -53,9 +53,6 @@ class EmailProcessor:
             
             # Step 2: Apply advanced filtering
             filter_result = await self.filter.process_message(email_data)
-
-            print(f"📝 [DEBUG-PROCESSOR] Filter result: {filter_result}")
-            print(f"📝 [DEBUG-PROCESSOR] email_data result: {email_data}")
             
             if not filter_result:
                 print(f"🚫 [PROCESSOR] Message filtered out")
@@ -322,6 +319,7 @@ class EmailProcessor:
         automation_payload = {
             "thread_id": thread_id,
             "message_id": email_data.get("message_id"),
+            "microsoft_message_id": email_data.get("microsoft_message_id"),  # Microsoft Graph internal ID for replies
             "reply_to_id": email_data.get("reply_to_id", "no"),
             "box_email": thread_data.get("box_email") or email_data.get("user_email"),
             "from": email_data.get("from"),

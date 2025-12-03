@@ -43,6 +43,81 @@ COUNTRY_TIMEZONE_MAP = {
     "Iceland": "Atlantic/Reykjavik",
 }
 
+EUROPEAN_IANA_TIMEZONES = set(COUNTRY_TIMEZONE_MAP.values())
+
+EMAIL_TLD_TO_COUNTRY = {
+    "it": "Italy",
+    "fr": "France",
+    "de": "Germany",
+    "es": "Spain",
+    "pt": "Portugal",
+    "nl": "Netherlands",
+    "be": "Belgium",
+    "at": "Austria",
+    "ch": "Switzerland",
+    "gr": "Greece",
+    "pl": "Poland",
+    "cz": "Czech Republic",
+    "hu": "Hungary",
+    "ro": "Romania",
+    "se": "Sweden",
+    "no": "Norway",
+    "dk": "Denmark",
+    "fi": "Finland",
+    "ie": "Ireland",
+    "hr": "Croatia",
+    "bg": "Bulgaria",
+    "sk": "Slovakia",
+    "si": "Slovenia",
+    "lt": "Lithuania",
+    "lv": "Latvia",
+    "ee": "Estonia",
+    "lu": "Luxembourg",
+    "mt": "Malta",
+    "cy": "Cyprus",
+    "uk": "United Kingdom",
+    "gb": "United Kingdom",
+    "is": "Iceland",
+}
+
+
+def _infer_timezone_from_email_domain(user_email: Optional[str]) -> Optional[str]:
+    if not user_email or "@" not in user_email:
+        return None
+    domain = user_email.split("@")[-1].lower()
+    if not domain:
+        return None
+    tld = domain.split(".")[-1]
+    country = EMAIL_TLD_TO_COUNTRY.get(tld)
+    if not country:
+        return None
+    return COUNTRY_TIMEZONE_MAP.get(country)
+
+
+def _apply_timezone_hint(
+    candidate: Optional[str],
+    hint_timezone: Optional[str],
+    source: str,
+    allow_hint_fallback: bool = False
+) -> Optional[str]:
+    if candidate:
+        if (
+            hint_timezone
+            and hint_timezone in EUROPEAN_IANA_TIMEZONES
+            and candidate not in EUROPEAN_IANA_TIMEZONES
+        ):
+            print(
+                f"⚠️ [{source}] Timezone '{candidate}' conflicts with domain hint '{hint_timezone}'. Using hint."
+            )
+            return hint_timezone
+        return candidate
+    if allow_hint_fallback and hint_timezone:
+        print(
+            f"ℹ️ [{source}] Microsoft APIs returned no usable timezone. Falling back to domain-based timezone '{hint_timezone}'."
+        )
+        return hint_timezone
+    return None
+
 def get_timezone_from_country(country: str) -> str:
     """
     Get timezone string from country name.
@@ -106,27 +181,125 @@ MICROSOFT_TIMEZONE_MAP = {
 }
 
 
-def get_microsoft_calendar_timezone(token: str) -> str:
+def get_microsoft_calendar_timezone(token: str, user_email: Optional[str] = None) -> str:
     """
-    Retrieve timezone from Microsoft Outlook mailbox settings.
+    Retrieve timezone from Microsoft Calendar settings.
+    
+    The Calendar object in Microsoft Graph does NOT have a timeZone property.
+    The timezone can only be obtained from:
+    1. Working hours via getSchedule (returns workingHours.timeZone)
+    2. Calendar events (start.timeZone) - requires Calendars.Read/ReadWrite
+    3. Mailbox settings - requires MailboxSettings.Read permission
     
     Args:
         token: Microsoft access token
+        user_email: SMTP address of the mailbox owner (required for getSchedule)
         
     Returns:
         Timezone string in IANA format (e.g., "Europe/Rome"). Defaults to "Europe/Rome" on error.
     """
-    url = "https://graph.microsoft.com/v1.0/me/mailboxSettings"
     headers = {
         "Authorization": f"Bearer {token}"
     }
+    timezone_hint = _infer_timezone_from_email_domain(user_email)
+
+    # Method 1: Use getSchedule to retrieve working hours timezone
+    # This works even if the user has no calendar events, as long as we know their email address
+    if user_email:
+        try:
+            schedule_url = "https://graph.microsoft.com/v1.0/me/calendar/getSchedule"
+            start_time = datetime.now(timezone.utc)
+            end_time = start_time + timedelta(days=7)
+            payload = {
+                "schedules": [user_email],
+                "startTime": {
+                    "dateTime": start_time.isoformat().replace("+00:00", "Z"),
+                    "timeZone": "UTC"
+                },
+                "endTime": {
+                    "dateTime": end_time.isoformat().replace("+00:00", "Z"),
+                    "timeZone": "UTC"
+                },
+                "availabilityViewInterval": 60
+            }
+            schedule_headers = headers.copy()
+            schedule_headers["Content-Type"] = "application/json"
+            response = httpx.post(schedule_url, headers=schedule_headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            schedule_info = (data.get("value") or [])
+            if schedule_info:
+                working_hours = schedule_info[0].get("workingHours", {})
+                time_zone_info = working_hours.get("timeZone", {})
+                ms_timezone = time_zone_info.get("name")
+                if ms_timezone:
+                    print(f"🌍 Retrieved Microsoft timezone from working hours: {ms_timezone}")
+                    iana_timezone = MICROSOFT_TIMEZONE_MAP.get(ms_timezone, ms_timezone)
+                    if "/" in ms_timezone:
+                        iana_timezone = ms_timezone
+                    elif ms_timezone not in MICROSOFT_TIMEZONE_MAP:
+                        print(f"⚠️ Microsoft timezone '{ms_timezone}' not in mapping, using default Europe/Rome")
+                        iana_timezone = "Europe/Rome"
+                    print(f"   Converted to IANA: {iana_timezone}")
+                    resolved_timezone = _apply_timezone_hint(iana_timezone, timezone_hint, "WorkingHours")
+                    if resolved_timezone:
+                        return resolved_timezone
+                    return iana_timezone
+            else:
+                print("⚠️ getSchedule returned no working hours data")
+        except Exception as e:
+            print(f"⚠️ Could not get timezone from working hours: {e}")
     
+    # Method 2: Get timezone from a recent calendar event
+    # Calendar events always contain the timezone in start.timeZone
+    # This works with Calendars.Read or Calendars.ReadWrite permission
     try:
-        response = httpx.get(url, headers=headers)
+        events_url = "https://graph.microsoft.com/v1.0/me/events"
+        params = {
+            "$top": "1",
+            "$orderby": "createdDateTime desc",
+            "$select": "start"
+        }
+        response = httpx.get(events_url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
+        events = data.get("value", [])
+        
+        if events:
+            event = events[0]
+            # Get timezone from event start
+            event_tz = event.get("start", {}).get("timeZone")
+            if event_tz:
+                print(f"🌍 Retrieved Microsoft timezone from calendar event: {event_tz}")
+                
+                # Convert Microsoft timezone to IANA format
+                iana_timezone = MICROSOFT_TIMEZONE_MAP.get(event_tz, event_tz)
+                
+                # If it's already IANA format (contains /), use it directly
+                if "/" in event_tz:
+                    iana_timezone = event_tz
+                elif event_tz not in MICROSOFT_TIMEZONE_MAP:
+                    print(f"⚠️ Microsoft timezone '{event_tz}' not in mapping, using default Europe/Rome")
+                    iana_timezone = "Europe/Rome"
+                
+                print(f"   Converted to IANA: {iana_timezone}")
+                resolved_timezone = _apply_timezone_hint(iana_timezone, timezone_hint, "CalendarEvent")
+                if resolved_timezone:
+                    return resolved_timezone
+                return iana_timezone
+        else:
+            print(f"⚠️ No calendar events found to infer timezone")
+    except Exception as e:
+        print(f"⚠️ Could not get timezone from events: {e}")
+    
+    # Method 3: Try mailbox settings as fallback (requires MailboxSettings.Read permission)
+    try:
+        mailbox_url = "https://graph.microsoft.com/v1.0/me/mailboxSettings"
+        response = httpx.get(mailbox_url, headers=headers)
         response.raise_for_status()
         data = response.json()
         ms_timezone = data.get("timeZone", "W. Europe Standard Time")
-        print(f"🌍 Retrieved Microsoft timezone: {ms_timezone}")
+        print(f"🌍 Retrieved Microsoft timezone from mailboxSettings: {ms_timezone}")
         
         # Convert Microsoft timezone to IANA format
         iana_timezone = MICROSOFT_TIMEZONE_MAP.get(ms_timezone, "Europe/Rome")
@@ -134,11 +307,19 @@ def get_microsoft_calendar_timezone(token: str) -> str:
             print(f"⚠️ Microsoft timezone '{ms_timezone}' not in mapping, using default Europe/Rome")
         
         print(f"   Converted to IANA: {iana_timezone}")
+        resolved_timezone = _apply_timezone_hint(iana_timezone, timezone_hint, "MailboxSettings")
+        if resolved_timezone:
+            return resolved_timezone
         return iana_timezone
     except Exception as e:
-        print(f"❌ Error retrieving Microsoft timezone: {e}")
-        print(f"   Using default: Europe/Rome")
-        return "Europe/Rome"
+        print(f"⚠️ Could not get mailboxSettings (likely missing MailboxSettings.Read permission): {e}")
+    
+    # Fallback to domain-based hint or default
+    resolved_timezone = _apply_timezone_hint(None, timezone_hint, "DomainHint", allow_hint_fallback=True)
+    if resolved_timezone:
+        return resolved_timezone
+    print(f"⚠️ Could not determine Microsoft timezone, using default: Europe/Rome")
+    return "Europe/Rome"
 
 encryption_key_token = os.getenv("ENCRYPTION_KEY_TOKEN")
 encryption_key_pass = os.getenv("ENCRYPTION_KEY_PASS")

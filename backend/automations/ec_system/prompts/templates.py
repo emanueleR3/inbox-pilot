@@ -838,7 +838,7 @@ READER_APPOINTMENT_PROMPT_ITA = """Sei un assistente esperto nell'analisi di ema
 
 Analizza attentamente la seguente email con richiesta di appuntamento ed estrai tutte le informazioni necessarie.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 CORPO EMAIL:
 {filtered_body}
@@ -890,7 +890,7 @@ READER_APPOINTMENT_PROMPT_ENG = """You are an expert assistant in analyzing emai
 
 Carefully analyze the following appointment request email and extract all necessary information.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 EMAIL BODY:
 {filtered_body}
@@ -943,7 +943,7 @@ SCHEDULER_PROMPT_ITA = """Sei un assistente esperto nella gestione di appuntamen
 
 Analizza la conversazione e determina l'azione appropriata per gestire la richiesta di appuntamento.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 RIASSUNTO MAIL CORRENTE:
 {mail_summary}
@@ -981,7 +981,7 @@ SCHEDULER_PROMPT_ENG = """You are an expert assistant in appointment management.
 
 Analyze the conversation and determine the appropriate action to handle the appointment request.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 CURRENT MAIL SUMMARY:
 {mail_summary}
@@ -1020,7 +1020,7 @@ READER_APPOINTMENT_CHANGE_PROMPT_ITA = """Sei un assistente esperto nell'analisi
 
 Analizza attentamente la seguente email di richiesta modifica appuntamento ed estrai tutte le informazioni necessarie.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 CORPO EMAIL:
 {filtered_body}
@@ -1081,7 +1081,7 @@ READER_APPOINTMENT_CHANGE_PROMPT_ENG = """You are an expert assistant in analyzi
 
 Carefully analyze the following appointment change request email and extract all necessary information.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 EMAIL BODY:
 {filtered_body}
@@ -1142,7 +1142,7 @@ RESCHEDULER_PROMPT_ITA = """Sei un assistente esperto nella gestione di modifich
 
 Analizza la conversazione e determina l'azione appropriata per gestire la richiesta di modifica appuntamento.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 RIASSUNTO MAIL CORRENTE:
 {mail_summary}
@@ -1182,7 +1182,7 @@ RESCHEDULER_PROMPT_ENG = """You are an expert assistant in managing appointment 
 
 Analyze the conversation and determine the appropriate action to handle the appointment change request.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 CURRENT MAIL SUMMARY:
 {mail_summary}
@@ -1223,7 +1223,7 @@ READER_CANCELLATION_PROMPT_ITA = """Sei un assistente esperto nell'analisi di em
 
 Analizza attentamente la seguente email di richiesta cancellazione appuntamento ed estrai tutte le informazioni necessarie.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 CORPO EMAIL:
 {filtered_body}
@@ -1260,7 +1260,7 @@ READER_CANCELLATION_PROMPT_ENG = """You are an expert assistant in analyzing ema
 
 Carefully analyze the following appointment cancellation request email and extract all necessary information.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 EMAIL BODY:
 {filtered_body}
@@ -1640,6 +1640,9 @@ Riassunto email corrente: {mail_summary}
 INFORMAZIONI AZIENDALI RILEVANTI:
 {chunked_company_info}
 
+CONTESTO APPUNTAMENTO (se applicabile):
+{appointment_context}
+
 STORICO MODIFICHE PRECEDENTI:
 {edit_history_text}
 
@@ -1668,6 +1671,13 @@ ISTRUZIONI PER LA REVISIONE:
    - Se presente uno storico di modifiche precedenti, verifica che le correzioni siano state applicate correttamente
    - Non ripetere le stesse correzioni già fatte nelle iterazioni precedenti
    - Identifica nuovi problemi non evidenziati prima
+
+5. IMPORTANTE - GESTIONE SLOT APPUNTAMENTO:
+   - Se nel "CONTESTO APPUNTAMENTO" sono presenti degli slot proposti, questi sono stati calcolati dal sistema di scheduling in base alla disponibilità reale del calendario
+   - NON segnalare come errore se gli slot proposti nell'email differiscono dagli orari di apertura generali nelle informazioni aziendali
+   - Gli slot proposti sono disponibilità specifiche e corrette, NON devono essere modificati per allinearli agli orari di apertura generali
+   - Verifica solo che gli slot scritti nell'email corrispondano a quelli nel "CONTESTO APPUNTAMENTO"
+   - Segnala errore SOLO se l'utente ha chiesto esplicitamente gli orari di apertura E l'email non li fornisce
 
 OUTPUT RICHIESTO:
 
@@ -1707,6 +1717,9 @@ Current email summary: {mail_summary}
 RELEVANT COMPANY INFORMATION:
 {chunked_company_info}
 
+APPOINTMENT CONTEXT (if applicable):
+{appointment_context}
+
 PREVIOUS EDIT HISTORY:
 {edit_history_text}
 
@@ -1735,6 +1748,13 @@ REVIEW INSTRUCTIONS:
    - If previous edit history exists, verify that corrections were applied correctly
    - Do not repeat the same corrections already made in previous iterations
    - Identify new problems not highlighted before
+
+5. IMPORTANT - APPOINTMENT SLOTS HANDLING:
+   - If "APPOINTMENT CONTEXT" contains proposed slots, these were calculated by the scheduling system based on actual calendar availability
+   - DO NOT flag as error if proposed slots in the email differ from general opening hours in company information
+   - Proposed slots are specific and correct availabilities, they MUST NOT be modified to align with general opening hours
+   - Only verify that slots written in the email match those in "APPOINTMENT CONTEXT"
+   - Flag as error ONLY if the user explicitly asked for opening hours AND the email doesn't provide them
 
 REQUIRED OUTPUT:
 

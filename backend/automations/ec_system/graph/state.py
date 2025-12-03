@@ -20,6 +20,7 @@ class EmailState(TypedDict):
     summarizer_only: Optional[bool]  # Flag to run only summarizer workflow
     human_response: Optional[bool]  # Flag indicating if human response is needed
     original_thread_id: Optional[str]  # Original thread ID from email provider (e.g., Gmail thread ID)
+    microsoft_message_id: Optional[str]  # Microsoft Graph internal message ID for replies
     high_priority_email: Optional[bool]  # Flag indicating if email is high priority
     # NEW: Separated workflow fields
     mail_summary: Optional[str]  # Summary of current email
@@ -80,6 +81,7 @@ def create_initial_state() -> EmailState:
         "summarizer_only": False,
         "human_response": False,
         "original_thread_id": None,
+        "microsoft_message_id": None,
         "mail_summary": None,
         "extended_summary": None,
         "confidence_score": None,
