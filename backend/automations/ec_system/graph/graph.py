@@ -728,6 +728,7 @@ def run_workflow(email_data: dict = None):
                 "automation_executed": False,
                 "summarizer_only": email_data.get("summarizer_only", False),
                 "original_thread_id": email_data.get("original_thread_id", None),
+                "microsoft_message_id": email_data.get("microsoft_message_id", None),
                 "review_iteration": 0,
                 "edit_history": []
             }

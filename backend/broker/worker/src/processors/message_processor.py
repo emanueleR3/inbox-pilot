@@ -322,6 +322,7 @@ class EmailProcessor:
         automation_payload = {
             "thread_id": thread_id,
             "message_id": email_data.get("message_id"),
+            "microsoft_message_id": email_data.get("microsoft_message_id"),  # Microsoft Graph internal ID for replies
             "reply_to_id": email_data.get("reply_to_id", "no"),
             "box_email": thread_data.get("box_email") or email_data.get("user_email"),
             "from": email_data.get("from"),

@@ -172,6 +172,7 @@ def process_automation_result(workflow_result: dict):
     summary_attachments = workflow_result.get("summary_attachments", None)
     now_tz = datetime.now(timezone.utc).isoformat()
     original_thread_id = workflow_result.get("original_thread_id", None)
+    microsoft_message_id = workflow_result.get("microsoft_message_id", None)  # Microsoft Graph internal ID for replies
 
     # Get timestamp in user's timezone for notification formatting
     notification_timestamp = _get_timestamp_in_user_timezone(box_email)
@@ -846,7 +847,8 @@ def process_automation_result(workflow_result: dict):
                     elif provider == "microsoft":
                         endpoint = f"{senders_url}/send-email/send-microsoft"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
-                        payload["message_id"] = message_id
+                        # Use microsoft_message_id (internal Graph ID) for replies, not the RFC message_id
+                        payload["message_id"] = microsoft_message_id
                     elif provider == "imap":
                         endpoint = f"{senders_url}/send-email/send-smtp"
                         payload["smtp_server"] = email_service_data.get("smtp_server")
