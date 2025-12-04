@@ -1343,12 +1343,14 @@ def scheduler_node(state):
         state["appointment_overlap"] = scheduler_response.overlap
         state["appointment_event_code"] = scheduler_response.event_code
         state["appointment_proposed_slots"] = scheduler_response.proposed_slots
+        state["appointment_favorite_day_unavailable"] = scheduler_response.favorite_day_unavailable
         
         print(f"✅ [SCHEDULER] Scheduling completed successfully")
         print(f"   ✓ Scheduled: {scheduler_response.scheduled}")
         print(f"   ⚠️ Overlap: {scheduler_response.overlap}")
         print(f"   🔢 Event code: {scheduler_response.event_code}")
         print(f"   📆 Proposed slots: {scheduler_response.proposed_slots}")
+        print(f"   📅 Favorite day unavailable: {scheduler_response.favorite_day_unavailable}")
         
         return state
         
@@ -1359,6 +1361,7 @@ def scheduler_node(state):
         state["appointment_overlap"] = False
         state["appointment_event_code"] = None
         state["appointment_proposed_slots"] = None
+        state["appointment_favorite_day_unavailable"] = False
         return state
 
 
@@ -1469,12 +1472,14 @@ def rescheduler_node(state):
         state["appointment_overlap"] = rescheduler_response.overlap
         state["appointment_event_code"] = rescheduler_response.event_code
         state["appointment_proposed_slots"] = rescheduler_response.proposed_slots
+        state["appointment_favorite_day_unavailable"] = rescheduler_response.favorite_day_unavailable
         
         print(f"✅ [RESCHEDULER] Rescheduling completed successfully")
         print(f"   ✓ Scheduled: {rescheduler_response.scheduled}")
         print(f"   ⚠️ Overlap: {rescheduler_response.overlap}")
         print(f"   🔢 Event code: {rescheduler_response.event_code}")
         print(f"   📆 Proposed slots: {rescheduler_response.proposed_slots}")
+        print(f"   📅 Favorite day unavailable: {rescheduler_response.favorite_day_unavailable}")
         
         return state
         
@@ -1694,10 +1699,12 @@ def writer_node(state):
             scheduled = state.get("appointment_scheduled", False)
             event_code = state.get("appointment_event_code")
             proposed_slots = state.get("appointment_proposed_slots")
+            favorite_day_unavailable = state.get("appointment_favorite_day_unavailable", False)
             
             print(f"   📅 Scheduled: {scheduled}")
             print(f"   🔢 Event code: {event_code}")
             print(f"   📆 Proposed slots: {proposed_slots}")
+            print(f"   ⚠️ Favorite day unavailable: {favorite_day_unavailable}")
             
             # Call LLM to write email
             write_response = llm_client.write_email(
@@ -1710,7 +1717,8 @@ def writer_node(state):
                 language=language,
                 scheduled=scheduled,
                 event_code=event_code,
-                proposed_slots=proposed_slots
+                proposed_slots=proposed_slots,
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         elif subcategory == "REQUEST_APPOINTMENT_CHANGE":
@@ -1720,12 +1728,14 @@ def writer_node(state):
             scheduled = state.get("appointment_scheduled", False)
             event_code = state.get("appointment_event_code")
             proposed_slots = state.get("appointment_proposed_slots")
+            favorite_day_unavailable = state.get("appointment_favorite_day_unavailable", False)
             
             print(f"   🔑 Change event code: {change_event_code}")
             print(f"   📊 Status: {status}")
             print(f"   📅 Scheduled: {scheduled}")
             print(f"   🔢 Event code: {event_code}")
             print(f"   📆 Proposed slots: {proposed_slots}")
+            print(f"   ⚠️ Favorite day unavailable: {favorite_day_unavailable}")
             
             # Call LLM to write email
             write_response = llm_client.write_email(
@@ -1740,7 +1750,8 @@ def writer_node(state):
                 status=status,
                 scheduled=scheduled,
                 event_code=event_code,
-                proposed_slots=proposed_slots
+                proposed_slots=proposed_slots,
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         elif subcategory == "CANCEL_APPOINTMENT":
@@ -1769,10 +1780,12 @@ def writer_node(state):
             scheduled = state.get("appointment_scheduled")
             event_code = state.get("appointment_event_code")
             proposed_slots = state.get("appointment_proposed_slots")
+            favorite_day_unavailable = state.get("appointment_favorite_day_unavailable", False)
             
             print(f"   📅 Scheduled: {scheduled}")
             print(f"   🔢 Event code: {event_code}")
             print(f"   📆 Proposed slots: {proposed_slots}")
+            print(f"   ⚠️ Favorite day unavailable: {favorite_day_unavailable}")
             
             # If already_scheduled=False, it went through scheduler and needs appointment-specific response
             # If already_scheduled=True, use generic prompt (scheduled will be None)
@@ -1786,7 +1799,8 @@ def writer_node(state):
                 language=language,
                 scheduled=scheduled,
                 event_code=event_code,
-                proposed_slots=proposed_slots
+                proposed_slots=proposed_slots,
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         else:

@@ -1064,17 +1064,20 @@ class LLMClient:
             overlap = False
             event_code = None
             proposed_slots = None
+            favorite_day_unavailable = False
             
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 for tool_call in response.tool_calls:
                     if tool_call['name'] == 'propose_new_slots':
                         # Call the propose_new_slots tool function
                         args = tool_call['args']
-                        proposed_slots = self._propose_new_slots_tool(
+                        slots_result = self._propose_new_slots_tool(
                             service_id=service_id,
                             favorite_day=args.get('favorite_day'),
                             not_available_dates=args.get('not_available_dates', [])
                         )
+                        proposed_slots = slots_result.get('slots', [])
+                        favorite_day_unavailable = slots_result.get('favorite_day_unavailable', False)
                     elif tool_call['name'] == 'book_appointment':
                         # Call the book_appointment tool function
                         args = tool_call['args']
@@ -1094,13 +1097,14 @@ class LLMClient:
                         overlap = booking_result.get('overlap', False)
                         event_code = booking_result.get('event_code')
             
-            print(f"📅 [LLM] Scheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}")
+            print(f"📅 [LLM] Scheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}, favorite_day_unavailable={favorite_day_unavailable}")
             
             return SchedulerResponse(
                 scheduled=scheduled,
                 overlap=overlap,
                 event_code=event_code,
-                proposed_slots=proposed_slots
+                proposed_slots=proposed_slots,
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         except Exception as e:
@@ -1110,7 +1114,8 @@ class LLMClient:
                 scheduled=False,
                 overlap=False,
                 event_code=None,
-                proposed_slots=None
+                proposed_slots=None,
+                favorite_day_unavailable=False
             )
 
     def read_appointment_change_request(
@@ -1433,16 +1438,21 @@ class LLMClient:
             overlap = False
             proposed_slots = None
             
+            favorite_day_unavailable = False
+            
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 for tool_call in response.tool_calls:
                     if tool_call['name'] == 'propose_new_slots':
                         # Call the propose_new_slots tool function
                         args = tool_call['args']
-                        proposed_slots = self._propose_new_slots_tool(
+                        slots_result = self._propose_new_slots_tool(
                             service_id=service_id,
                             favorite_day=args.get('favorite_day'),
                             not_available_dates=args.get('not_available_dates', [])
                         )
+                        # Extract slots and favorite_day_unavailable from dict return
+                        proposed_slots = slots_result.get('slots', [])
+                        favorite_day_unavailable = slots_result.get('favorite_day_unavailable', False)
                     elif tool_call['name'] == 'reschedule_appointment':
                         # Call the reschedule_appointment tool function
                         args = tool_call['args']
@@ -1459,13 +1469,14 @@ class LLMClient:
                         overlap = reschedule_appointment['overlap']
                         proposed_slots = reschedule_appointment['proposed_slots']
             
-            print(f"📅 [LLM] Rescheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}")
+            print(f"📅 [LLM] Rescheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}, favorite_day_unavailable={favorite_day_unavailable}")
             
             return SchedulerResponse(
                 scheduled=scheduled,
                 overlap=overlap,
                 event_code=event_code,
-                proposed_slots=proposed_slots
+                proposed_slots=proposed_slots,
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         except Exception as e:
@@ -1484,7 +1495,15 @@ class LLMClient:
         service_id: str,
         favorite_day: Optional[str] = None, 
         not_available_dates: Optional[list] = None
-    ) -> list:
+    ) -> dict:
+        """
+        Tool function to propose available appointment slots.
+        
+        Returns:
+            Dictionary with:
+                - slots: List of available time slots in ISO format
+                - favorite_day_unavailable: True if favorite_day was specified but had no slots
+        """
         print(f"\n🛠️ [TOOL] propose_new_slots called: favorite_day={favorite_day}, not_available={not_available_dates}")
         
         from db_client import get_calendar_service_data
@@ -1492,7 +1511,7 @@ class LLMClient:
         # Get calendar service data from DB
         service_data = get_calendar_service_data(service_id)
         if not service_data:
-            return []
+            return {"slots": [], "favorite_day_unavailable": False}
         
         calendar_provider = service_data["calendar_provider"]
         token = service_data["access_token"]
@@ -1509,10 +1528,14 @@ class LLMClient:
             print(f"⚠️ Unknown calendar provider: {calendar_provider}, using default Europe/Rome")
             user_timezone = "Europe/Rome"
         
-        # Time range
+        # Time range - default is next 7 days
         now = datetime.now()
-        start_time = now
-        end_time = now + timedelta(days=7)
+        weekly_start_time = now
+        weekly_end_time = now + timedelta(days=7)
+        
+        # Track if we're searching for a specific favorite_day
+        searching_favorite_day = False
+        favorite_day_unavailable = False
         
         if favorite_day:
             try:
@@ -1521,27 +1544,35 @@ class LLMClient:
                 end_time = fav_date.replace(hour=23, minute=59, second=59, microsecond=0)
                 if start_time < now:
                     start_time = now
+                searching_favorite_day = True
             except ValueError:
                 print(f"❌ Invalid favourite_day format: {favorite_day}")
-        
-        # Busy slots
-        if calendar_provider == "google":
-            busy_slots = utils.get_google_busy_slots(token, start_time, end_time)
-        elif calendar_provider == "microsoft":
-            busy_slots = utils.get_microsoft_busy_slots(token, start_time, end_time)
+                start_time = weekly_start_time
+                end_time = weekly_end_time
         else:
-            print(f"❌ Unknown calendar provider: {calendar_provider}")
-            return []
+            start_time = weekly_start_time
+            end_time = weekly_end_time
+        
+        # Helper function to get busy slots
+        def get_busy_slots(s_time, e_time):
+            if calendar_provider == "google":
+                return utils.get_google_busy_slots(token, s_time, e_time)
+            elif calendar_provider == "microsoft":
+                return utils.get_microsoft_busy_slots(token, s_time, e_time)
+            else:
+                print(f"❌ Unknown calendar provider: {calendar_provider}")
+                return []
+        
+        # Get busy slots for the selected time range
+        busy_slots = get_busy_slots(start_time, end_time)
         
         # DEBUG FULL STATE
         print("\n====== DEBUG BEFORE calculate_free_slots() ======")
         print(f"start_time: {start_time}")
-        # Debug: print first 10 busy slots
         print(f"busy_slots: {len(busy_slots)}")
         if len(busy_slots) > 0:
             print(f"\n🗓️ Showing first {min(10, len(busy_slots))} busy slots:")
             for i, busy_slot in enumerate(busy_slots[:10]):
-                # Handle both 2-tuple (old format) and 3-tuple (new format with event_id)
                 if len(busy_slot) == 3:
                     bs, be, b_event_id = busy_slot
                 else:
@@ -1562,8 +1593,29 @@ class LLMClient:
             user_timezone=user_timezone
         )
         
-        print(f"✅ Found {len(free_slots)} free slots.")
-        return free_slots[:3]
+        print(f"✅ Found {len(free_slots)} free slots for {'favorite day ' + favorite_day if searching_favorite_day else 'next 7 days'}.")
+        
+        # If favorite_day was specified but no slots found, fallback to weekly slots
+        if searching_favorite_day and len(free_slots) == 0:
+            print(f"⚠️ No slots available for favorite day {favorite_day}, falling back to weekly slots...")
+            favorite_day_unavailable = True
+            
+            # Get busy slots for the full week
+            busy_slots = get_busy_slots(weekly_start_time, weekly_end_time)
+            
+            # Calculate free slots for the full week
+            free_slots = utils.calculate_free_slots(
+                weekly_start_time,
+                weekly_end_time,
+                busy_slots,
+                business_hours,
+                appointment_duration,
+                not_available_dates,
+                user_timezone=user_timezone
+            )
+            print(f"✅ Found {len(free_slots)} free slots for next 7 days (fallback).")
+        
+        return {"slots": free_slots, "favorite_day_unavailable": favorite_day_unavailable}
 
     
     def _book_appointment_tool(
@@ -1953,6 +2005,7 @@ class LLMClient:
         scheduled: bool = None,
         event_code: str = None,
         proposed_slots: list = None,
+        favorite_day_unavailable: bool = False,
         # Request appointment change specific params
         change_event_code: str = None,
         status: str = None,
@@ -1973,6 +2026,7 @@ class LLMClient:
             scheduled: Whether appointment was scheduled (for REQUEST_APPOINTMENT/CHANGE)
             event_code: Event code if appointment was scheduled
             proposed_slots: Proposed slots if appointment couldn't be scheduled
+            favorite_day_unavailable: True if the requested favorite day had no slots available
             change_event_code: Event code from change request
             status: Status of the operation
             cancellation_event_code: Event code from cancellation request
@@ -2016,6 +2070,7 @@ class LLMClient:
                     scheduled=scheduled,
                     event_code=event_code or "N/A",
                     proposed_slots=proposed_slots or [],
+                    favorite_day_unavailable=favorite_day_unavailable,
                     guidelines_section=guidelines_section
                 )
                 
@@ -2035,6 +2090,7 @@ class LLMClient:
                     scheduled=scheduled,
                     event_code=event_code or "N/A",
                     proposed_slots=proposed_slots or [],
+                    favorite_day_unavailable=favorite_day_unavailable,
                     guidelines_section=guidelines_section
                 )
                 
@@ -2071,6 +2127,7 @@ class LLMClient:
                         scheduled=scheduled,
                         event_code=event_code or "N/A",
                         proposed_slots=proposed_slots or [],
+                        favorite_day_unavailable=favorite_day_unavailable,
                         guidelines_section=guidelines_section
                     )
                 else:

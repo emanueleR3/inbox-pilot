@@ -219,6 +219,10 @@ class SchedulerResponse(BaseModel):
         None,
         description="Array di date proposte in formato YYYY-MM-DD, None se non proposte"
     )
+    favorite_day_unavailable: bool = Field(
+        False,
+        description="True se il giorno preferito non aveva slot disponibili e sono stati proposti gli slot settimanali"
+    )
 
 
 class ReaderAppointmentChangeResponse(BaseModel):

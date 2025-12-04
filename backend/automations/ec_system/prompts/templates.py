@@ -1508,6 +1508,7 @@ STATO SCHEDULAZIONE APPUNTAMENTO:
 - APPUNTAMENTO SCHEDULATO: {scheduled}
 - CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
+- GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
 
 {guidelines_section}
 
@@ -1518,7 +1519,9 @@ ISTRUZIONI CRITICHE:
    - Includi il codice evento per riferimento futuro
    - Specifica che per modifiche o cancellazioni è necessario fornire il codice evento
 3. SE l'appuntamento NON è stato schedulato (scheduled=False) ma ci sono slot proposti:
-   - Proponi cortesemente le date disponibili
+   - SE GIORNO PREFERITO NON DISPONIBILE=True: Spiega che purtroppo non ci sono slot disponibili nel giorno richiesto, quindi proponi gli slot disponibili nei prossimi 7 giorni
+   - SE GIORNO PREFERITO NON DISPONIBILE=False: Proponi cortesemente le date disponibili
+   - Devi raggruppare gli slot per giorno (gg/mm) e scrivere in seguito l'elenco degli orari (hh:mm)
    - Chiedi al cliente di indicare la preferenza
 4. SE ci sono altre richieste nell'email oltre all'appuntamento, rispondi anche a quelle
 5. Usa un tono professionale ma cordiale
@@ -1540,6 +1543,7 @@ APPOINTMENT SCHEDULING STATUS:
 - APPOINTMENT SCHEDULED: {scheduled}
 - EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
+- FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
 
 {guidelines_section}
 
@@ -1550,7 +1554,9 @@ CRITICAL INSTRUCTIONS:
    - Include the event code for future reference
    - Specify that for changes or cancellations the event code is required
 3. IF the appointment was NOT scheduled (scheduled=False) but there are proposed slots:
-   - Kindly propose the available dates
+   - IF FAVORITE DAY UNAVAILABLE=True: Explain that unfortunately there are no available slots on the requested day, so you're proposing available slots for the next 7 days
+   - IF FAVORITE DAY UNAVAILABLE=False: Kindly propose the available dates
+   - You must group the slots by day (dd/mm) and then list the times (hh:mm)
    - Ask the client to indicate their preference
 4. IF there are other requests in the email besides the appointment, respond to those as well
 5. Use a professional but friendly tone
@@ -1575,6 +1581,7 @@ STATO MODIFICA APPUNTAMENTO:
 - APPUNTAMENTO RISCHEDULATO: {scheduled}
 - NUOVO CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
+- GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
 
 {guidelines_section}
 
@@ -1590,9 +1597,12 @@ ISTRUZIONI CRITICHE:
 3. SE l'appuntamento NON è stato rischedulato ma ci sono slot proposti:
    - Proponi cortesemente le nuove date disponibili
    - Chiedi al cliente di indicare la preferenza
-4. SE ci sono altre richieste nell'email, rispondi anche a quelle
-5. Basa la risposta sulle informazioni aziendali fornite
-6. Usa un tono professionale ma cordiale
+4. SE il giorno preferito non era disponibile (favorite_day_unavailable=True):
+   - Menziona che il giorno richiesto non aveva disponibilità
+   - Proponi le alternative disponibili nei prossimi 7 giorni
+5. SE ci sono altre richieste nell'email, rispondi anche a quelle
+6. Basa la risposta sulle informazioni aziendali fornite
+7. Usa un tono professionale ma cordiale
 
 Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
 """
@@ -1612,6 +1622,7 @@ APPOINTMENT CHANGE STATUS:
 - APPOINTMENT RESCHEDULED: {scheduled}
 - NEW EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
+- FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
 
 {guidelines_section}
 
@@ -1627,9 +1638,12 @@ CRITICAL INSTRUCTIONS:
 3. IF the appointment was NOT rescheduled but there are proposed slots:
    - Kindly propose the new available dates
    - Ask the client to indicate their preference
-4. IF there are other requests in the email, respond to those as well
-5. Base the response on the provided company information
-6. Use a professional but friendly tone
+4. IF the favorite day was unavailable (favorite_day_unavailable=True):
+   - Mention that the requested day had no availability
+   - Propose the available alternatives in the next 7 days
+5. IF there are other requests in the email, respond to those as well
+6. Base the response on the provided company information
+7. Use a professional but friendly tone
 
 Write ONLY the email response body, without subject or signature.
 """
@@ -1709,6 +1723,7 @@ STATO CONFERMA APPUNTAMENTO:
 - APPUNTAMENTO SCHEDULATO: {scheduled}
 - CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
+- GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
 
 {guidelines_section}
 
@@ -1723,9 +1738,12 @@ ISTRUZIONI CRITICHE:
    - Spiega cortesemente che gli slot inizialmente proposti non sono più disponibili
    - Proponi le nuove date disponibili
    - Chiedi al cliente di indicare la preferenza
-4. SE ci sono altre richieste o domande nell'email oltre alla conferma, rispondi anche a quelle
-5. Usa un tono professionale ma cordiale
-6. Non inventare informazioni non presenti nel contesto
+4. SE il giorno preferito non era disponibile (favorite_day_unavailable=True):
+   - Menziona che il giorno richiesto non aveva disponibilità
+   - Proponi le alternative disponibili nei prossimi 7 giorni
+5. SE ci sono altre richieste o domande nell'email oltre alla conferma, rispondi anche a quelle
+6. Usa un tono professionale ma cordiale
+7. Non inventare informazioni non presenti nel contesto
 
 Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
 """
@@ -1743,6 +1761,7 @@ APPOINTMENT CONFIRMATION STATUS:
 - APPOINTMENT SCHEDULED: {scheduled}
 - EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
+- FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
 
 {guidelines_section}
 
@@ -1757,9 +1776,12 @@ CRITICAL INSTRUCTIONS:
    - Politely explain that the initially proposed slots are no longer available
    - Propose the new available dates
    - Ask the client to indicate their preference
-4. IF there are other requests or questions in the email besides the confirmation, respond to those as well
-5. Use a professional but friendly tone
-6. Do not invent information not present in the context
+4. IF the favorite day was unavailable (favorite_day_unavailable=True):
+   - Mention that the requested day had no availability
+   - Propose the available alternatives in the next 7 days
+5. IF there are other requests or questions in the email besides the confirmation, respond to those as well
+6. Use a professional but friendly tone
+7. Do not invent information not present in the context
 
 Write ONLY the email response body, without subject or signature.
 """

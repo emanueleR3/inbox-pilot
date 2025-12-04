@@ -46,6 +46,7 @@ class EmailState(TypedDict):
     appointment_overlap: Optional[bool]  # True if there's overlap with other events
     appointment_event_code: Optional[str]  # Event code if booked
     appointment_proposed_slots: Optional[List[str]]  # Proposed dates if booking not possible
+    appointment_favorite_day_unavailable: Optional[bool]  # True if favorite day had no slots and weekly slots were returned instead
     # Confirm appointment-specific fields (for CONFIRM_APPOINTMENT subcategory)
     already_scheduled: Optional[bool]  # True if appointment was already scheduled (final confirmation), False if needs scheduling
     # Appointment change fields (for REQUEST_APPOINTMENT_CHANGE subcategory)
@@ -106,6 +107,7 @@ def create_initial_state() -> EmailState:
         "appointment_overlap": None,
         "appointment_event_code": None,
         "appointment_proposed_slots": None,
+        "appointment_favorite_day_unavailable": None,
         "already_scheduled": None,
         "change_event_code": None,
         "change_new_title": None,
