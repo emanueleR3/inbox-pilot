@@ -905,6 +905,7 @@ def process_automation_result(workflow_result: dict):
                         # Use microsoft_message_id (internal Graph ID) for replies, not the RFC message_id
                         payload["message_id"] = microsoft_message_id
                     elif provider == "imap":
+                        print("[DEBUG-AUTOMATION] imap")
                         endpoint = f"{senders_url}/send-email/send-smtp"
                         payload["smtp_server"] = email_service_data.get("smtp_server")
                         payload["smtp_port"] = email_service_data.get("smtp_port")

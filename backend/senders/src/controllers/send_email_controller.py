@@ -70,23 +70,32 @@ class SendEmailController:
             smtp_email = req.get("smtp_email")
             password = req.get("password")
 
-            if not email:   
+            if not email:
+                print("[DEBUG-SENDER-CONTROLLER] Email is required")   
                 raise ValueError("Email is required")
             if not subject:
+                print("[DEBUG-SENDER-CONTROLLER] Subject is required")
                 raise ValueError("Subject is required")
             if not body:
+                print("[DEBUG-SENDER-CONTROLLER] Body is required")
                 raise ValueError("Body is required")
             if not smtp_port:
+                print("[DEBUG-SENDER-CONTROLLER] Smtp port is required")
                 raise ValueError("Smtp port is required")
             if not smtp_server:
+                print("[DEBUG-SENDER-CONTROLLER] Smtp server is required")
                 raise ValueError("Smtp server is required")
             if not smtp_email:
+                print("[DEBUG-SENDER-CONTROLLER] Smtp email is required")
                 raise ValueError("Smtp email is required")
             if not password:
+                print("[DEBUG-SENDER-CONTROLLER] Smtp password is required")
                 raise ValueError("Smtp password is required")
 
             reply_to_id = req.get("reply_to_id")
             message_id = req.get("message_id")
+
+            print("[DEBUG-SENDER-CONTROLLER]"+str(req))
 
             return self.send_email_service.send_email_smtp(
                 email, subject, body, smtp_port, smtp_server, smtp_email, password, reply_to_id, message_id
