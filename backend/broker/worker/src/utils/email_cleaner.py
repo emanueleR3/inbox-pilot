@@ -315,7 +315,7 @@ class EmailCleaner:
             
             for pattern in forward_subject_patterns:
                 if subject.startswith(pattern):
-                    logger.debug(f"Forward detected via subject pattern: {pattern}")
+                    print(f"[DEBUG] Forward detected via subject pattern: {pattern}")
                     return "forward"
             
             # 2. Check body for forward indicators
@@ -324,10 +324,10 @@ class EmailCleaner:
                 "nachricht weiterleiten", "message transféré",
                 "-----original message-----", "-----messaggio originale-----",
                 "-----mensaje original-----", "-----ursprüngliche nachricht-----",
-                "-----message d'origine-----",
-                "from:", "sent:", "to:", "subject:",  # Email header block
-                "da:", "inviato:", "a:", "oggetto:",  # Italian headers
-                "de:", "enviado:", "para:", "asunto:",  # Spanish headers
+                "-----message d'origine-----"
+                #"from:", "sent:", "to:", "subject:",  # Email header block
+                #"da:", "inviato:", "a:", "oggetto:",  # Italian headers
+                #"de:", "enviado:", "para:", "asunto:",  # Spanish headers
             ]
             
             forward_indicators = 0
@@ -335,7 +335,7 @@ class EmailCleaner:
                 if pattern in body_lower:
                     forward_indicators += 1
                     if forward_indicators >= 2:  # Multiple indicators = likely forward
-                        logger.debug(f"Forward detected via body patterns")
+                        print(f"[DEBUG] Forward detected via body patterns: {pattern}")
                         return "forward"
             
             # 3. Check for reply indicators (after ruling out forward)
