@@ -735,15 +735,20 @@ def create_microsoft_calendar_event(
     if end_time.tzinfo is None:
         end_time = end_time.replace(tzinfo=timezone.utc)
     
-    # Microsoft expects ISO8601 format with timezone
+    # Convert to UTC for Microsoft API
+    start_time_utc = start_time.astimezone(timezone.utc)
+    end_time_utc = end_time.astimezone(timezone.utc)
+    
+    # Microsoft expects ISO8601 format with timezone - use UTC
+    # Format without timezone suffix since we specify timeZone separately
     body = {
         "subject": title,
         "start": {
-            "dateTime": start_time.isoformat(),
+            "dateTime": start_time_utc.strftime("%Y-%m-%dT%H:%M:%S"),
             "timeZone": "UTC"
         },
         "end": {
-            "dateTime": end_time.isoformat(),
+            "dateTime": end_time_utc.strftime("%Y-%m-%dT%H:%M:%S"),
             "timeZone": "UTC"
         }
     }
@@ -842,8 +847,15 @@ def update_microsoft_calendar_event(
     if title:
         body["subject"] = title
     if start_time and end_time:
-        body["start"] = {"dateTime": start_time.isoformat(), "timeZone": "UTC"}
-        body["end"] = {"dateTime": end_time.isoformat(), "timeZone": "UTC"}
+        # Ensure timezone info and convert to UTC
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=timezone.utc)
+        start_time_utc = start_time.astimezone(timezone.utc)
+        end_time_utc = end_time.astimezone(timezone.utc)
+        body["start"] = {"dateTime": start_time_utc.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "UTC"}
+        body["end"] = {"dateTime": end_time_utc.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "UTC"}
     if description:
         body["body"] = {"contentType": "text", "content": description}
     if attendees:

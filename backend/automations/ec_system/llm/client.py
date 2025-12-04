@@ -85,6 +85,8 @@ from ..prompts.templates import (
     WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ENG,
     WRITER_CANCEL_APPOINTMENT_PROMPT_ITA,
     WRITER_CANCEL_APPOINTMENT_PROMPT_ENG,
+    WRITER_CONFIRM_APPOINTMENT_PROMPT_ITA,
+    WRITER_CONFIRM_APPOINTMENT_PROMPT_ENG,
     WRITER_GENERIC_PROMPT_ITA,
     WRITER_GENERIC_PROMPT_ENG,
     GUIDELINES_SECTION_ITA,
@@ -1683,6 +1685,7 @@ class LLMClient:
                 description=additional_notes
             )
         elif calendar_provider == "microsoft":
+            print(f"Creating event in Microsoft calendar with dates start_time={start_dt}, end_time={end_dt}")
             provider_event_id = utils.create_microsoft_calendar_event(
                 token=token,
                 title=title_of_event,
@@ -2050,6 +2053,40 @@ class LLMClient:
                     status=status or "UNKNOWN",
                     guidelines_section=guidelines_section
                 )
+            
+            elif subcategory == "CONFIRM_APPOINTMENT":
+                # Use appointment-specific prompt when scheduling was involved (already_scheduled=False path)
+                # For already_scheduled=True with needs_response=True, use generic prompt
+                if scheduled is not None:  # This means it went through scheduler
+                    if language == "ITA":
+                        prompt_template = WRITER_CONFIRM_APPOINTMENT_PROMPT_ITA
+                    else:
+                        prompt_template = WRITER_CONFIRM_APPOINTMENT_PROMPT_ENG
+                    
+                    prompt = prompt_template.format(
+                        extended_summary=extended_summary or "",
+                        mail_summary=mail_summary or "",
+                        chunked_company_info=company_info_str,
+                        attachment_summary=attachment_text,
+                        scheduled=scheduled,
+                        event_code=event_code or "N/A",
+                        proposed_slots=proposed_slots or [],
+                        guidelines_section=guidelines_section
+                    )
+                else:
+                    # already_scheduled=True case - use generic prompt
+                    if language == "ITA":
+                        prompt_template = WRITER_GENERIC_PROMPT_ITA
+                    else:
+                        prompt_template = WRITER_GENERIC_PROMPT_ENG
+                    
+                    prompt = prompt_template.format(
+                        extended_summary=extended_summary or "",
+                        mail_summary=mail_summary or "",
+                        chunked_company_info=company_info_str,
+                        attachment_summary=attachment_text,
+                        guidelines_section=guidelines_section
+                    )
                 
             else:
                 # Generic prompt for all other subcategories

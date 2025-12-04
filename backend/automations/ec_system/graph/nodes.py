@@ -1763,6 +1763,31 @@ def writer_node(state):
                 cancellation_event_code=cancellation_event_code,
                 status=status
             )
+        
+        elif subcategory == "CONFIRM_APPOINTMENT":
+            # Get confirm appointment-specific parameters
+            scheduled = state.get("appointment_scheduled")
+            event_code = state.get("appointment_event_code")
+            proposed_slots = state.get("appointment_proposed_slots")
+            
+            print(f"   📅 Scheduled: {scheduled}")
+            print(f"   🔢 Event code: {event_code}")
+            print(f"   📆 Proposed slots: {proposed_slots}")
+            
+            # If already_scheduled=False, it went through scheduler and needs appointment-specific response
+            # If already_scheduled=True, use generic prompt (scheduled will be None)
+            write_response = llm_client.write_email(
+                subcategory=subcategory,
+                extended_summary=extended_summary,
+                mail_summary=mail_summary,
+                chunked_company_info=chunked_company_info,
+                attachment_summary=attachment_summary,
+                guidelines=guidelines,
+                language=language,
+                scheduled=scheduled,
+                event_code=event_code,
+                proposed_slots=proposed_slots
+            )
             
         else:
             # Generic case for all other subcategories
@@ -1838,7 +1863,7 @@ def reviewer_node(state):
         
         # Check if this is an appointment-related subcategory
         appointment_subcategories = [
-            "REQUEST_APPOINTMENT", "REQUEST_APPOINTMENT_CHANGE", "CANCEL_APPOINTMENT" # valutare confirmation appointment
+            "REQUEST_APPOINTMENT", "REQUEST_APPOINTMENT_CHANGE", "CANCEL_APPOINTMENT", "CONFIRM_APPOINTMENT"
         ]
         
         # Get subcategory value (handle enum or string)
