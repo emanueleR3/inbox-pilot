@@ -629,9 +629,6 @@ def calculate_free_slots(
         if not is_busy:
             print(f"  ✅ FREE SLOT: {current_time.isoformat()}")
             free_slots.append(current_time.isoformat())
-            if len(free_slots) >= 3:
-                print("=== RETURNING FIRST 3 FREE SLOTS ===")
-                return free_slots
             
             # Move to next slot boundary based on duration
             if duration >= 60:
@@ -735,21 +732,28 @@ def create_microsoft_calendar_event(
     if end_time.tzinfo is None:
         end_time = end_time.replace(tzinfo=timezone.utc)
     
-    # Convert to UTC for Microsoft API
-    start_time_utc = start_time.astimezone(timezone.utc)
-    end_time_utc = end_time.astimezone(timezone.utc)
+    # Get the timezone name from the datetime object
+    # Microsoft Graph API expects the dateTime to be in the specified timezone
+    # We send the local time as-is and specify its timezone
+    tz_name = str(start_time.tzinfo)
     
-    # Microsoft expects ISO8601 format with timezone - use UTC
-    # Format without timezone suffix since we specify timeZone separately
+    # Map IANA timezone to Microsoft timezone name if needed
+    # Microsoft accepts IANA timezones in the timeZone field
+    microsoft_tz = tz_name
+    if tz_name == "UTC+01:00" or tz_name == "UTC+02:00":
+        # Handle fixed offset timezones by using a standard name
+        microsoft_tz = "Europe/Rome"
+    
+    # Format datetime without timezone suffix - Microsoft uses the timeZone field
     body = {
         "subject": title,
         "start": {
-            "dateTime": start_time_utc.strftime("%Y-%m-%dT%H:%M:%S"),
-            "timeZone": "UTC"
+            "dateTime": start_time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "timeZone": microsoft_tz
         },
         "end": {
-            "dateTime": end_time_utc.strftime("%Y-%m-%dT%H:%M:%S"),
-            "timeZone": "UTC"
+            "dateTime": end_time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "timeZone": microsoft_tz
         }
     }
     
@@ -847,15 +851,21 @@ def update_microsoft_calendar_event(
     if title:
         body["subject"] = title
     if start_time and end_time:
-        # Ensure timezone info and convert to UTC
+        # Ensure timezone info
         if start_time.tzinfo is None:
             start_time = start_time.replace(tzinfo=timezone.utc)
         if end_time.tzinfo is None:
             end_time = end_time.replace(tzinfo=timezone.utc)
-        start_time_utc = start_time.astimezone(timezone.utc)
-        end_time_utc = end_time.astimezone(timezone.utc)
-        body["start"] = {"dateTime": start_time_utc.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "UTC"}
-        body["end"] = {"dateTime": end_time_utc.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "UTC"}
+        
+        # Get the timezone name from the datetime object
+        tz_name = str(start_time.tzinfo)
+        microsoft_tz = tz_name
+        if tz_name == "UTC+01:00" or tz_name == "UTC+02:00":
+            microsoft_tz = "Europe/Rome"
+        
+        # Send time in the original timezone, not converted to UTC
+        body["start"] = {"dateTime": start_time.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": microsoft_tz}
+        body["end"] = {"dateTime": end_time.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": microsoft_tz}
     if description:
         body["body"] = {"contentType": "text", "content": description}
     if attendees:

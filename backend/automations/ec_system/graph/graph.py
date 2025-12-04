@@ -279,7 +279,8 @@ def create_email_classification_graph():
         if state.get("high_priority_email") and subcategory in [
             "REQUEST_APPOINTMENT",
             "REQUEST_APPOINTMENT_CHANGE",
-            "CANCEL_APPOINTMENT"
+            "CANCEL_APPOINTMENT",
+            "CONFIRM_APPOINTMENT"
         ]:
             return END # TODO valutare di continuare i flussi con scheduler
 

@@ -1456,18 +1456,18 @@ class LLMClient:
                     elif tool_call['name'] == 'reschedule_appointment':
                         # Call the reschedule_appointment tool function
                         args = tool_call['args']
-                        reschedule_appointment = self._reschedule_appointment_tool(
+                        reschedule_result = self._reschedule_appointment_tool(
                             event_code=event_code,
                             new_title=args.get('new_title'),
                             new_date=args.get('new_date'),
-                            new_duration=args.get('new_duration'),
+                            new_duration=args.get('new_duration') or 60,
                             new_attendees=args.get('new_attendees'),
                             new_place=args.get('new_place'),
                             additional_notes=args.get('additional_notes')
                         )
-                        scheduled = reschedule_appointment['scheduled']
-                        overlap = reschedule_appointment['overlap']
-                        proposed_slots = reschedule_appointment['proposed_slots']
+                        scheduled = reschedule_result.get('scheduled', False)
+                        overlap = reschedule_result.get('overlap', False)
+                        proposed_slots = reschedule_result.get('proposed_slots')
             
             print(f"📅 [LLM] Rescheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}, favorite_day_unavailable={favorite_day_unavailable}")
             
@@ -1811,7 +1811,8 @@ class LLMClient:
             return {
                 'invalid_event_code': True,
                 'scheduled': False,
-                'overlap': False
+                'overlap': False,
+                'proposed_slots': None
             }
         
         # Get event details
@@ -1824,7 +1825,7 @@ class LLMClient:
         service_data = get_calendar_service_data(service_id)
         if not service_data:
             print(f"❌ Calendar service data not found for service_id: {service_id}")
-            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False}
+            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False, 'proposed_slots': None}
         
         calendar_provider = service_data["calendar_provider"]
         token = service_data["access_token"]
@@ -1849,7 +1850,7 @@ class LLMClient:
             end_dt = end_dt_naive.replace(tzinfo=tz)
         except ValueError as e:
             print(f"❌ Invalid date format: {new_date}, error: {e}")
-            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False}
+            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False, 'proposed_slots': None}
         
         # Get busy slots from calendar provider to check for overlaps
         busy_slots = []
@@ -1885,7 +1886,7 @@ class LLMClient:
         
         if is_overlap:
             print("❌ Overlap detected with existing calendar events")
-            return {'scheduled': False, 'overlap': True, 'invalid_event_code': False}
+            return {'scheduled': False, 'overlap': True, 'invalid_event_code': False, 'proposed_slots': None}
         
         # Update event in external calendar
         updated_provider_event_id = None
@@ -1914,7 +1915,7 @@ class LLMClient:
         
         if not updated_provider_event_id:
             print(f"❌ Failed to update event in {calendar_provider} calendar")
-            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False}
+            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False, 'proposed_slots': None}
         
         print(f"✅ Event updated in {calendar_provider} calendar")
         
@@ -1928,7 +1929,8 @@ class LLMClient:
         return {
             'scheduled': True,
             'overlap': False,
-            'invalid_event_code': False
+            'invalid_event_code': False,
+            'proposed_slots': None
         }
     
     def extract_company_info(
