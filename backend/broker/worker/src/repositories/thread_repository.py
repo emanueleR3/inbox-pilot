@@ -152,7 +152,9 @@ class ThreadRepository:
                 return False
             
             # Get current history and append new message
-            current_history = current_thread.get("history", [])
+            current_history = current_thread.get("history") or []
+            if not isinstance(current_history, list):
+                current_history = list(current_history)
             if new_message_id not in current_history:
                 updated_history = current_history + [new_message_id]
                 
@@ -265,8 +267,10 @@ class ThreadRepository:
                 return False
             
             # Prepare updated history with reply_to_id check
-            current_history = current_thread.get("history", [])
-            updated_history = current_history.copy()
+            current_history = current_thread.get("history") or []
+            if not isinstance(current_history, list):
+                current_history = list(current_history)
+            updated_history = list(current_history)
             
             # Ensure reply_to_id is in history (if provided and missing)
             if reply_to_id and reply_to_id != "no" and reply_to_id not in updated_history:
@@ -280,8 +284,10 @@ class ThreadRepository:
                 print(f"🔄 [THREAD] Message {message_id} already in history for thread {thread_id}")
             
             # Merge CC emails if provided
-            current_cc_emails = current_thread.get("cc_emails", [])
-            updated_cc_emails = current_cc_emails.copy()
+            current_cc_emails = current_thread.get("cc_emails") or []
+            if not isinstance(current_cc_emails, list):
+                current_cc_emails = list(current_cc_emails)
+            updated_cc_emails = list(current_cc_emails)
             if cc_emails:
                 for cc in cc_emails:
                     if cc not in updated_cc_emails:
@@ -336,7 +342,9 @@ class ThreadRepository:
                 # Get current thread data
                 current_thread = self.get_thread_by_id(thread_id)
                 if current_thread:
-                    current_history = current_thread.get("history", [])
+                    current_history = current_thread.get("history") or []
+                    if not isinstance(current_history, list):
+                        current_history = list(current_history)
                     if message_id not in current_history:
                         updated_history = current_history + [message_id]
                         update_data.update({
