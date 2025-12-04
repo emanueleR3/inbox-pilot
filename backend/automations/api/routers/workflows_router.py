@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import sys
@@ -46,11 +46,29 @@ class WorkflowResponse(BaseModel):
     message: Optional[str] = Field(None, description="Additional information")
 
 
+def _process_workflow_background(email_data: dict):
+    """
+    Background function to execute workflow without blocking HTTP response.
+    This runs in a separate thread/process via BackgroundTasks.
+    """
+    try:
+        print(f"🔄 [BACKGROUND] Starting workflow execution for thread {email_data.get('thread_id')}")
+        run_workflow(email_data)
+        print(f"✅ [BACKGROUND] Workflow completed for thread {email_data.get('thread_id')}")
+    except Exception as e:
+        print(f"❌ [BACKGROUND] Workflow error for thread {email_data.get('thread_id')}: {e}")
+
+
 @router.post("/process-email", response_model=WorkflowResponse)
-async def process_email_workflow(payload: EmailWorkflowPayload):
+async def process_email_workflow(payload: EmailWorkflowPayload, background_tasks: BackgroundTasks):
     """
     Process incoming email through automation workflows.
     Called by broker after email filtering and thread management.
+    
+    This endpoint uses fire-and-forget pattern:
+    - Returns immediate response to prevent timeout
+    - Executes workflow in background
+    - Broker doesn't wait for workflow completion
     
     This endpoint orchestrates:
     - Category/subcategory classification (if not set)
@@ -59,7 +77,8 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
     - Action dispatching based on category
     """
     try:
-        print(f"📧 [NEW WORKFLOW] Received email workflow request")
+        print(f"📧 [NEW WORKFLOW] Received email workflow request for thread {payload.thread_id}")
+        
         # Convert payload to dict for workflow
         email_data = {
             "thread_id": payload.thread_id,
@@ -84,19 +103,22 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
             "original_thread_id": payload.original_thread_id
         }
         
-        # Execute the email classification workflow
-        run_workflow(email_data)
+        # Add workflow to background tasks - runs after response is sent
+        background_tasks.add_task(_process_workflow_background, email_data)
         
+        print(f"✅ [WORKFLOW] Email queued for background processing")
+        
+        # Return immediate response
         return WorkflowResponse(
-            status="processed",
-            message="Email workflow processed successfully"
+            status="accepted",
+            message="Email workflow accepted and queued for processing"
         )
         
     except Exception as e:
-        print(f"❌ [WORKFLOW] Error processing email workflow: {e}")
+        print(f"❌ [WORKFLOW] Error queueing email workflow: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to process email workflow: {str(e)}"
+            detail=f"Failed to queue email workflow: {str(e)}"
         )
 
 
