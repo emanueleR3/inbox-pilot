@@ -38,8 +38,6 @@ def get_user_by_email(email: str):
     responses={
         201: {
             "description": "Account creato con successo",
-        201: {
-            "description": "Account creato con successo",
             "content": {
                 "application/json": {
                     "example": {

@@ -906,6 +906,7 @@ def process_automation_result(workflow_result: dict):
                         payload["message_id"] = microsoft_message_id
                     elif provider == "imap":
                         print("[DEBUG-AUTOMATION] imap")
+                        print("[DEBUG-AUTOMATION] email_service_data: ", email_service_data)
                         endpoint = f"{senders_url}/send-email/send-smtp"
                         payload["smtp_server"] = email_service_data.get("smtp_server")
                         payload["smtp_port"] = email_service_data.get("smtp_port")
