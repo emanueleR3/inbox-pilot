@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Body, status
-from src.core.dependecy import get_current_user
+from src.core.dependency import get_current_user
 from src.modules.auth.src.controllers.user_controller import UserController
 
 router = APIRouter(tags=["Autenticazione Supa"])
@@ -17,7 +17,7 @@ controller = UserController()
                     "example": {
                         "user_id": "abc123",
                         "email": "user@example.com",
-                        "name": "Mario Rossi",
+                        "name": "Mario Rossi"
                     }
                 }
             },
@@ -27,6 +27,7 @@ controller = UserController()
 )
 def get_user_by_email(email: str):
     return controller.get_user_by_email(email)
+
 
 @router.post(
     "/create-account",
@@ -52,10 +53,10 @@ def get_user_by_email(email: str):
                                     "vat_number": "IT123456789",
                                     "city": "Torino",
                                     "address": "Corso Francia 100",
-                                    "active": "true",
+                                    "active": True,
                                     "current_period_end": "2025-12-31T23:59:59Z",
                                     "plan": "Premium",
-                                    "is_configurated": "false", 
+                                    "is_configurated": False
                                 }
                             ],
                             "jwt": "jwt_token",
@@ -71,8 +72,8 @@ def get_user_by_email(email: str):
                 "application/json": {
                     "examples": {
                         "missing_fields": {
-                            "value": {"detail": "Email e password e i dati della sottoscrizione sono richiesti"}
-                        },
+                            "value": {"detail": "Email, password e i dati della sottoscrizione sono richiesti"}
+                        }
                     }
                 }
             }
@@ -99,7 +100,7 @@ def create_user_with_sub(
     payload: dict = Body(
         ...,
         example={
-            "email": "user@example.com", 
+            "email": "user@example.com",
             "password": "strongpassword123",
             "subscription": {
                 "name": "TechVision Srl",
@@ -108,7 +109,7 @@ def create_user_with_sub(
                 "address": "Via Roma 42",
                 "active": True,
                 "current_period_end": "2025-12-31T23:59:59Z",
-                "plan": "premium",
+                "plan": "premium"
             }
         },
         description="Email e password per la registrazione del nuovo utente.",
@@ -116,6 +117,7 @@ def create_user_with_sub(
 ):
     result = controller.create_user_with_sub(payload)
     return {"message": "Registrazione completata", "result": result}
+
 
 @router.post(
     "/add-new-user",
@@ -131,9 +133,7 @@ def create_user_with_sub(
                 "application/json": {
                     "example": {
                         "message": "Registrazione completata",
-                        "result": {
-                            True
-                        }
+                        "result": True
                     }
                 }
             }
@@ -141,10 +141,12 @@ def create_user_with_sub(
         400: {
             "description": "Richiesta non valida",
             "content": {
-                "examples": {
-                    "missing_fields": {
-                        "value": {"detail": "Email e password e dettagli della subscription sono richiesti"}
-                    },
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "value": {"detail": "Email, password e dettagli della subscription sono richiesti"}
+                        }
+                    }
                 }
             }
         },
@@ -170,43 +172,47 @@ def add_new_user(
     payload: dict = Body(
         ...,
         example={
-            "email": "user@example.com", 
+            "email": "user@example.com",
             "password": "strongpassword123",
             "subscription_id": "sub_id"
         },
-        description="Email e password per la registrazione del nuovo utente.",
+        description="Email e password per la registrazione del nuovo utente."
     ),
-    #current_user=Depends(get_current_user)
+    # current_user=Depends(get_current_user)
 ):
     result = controller.add_new_user(payload)
     return {"message": "Registrazione completata", "result": result}
 
+
 @router.post(
     "/create-new-subs",
     status_code=status.HTTP_201_CREATED,
-    summary="Crea una nuova subscriptione",
-    description="""
-    Crea un nuovo utente con la sua sottoscrizione associata.
-    """,
+    summary="Crea una nuova subscription",
+    description="Crea una nuova subscription e la associa a un utente esistente.",
     responses={
         201: {
-            "description": "Account creato con successo",
+            "description": "Sottoscrizione creata con successo",
             "content": {
                 "application/json": {
                     "example": {
                         "message": "Registrazione completata",
                         "result": {
                             "user": {
-                                "session of the user"
+                                "id": "userid",
+                                "email": "user@example.com",
+                                "subscriptions": ["sub_id_existing"],
+                                "jwt": "jwt_token",
+                                "sub_selected": 0
                             },
                             "subscription": {
-                                "name": "TechVision Srl",
-                                "vat_number": "IT12345678901",
-                                "city": "Milano",
-                                "address": "Via Roma 42",
+                                "subscription_id": "sub_new_123",
+                                "name": "Palestra Torino123",
+                                "vat_number": "IT123456789",
+                                "city": "Torino",
+                                "address": "Corso Francia 100",
                                 "active": True,
                                 "current_period_end": "2025-12-31T23:59:59Z",
-                                "plan": "premium",
+                                "plan": "Premium"
                             }
                         }
                     }
@@ -219,8 +225,8 @@ def add_new_user(
                 "application/json": {
                     "examples": {
                         "missing_fields": {
-                            "value": {"detail": "Email e password e dettagli della subscription sono richiesti"}
-                        },
+                            "value": {"detail": "Dati utente e dettagli della subscription sono richiesti"}
+                        }
                     }
                 }
             }
@@ -237,7 +243,7 @@ def add_new_user(
             "description": "Errore interno del server",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Errore durante la creazione dell'account"}
+                    "example": {"detail": "Errore durante la creazione della sottoscrizione"}
                 }
             }
         }
@@ -249,12 +255,10 @@ def create_new_sub(
         example={
             "user": {
                 "id": "userid",
-                "email": "email",
-                "subscriptions": [
-                    "...."
-                ],
+                "email": "user@example.com",
+                "subscriptions": ["sub_id_existing"],
                 "jwt": "jwt_token",
-                "sub_selected": "0"
+                "sub_selected": 0
             },
             "subscription": {
                 "name": "Palestra Torino123",
@@ -266,11 +270,12 @@ def create_new_sub(
                 "plan": "Premium"
             }
         },
-        description="Email e password per la registrazione del nuovo utente.",
+        description="Dati utente e dettagli della nuova subscription.",
     )
 ):
     result = controller.create_new_sub(payload)
     return {"message": "Registrazione completata", "result": result}
+
 
 @router.get(
     "/get-users-subscription/{subscription_id}",
@@ -284,7 +289,20 @@ def create_new_sub(
     🔹 Filtra gli utenti registrati in Supabase Auth
     """,
     responses={
-        200: {"description": "Lista di utenti trovata con successo"},
+        200: {
+            "description": "Lista di utenti trovata con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "subscription_id": "sub_id12345",
+                        "users": [
+                            {"id": "user_1", "email": "one@example.com"},
+                            {"id": "user_2", "email": "two@example.com"}
+                        ]
+                    }
+                }
+            }
+        },
         400: {"description": "ID sottoscrizione mancante o non valido"},
         404: {"description": "Nessun utente trovato per questa sottoscrizione"},
         500: {"description": "Errore interno del server"}
@@ -293,16 +311,10 @@ def create_new_sub(
 def get_users_by_subscription(subscription_id: str):
     return controller.get_users_by_subscription(subscription_id)
 
+
 @router.post(
     "/login",
     summary="Login utente",
-    description="""
-    Esegue il login di un utente fornendo email e password.
-    
-    - Richiede email e password validi
-    - Verifica le credenziali contro Supabase Auth
-    - Restituisce un token di sessione in caso di successo
-    """,
     description="""
     Esegue il login di un utente fornendo email e password.
     
@@ -327,10 +339,10 @@ def get_users_by_subscription(subscription_id: str):
                                     "vat_number": "0987654321",
                                     "city": "Lecce",
                                     "address": "Via Enrico Fermi, 8",
-                                    "active": "true",
+                                    "active": True,
                                     "current_period_end": "2025-12-20T00:00:00Z",
                                     "plan": "personal",
-                                    "is_configurated": "true"
+                                    "is_configurated": True
                                 }
                             ],
                             "jwt": "jwt_token",
@@ -347,7 +359,7 @@ def get_users_by_subscription(subscription_id: str):
                     "examples": {
                         "missing_fields": {
                             "value": {"detail": "Email e password sono richiesti"}
-                        },
+                        }
                     }
                 }
             }
@@ -381,7 +393,6 @@ def login_user(
     return {"message": "Login effettuato", "result": result}
 
 
-
 @router.post(
     "/magic-link",
     summary="Invia un link magico per l'accesso",
@@ -408,6 +419,7 @@ def magic_link_login(
     )
 ):
     return controller.send_magic_link(payload)
+
 
 @router.post(
     "/reset-password",
@@ -436,6 +448,7 @@ def reset_password(
 ):
     return controller.reset_password(payload)
 
+
 @router.post(
     "/update-password",
     summary="Aggiorna la password dell'utente",
@@ -458,13 +471,14 @@ def update_password(
         ...,
         example={
             "old_password": "vecchiapassword",
-            "new_password": "nuovapasswordSicura123",
+            "new_password": "nuovapasswordSicura123"
         },
         description="Vecchia e nuova password dell'utente.",
     ),
     current_user=Depends(get_current_user)
 ):
     return controller.update_password(payload)
+
 
 @router.post(
     "/logout",
@@ -484,7 +498,8 @@ def update_password(
 )
 def logout(current_user=Depends(get_current_user)):
     controller.logout()
-    return {"message": "Logout effettutato"}
+    return {"message": "Logout effettuato"}
+
 
 @router.delete(
     "/delete/{user_id}",
@@ -506,6 +521,7 @@ def logout(current_user=Depends(get_current_user)):
 def delete_user(user_id: str, current_user=Depends(get_current_user)):
     controller.delete_account(user_id)
     return {"message": "Account cancellato"}
+
 
 @router.get(
     "/get-subscription/{subscription_id}",
