@@ -111,19 +111,6 @@ def create_user_with_sub(
                 "plan": "premium",
             }
         },
-        example={
-            "email": "user@example.com", 
-            "password": "strongpassword123",
-            "subscription": {
-                "name": "TechVision Srl",
-                "vat_number": "IT12345678901",
-                "city": "Milano",
-                "address": "Via Roma 42",
-                "active": True,
-                "current_period_end": "2025-12-31T23:59:59Z",
-                "plan": "premium",
-            }
-        },
         description="Email e password per la registrazione del nuovo utente.",
     )
 ):
