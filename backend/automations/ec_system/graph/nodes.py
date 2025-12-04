@@ -1178,6 +1178,47 @@ def reader_node(state):
             
             print(f"✅ [READER] Cancellation analysis completed successfully")
             print(f"   🔑 Event code: {cancellation_response.event_code}")
+        
+        # Check if this is a CONFIRM_APPOINTMENT email
+        elif subcategory == "CONFIRM_APPOINTMENT":
+            print(f"✅ [READER] Detected CONFIRM_APPOINTMENT - using confirm appointment analysis")
+            
+            # Get additional data for confirm appointment analysis
+            extended_summary = state.get("extended_summary", "")
+            extracted_info = state.get("extracted_info", {})
+            sender_email = extracted_info.get("from", "mail not available")
+            now = datetime.now()
+            current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
+            
+            # Analyze confirm appointment using specialized LLM method
+            confirm_response = llm_client.read_confirm_appointment(
+                filtered_body,
+                extended_summary,
+                current_timestamp,
+                sender_email,
+                language
+            )
+            
+            # Update state with confirm appointment details
+            state["key_entities"] = confirm_response.key_entities
+            state["appointment_title"] = confirm_response.title_of_event
+            state["appointment_date"] = confirm_response.date
+            state["appointment_duration"] = confirm_response.duration
+            state["appointment_attendees"] = confirm_response.attendees
+            state["appointment_place"] = confirm_response.place
+            state["appointment_notes"] = confirm_response.additional_notes
+            state["already_scheduled"] = confirm_response.already_scheduled
+            state["needs_response"] = confirm_response.needs_response
+            
+            print(f"✅ [READER] Confirm appointment analysis completed successfully")
+            print(f"   📅 Title: {confirm_response.title_of_event}")
+            print(f"   🕐 Date: {confirm_response.date}")
+            print(f"   ⏱️ Duration: {confirm_response.duration} minutes")
+            print(f"   👥 Attendees: {confirm_response.attendees}")
+            print(f"   📍 Place: {confirm_response.place}")
+            print(f"   📝 Notes: {confirm_response.additional_notes}")
+            print(f"   📆 Already Scheduled: {confirm_response.already_scheduled}")
+            print(f"   💬 Needs Response: {confirm_response.needs_response}")
             
         else:
             # Standard email analysis for non-appointment emails

@@ -31,6 +31,7 @@ from ..models.llm_responses import (
     ReaderAppointmentResponse,
     ReaderAppointmentChangeResponse,
     ReaderCancellationResponse,
+    ReaderConfirmAppointmentResponse,
     SchedulerResponse,
     ExtractorCompanyInfoResponse,
     WriteResponse,
@@ -68,6 +69,8 @@ from ..prompts.templates import (
     READER_APPOINTMENT_PROMPT_ENG,
     READER_APPOINTMENT_CHANGE_PROMPT_ITA,
     READER_APPOINTMENT_CHANGE_PROMPT_ENG,
+    READER_CONFIRM_APPOINTMENT_PROMPT_ITA,
+    READER_CONFIRM_APPOINTMENT_PROMPT_ENG,
     READER_CANCELLATION_PROMPT_ITA,
     READER_CANCELLATION_PROMPT_ENG,
     SCHEDULER_PROMPT_ITA,
@@ -844,6 +847,90 @@ class LLMClient:
                 attendees=None,
                 place=None,
                 additional_notes=None
+            )
+
+    def read_confirm_appointment(self, filtered_body: str, extended_summary: str, 
+                                current_timestamp: str, sender_email: str, 
+                                language: str) -> ReaderConfirmAppointmentResponse:
+        """
+        Extract appointment confirmation details from CONFIRM_APPOINTMENT emails.
+        
+        Args:
+            filtered_body: Filtered email body
+            extended_summary: Extended conversation summary
+            current_timestamp: Current timestamp for relative date calculations
+            sender_email: Email of the sender
+            language: Language of the email ("ITA" or "ENG")
+            
+        Returns:
+            ReaderConfirmAppointmentResponse with appointment details and scheduling status
+        """
+        try:
+            # Choose prompt based on language
+            if language == "ENG":
+                prompt_template = READER_CONFIRM_APPOINTMENT_PROMPT_ENG
+            else:
+                prompt_template = READER_CONFIRM_APPOINTMENT_PROMPT_ITA
+            
+            # Create output parser
+            parser = PydanticOutputParser(pydantic_object=ReaderConfirmAppointmentResponse)
+            
+            # Gestione default extended_summary in base alla lingua
+            if not extended_summary:
+                if language == "ENG":
+                    default_summary = "No previous summary."
+                else:
+                    default_summary = "Nessun riassunto precedente."
+                used_extended_summary = default_summary
+            else:
+                used_extended_summary = extended_summary
+
+            # Format prompt
+            prompt_text = prompt_template.format(
+                current_timestamp=current_timestamp,
+                filtered_body=filtered_body,
+                extended_summary=used_extended_summary,
+                sender_email=sender_email
+            )
+            
+            # Add format instructions
+            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            
+            # Create message
+            message = HumanMessage(content=prompt_with_format)
+            
+            # Get response from LLM
+            response = self.llm.invoke([message])
+            
+            # Parse response
+            parsed_response = parser.parse(response.content)
+            
+            print(f"✅ [LLM] Confirm appointment analyzed ({language}): date={parsed_response.date}, already_scheduled={parsed_response.already_scheduled}, needs_response={parsed_response.needs_response}")
+            return parsed_response
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in confirm appointment reading: {e}")
+            # Return default response on error
+            return ReaderConfirmAppointmentResponse(
+                key_entities={
+                    "dates": [],
+                    "locations": [],
+                    "people": [],
+                    "organizations": [],
+                    "requests": [],
+                    "actions": [],
+                    "amounts": [],
+                    "documents": [],
+                    "other_info": []
+                },
+                title_of_event=f"[AI] APPUNTAMENTO {sender_email}",
+                date=None,
+                duration=60,
+                attendees=None,
+                place=None,
+                additional_notes=None,
+                already_scheduled=False,
+                needs_response=True
             )
     
     def schedule_appointment(

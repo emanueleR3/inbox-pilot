@@ -161,6 +161,46 @@ class ReaderAppointmentResponse(BaseModel):
     )
 
 
+class ReaderConfirmAppointmentResponse(BaseModel):
+    """Response model for Reader node analysis of CONFIRM_APPOINTMENT subcategory."""
+    key_entities: dict = Field(
+        ...,
+        description="Entità chiave estratte dalla mail e allegati (date, informazioni, richieste, luoghi, ecc.)"
+    )
+    title_of_event: str = Field(
+        ...,
+        description="Titolo dell'appuntamento nella forma '[AI] APPUNTAMENTO + sender email'"
+    )
+    date: Optional[str] = Field(
+        None,
+        description="Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss, None se non specificato data e orario completi"
+    )
+    duration: int = Field(
+        60,
+        description="Durata dell'appuntamento in minuti, default 60 se non specificato"
+    )
+    attendees: Optional[list] = Field(
+        None,
+        description="Lista di email degli invitati, None se non specificati"
+    )
+    place: Optional[str] = Field(
+        None,
+        description="Luogo dell'evento, None se non specificato"
+    )
+    additional_notes: Optional[str] = Field(
+        None,
+        description="Note aggiuntive sull'evento"
+    )
+    already_scheduled: bool = Field(
+        False,
+        description="True se dall'extended summary si evince che l'appuntamento è già stato schedulato (conferma finale senza intervento), False se deve ancora essere schedulato"
+    )
+    needs_response: bool = Field(
+        ...,
+        description="True se l'email richiede una risposta, False altrimenti"
+    )
+
+
 class SchedulerResponse(BaseModel):
     """Response model for Scheduler node - appointment scheduling result."""
     scheduled: bool = Field(

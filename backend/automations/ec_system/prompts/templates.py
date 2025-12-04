@@ -1015,6 +1015,141 @@ INSTRUCTIONS:
 
 Always respond in JSON format with fields: scheduled, overlap, event_code, proposed_slots."""
 
+# READER PROMPTS FOR CONFIRM_APPOINTMENT
+READER_CONFIRM_APPOINTMENT_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email di conferma appuntamento.
+
+Analizza attentamente la seguente email di conferma appuntamento ed estrai tutte le informazioni necessarie.
+
+DATA E ORA ATTUALE: {current_timestamp}
+
+CORPO EMAIL:
+{filtered_body}
+
+RIASSUNTO CONVERSAZIONE:
+{extended_summary}
+
+ESTRAI LE SEGUENTI INFORMAZIONI:
+
+1. **key_entities**: Dizionario JSON con le entità chiave:
+   - "dates": Date/orari menzionati
+   - "locations": Luoghi menzionati
+   - "people": Nomi di persone
+   - "organizations": Aziende/organizzazioni
+   - "requests": Richieste esplicite
+   - "actions": Azioni richieste
+   - "amounts": Importi monetari
+   - "documents": Documenti menzionati
+   - "other_info": Altre informazioni rilevanti
+
+2. **title_of_event**: Titolo dell'appuntamento nel formato "[AI] APPUNTAMENTO {sender_email}"
+   Esempio: "[AI] APPUNTAMENTO mario.rossi@example.com"
+
+3. **date**: Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss
+   - Analizza sia la mail corrente che il riassunto conversazione per trovare la data completa
+   - Se l'utente sta confermando una data proposta in precedenza, recupera la data dal contesto
+   - Se menzionato "domani", calcola rispetto al timestamp attuale
+   - Se menzionato "prossimo lunedì", "tra tre giorni", ecc., calcola rispetto al timestamp attuale
+   - Se non viene specificata data E orario completi (entrambi necessari), imposta a None
+   - Se specificato solo un giorno senza orario, imposta a None
+
+4. **duration**: Durata in minuti (default: 60 se non specificato)
+
+5. **attendees**: Array di email degli invitati
+   - Se non specificati, imposta a None
+   - Estrai eventuali email menzionate nel testo
+
+6. **place**: Luogo dell'evento
+   - Se non specificato, imposta a None
+   - Può essere un indirizzo fisico o "online", "Teams", "Zoom", ecc.
+
+7. **additional_notes**: Note aggiuntive sull'evento
+   - Informazioni rilevanti che non rientrano negli altri campi
+   - Se non ci sono note particolari, imposta a None
+
+8. **already_scheduled**: Booleano che indica se l'appuntamento è già stato schedulato
+   - Analizza l'extended_summary per determinare questo campo
+   - True: se dal riassunto conversazione si evince che l'appuntamento è GIÀ STATO SCHEDULATO 
+     (es. è stata ricevuta conferma di prenotazione, event_code presente, calendario già aggiornato)
+     In questo caso l'utente sta esprimendo una conferma finale, ma NON è necessario alcun intervento
+   - False: se dal riassunto conversazione si evince che l'appuntamento NON è ancora stato schedulato
+     (es. sono stati proposti degli slot, l'utente sta confermando uno slot per completare la prenotazione)
+     In questo caso è necessario procedere con lo scheduling effettivo
+
+9. **needs_response**: Booleano che indica se è necessaria una risposta
+   - True: se l'email richiede esplicitamente una risposta o azione
+   - False: se l'email è conclusiva e non richiede ulteriori comunicazioni
+
+MITTENTE EMAIL: {sender_email}
+
+Rispondi in formato JSON con tutte le chiavi richieste."""
+
+READER_CONFIRM_APPOINTMENT_PROMPT_ENG = """You are an expert assistant in analyzing appointment confirmation emails.
+
+Carefully analyze the following appointment confirmation email and extract all necessary information.
+
+CURRENT DATE AND TIME: {current_timestamp}
+
+EMAIL BODY:
+{filtered_body}
+
+CONVERSATION SUMMARY:
+{extended_summary}
+
+EXTRACT THE FOLLOWING INFORMATION:
+
+1. **key_entities**: JSON dictionary with key entities:
+   - "dates": Dates/times mentioned
+   - "locations": Places mentioned
+   - "people": People's names
+   - "organizations": Companies/organizations
+   - "requests": Explicit requests
+   - "actions": Requested actions
+   - "amounts": Monetary amounts
+   - "documents": Documents mentioned
+   - "other_info": Other relevant information
+
+2. **title_of_event**: Appointment title in format "[AI] APPOINTMENT {sender_email}"
+   Example: "[AI] APPOINTMENT mario.rossi@example.com"
+
+3. **date**: Appointment date and time in format YYYY-MM-DDThh:mm:ss
+   - Analyze both the current email and conversation summary to find the complete date
+   - If the user is confirming a previously proposed date, retrieve the date from context
+   - If mentioned "tomorrow", calculate relative to current timestamp
+   - If mentioned "next Monday", "in three days", etc., calculate relative to current timestamp
+   - If date AND time are NOT both specified (both required), set to None
+   - If only day is specified without time, set to None
+
+4. **duration**: Duration in minutes (default: 60 if not specified)
+
+5. **attendees**: Array of attendee emails
+   - If not specified, set to None
+   - Extract any emails mentioned in the text
+
+6. **place**: Event location
+   - If not specified, set to None
+   - Can be a physical address or "online", "Teams", "Zoom", etc.
+
+7. **additional_notes**: Additional event notes
+   - Relevant information that doesn't fit in other fields
+   - If no particular notes, set to None
+
+8. **already_scheduled**: Boolean indicating if the appointment has already been scheduled
+   - Analyze the extended_summary to determine this field
+   - True: if from the conversation summary it appears the appointment is ALREADY SCHEDULED
+     (e.g., booking confirmation received, event_code present, calendar already updated)
+     In this case the user is expressing a final confirmation, but NO action is needed
+   - False: if from the conversation summary it appears the appointment is NOT YET scheduled
+     (e.g., slots were proposed, user is confirming a slot to complete the booking)
+     In this case it's necessary to proceed with actual scheduling
+
+9. **needs_response**: Boolean indicating if a response is needed
+   - True: if the email explicitly requests a response or action
+   - False: if the email is conclusive and doesn't require further communication
+
+EMAIL SENDER: {sender_email}
+
+Respond in JSON format with all required keys."""
+
 # READER PROMPTS FOR REQUEST_APPOINTMENT_CHANGE
 READER_APPOINTMENT_CHANGE_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email per richieste di modifica appuntamenti.
 
