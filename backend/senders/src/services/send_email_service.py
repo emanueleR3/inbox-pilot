@@ -302,7 +302,7 @@ class SendEmailService:
         smtp_port: int,
         smtp_server: str,
         smtp_email: str,
-        hashed_password: str,
+        password: str,
         reply_to_id: Optional[str] = None,
         message_id: Optional[str] = None
     ) -> dict:
@@ -317,19 +317,22 @@ class SendEmailService:
             print(f"🔵 [SERVICE] smtp_email={smtp_email}")
             print(f"🔵 [SERVICE] reply_to_id={reply_to_id}")
             print(f"🔵 [SERVICE] message_id={message_id}")
-            print("🔵 [SERVICE] hashed_password received (not printed)")
+            print("🔵 [SERVICE] password received (not printed)")
 
             sender_email = smtp_email
 
+            # Create message
             message = MIMEMultipart("alternative")
             message["From"] = sender_email
             message["To"] = email
             message["Subject"] = subject
 
+            # RFC Message-ID
             msg_id = make_msgid()
             message["Message-ID"] = msg_id
             print(f"🔵 [SERVICE] Generated RFC Message-ID={msg_id}")
 
+            # Reply headers
             if reply_to_id:
                 rfc_reply_to_id = reply_to_id if reply_to_id.startswith('<') else f"<{reply_to_id}>"
                 message["In-Reply-To"] = rfc_reply_to_id
@@ -340,7 +343,7 @@ class SendEmailService:
                 message["References"] = rfc_message_id
                 print(f"🔵 [SERVICE] References={rfc_message_id}")
 
-            # HTML or text
+            # Body type
             if body.strip().startswith("<"):
                 print("🔵 [SERVICE] Body detected as HTML")
                 message.attach(MIMEText(body, "html", "utf-8"))
@@ -348,22 +351,13 @@ class SendEmailService:
                 print("🔵 [SERVICE] Body detected as TEXT")
                 message.attach(MIMEText(body, "plain", "utf-8"))
 
-            # Decrypt password
-            print("🔵 [SERVICE] Decrypting password...")
-            password = decrypt(hashed_password, "pass")
-            print(f"🔵 [SERVICE] Password decrypted: {'OK' if password else 'FAILED'}")
-
-            if not password:
-                raise ValueError("Failed to decrypt hashed password")
-
             context = ssl.create_default_context()
-
             print(f"🔵 [SERVICE] Selecting SMTP flow for port {smtp_port}...")
 
+            # SMTP 465 SSL
             if smtp_port == 465:
                 print("🟣 [SERVICE] Connecting with SMTP_SSL...")
                 with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
-                    print("🟣 [SERVICE] Connected via SSL")
                     server.ehlo()
                     print("🟣 [SERVICE] Logging in...")
                     server.login(sender_email, password)
@@ -371,8 +365,9 @@ class SendEmailService:
                     server.send_message(message)
                     print("🟣 [SERVICE] Message sent via SSL")
 
+            # SMTP 587 STARTTLS
             elif smtp_port == 587:
-                print("🟠 [SERVICE] Connecting on port 587 with STARTTLS...")
+                print("🟠 [SERVICE] Connecting with STARTTLS...")
                 with smtplib.SMTP(smtp_server, smtp_port) as server:
                     server.ehlo()
                     print("🟠 [SERVICE] Starting TLS...")
@@ -384,12 +379,14 @@ class SendEmailService:
                     server.send_message(message)
                     print("🟠 [SERVICE] Message sent via STARTTLS")
 
+            # SMTP 25 (optional TLS/login)
             elif smtp_port == 25:
                 print("🟢 [SERVICE] Connecting on port 25...")
                 with smtplib.SMTP(smtp_server, smtp_port) as server:
                     server.ehlo()
+
                     try:
-                        print("🟢 [SERVICE] Trying STARTTLS (optional)...")
+                        print("🟢 [SERVICE] Trying STARTTLS...")
                         server.starttls(context=context)
                         server.ehlo()
                         print("🟢 [SERVICE] STARTTLS OK")
@@ -397,11 +394,11 @@ class SendEmailService:
                         print(f"🟡 [SERVICE] STARTTLS not available: {e_tls}")
 
                     try:
-                        print("🟢 [SERVICE] Logging in (optional)...")
+                        print("🟢 [SERVICE] Logging in...")
                         server.login(sender_email, password)
                         print("🟢 [SERVICE] Login OK")
                     except Exception as e_login:
-                        print(f"🟡 [SERVICE] Login failed or not required: {type(e_login).__name__}: {e_login}")
+                        print(f"🟡 [SERVICE] Login failed/not required: {e_login}")
 
                     print("🟢 [SERVICE] Sending message...")
                     server.send_message(message)
@@ -437,3 +434,4 @@ class SendEmailService:
                 "message_id": None,
                 "notification_id": None
             }
+
