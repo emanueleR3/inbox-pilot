@@ -307,6 +307,17 @@ class SendEmailService:
         message_id: Optional[str] = None
     ) -> dict:
         try:
+            print("[DEBUG-SERVICE] START send_email_smtp")
+            print(f"[DEBUG-SERVICE] email={email}")
+            print(f"[DEBUG-SERVICE] subject={subject}")
+            print(f"[DEBUG-SERVICE] body_length={len(body) if body else 0}")
+            print(f"[DEBUG-SERVICE] smtp_port={smtp_port}")
+            print(f"[DEBUG-SERVICE] smtp_server={smtp_server}")
+            print(f"[DEBUG-SERVICE] smtp_email={smtp_email}")
+            print("[DEBUG-SERVICE] smtp_password received (hidden)")
+            print(f"[DEBUG-SERVICE] reply_to_id={reply_to_id}")
+            print(f"[DEBUG-SERVICE] message_id={message_id}")
+
             sender_email = smtp_email
 
             message = MIMEMultipart("alternative")
@@ -314,80 +325,97 @@ class SendEmailService:
             message["To"] = email
             message["Subject"] = subject
         
-            # 🆕 Genero Message-ID RFC e lo aggiungo all'header
             msg_id = make_msgid()
             message["Message-ID"] = msg_id
 
+            print(f"[DEBUG-SERVICE] Generated Message-ID={msg_id}")
+
             if reply_to_id:
-                # Ensure reply_to_id has angle brackets for RFC compliance
-                rfc_reply_to_id = reply_to_id if reply_to_id.startswith('<') else f"<{reply_to_id}>"
+                rfc_reply_to_id = reply_to_id if reply_to_id.startswith("<") else f"<{reply_to_id}>"
                 message["In-Reply-To"] = rfc_reply_to_id
+                print(f"[DEBUG-SERVICE] In-Reply-To set to {rfc_reply_to_id}")
+
             if message_id:
-                # Ensure message_id has angle brackets for RFC compliance
-                rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
+                rfc_message_id = message_id if message_id.startswith("<") else f"<{message_id}>"
                 message["References"] = rfc_message_id
+                print(f"[DEBUG-SERVICE] References set to {rfc_message_id}")
 
             # HTML o testo
             if body.strip().startswith("<"):
+                print("[DEBUG-SERVICE] Body detected as HTML")
                 message.attach(MIMEText(body, "html", "utf-8"))
             else:
+                print("[DEBUG-SERVICE] Body detected as TEXT")
                 message.attach(MIMEText(body, "plain", "utf-8"))
 
-            # SSL/STARTTLS
             context = ssl.create_default_context()
 
+            print("[DEBUG-SERVICE] Decrypting password...")
             password = decrypt(smtp_password, "pass")
+            print("[DEBUG-SERVICE] Password decrypted (hidden)")
+
             if not password:
                 raise ValueError("Failed to decrypt hashed password")
 
+            print(f"[DEBUG-SERVICE] Connecting to SMTP server on port {smtp_port}...")
+
             if smtp_port == 465:
                 with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
+                    print("[DEBUG-SERVICE] Using SMTP_SSL")
                     server.ehlo()
                     server.login(sender_email, password)
+                    print("[DEBUG-SERVICE] Logged in successfully")
                     server.send_message(message)
 
             elif smtp_port == 587:
                 with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    print("[DEBUG-SERVICE] Using SMTP on port 587 with STARTTLS")
                     server.ehlo()
                     server.starttls(context=context)
                     server.ehlo()
                     server.login(sender_email, password)
+                    print("[DEBUG-SERVICE] Logged in successfully")
                     server.send_message(message)
 
             elif smtp_port == 25:
                 with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    print("[DEBUG-SERVICE] Using SMTP on port 25")
                     server.ehlo()
                     try:
                         server.starttls(context=context)
                         server.ehlo()
-                    except:
-                        pass
+                        print("[DEBUG-SERVICE] STARTTLS enabled")
+                    except Exception as e_tls:
+                        print(f"[DEBUG-SERVICE] STARTTLS not supported: {e_tls}")
 
                     try:
                         server.login(sender_email, password)
-                    except:
-                        pass
+                        print("[DEBUG-SERVICE] Login successful")
+                    except Exception as e_login:
+                        print(f"[DEBUG-SERVICE] Login failed or not required: {e_login}")
 
                     server.send_message(message)
 
             else:
+                print(f"[DEBUG-SERVICE] Unsupported port: {smtp_port}")
                 return {
                     "success": False,
                     "message": f"Unsupported SMTP port {smtp_port}. Use 465 / 587 / 25.",
                     "message_id": None
                 }
 
-            # Clean message_id by removing angle brackets
             cleaned_message_id = _clean_message_id(msg_id)
+            print(f"[DEBUG-SERVICE] Email sent. Clean message_id={cleaned_message_id}")
 
             return {
                 "success": True,
                 "message": "Email sent",
-                "message_id": cleaned_message_id,     # RFC Message-ID (cleaned)
-                "notification_id": cleaned_message_id  # Per uniformità con gli altri metodi
+                "message_id": cleaned_message_id,
+                "notification_id": cleaned_message_id
             }
 
         except Exception as e:
+            print(f"[DEBUG-SERVICE] ERROR: {e}")
             return {
                 "success": False,
                 "message": str(e),

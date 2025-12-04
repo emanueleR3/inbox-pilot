@@ -55,30 +55,6 @@ controller = SubscriptionServiceController()
                 }
             }
         }
-        400: {
-            "description": "Richiesta non valida",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "ID sottoscrizione richiesto"}
-                }
-            }
-        },
-        404: {
-            "description": "Configurazione non trovata",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Configurazione con ID {subscription_id} non trovata"}
-                }
-            }
-        },
-        500: {
-            "description": "Errore interno del server",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Errore durante il recupero della configurazione"}
-                }
-            }
-        }
     },
 )
 def get_configuration(subscription_id: str):

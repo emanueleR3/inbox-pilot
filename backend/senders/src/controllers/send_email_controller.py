@@ -84,9 +84,20 @@ class SendEmailController:
                 raise ValueError("Smtp email is required")
             if not smtp_password:
                 raise ValueError("Smtp password is required")
+            
+            print("[DEBUG CONTROLLER]- "+email)
+            print("[DEBUG CONTROLLER]- "+subject)
+            print("[DEBUG CONTROLLER]- "+body)
+            print("[DEBUG CONTROLLER]- "+smtp_port)
+            print("[DEBUG CONTROLLER]- "+smtp_server)
+            print("[DEBUG CONTROLLER]- "+smtp_email)
+            print("[DEBUG CONTROLLER]- "+smtp_password)
 
             reply_to_id = req.get("reply_to_id")
             message_id = req.get("message_id")
+
+            print("[DEBUG CONTROLLER]- "+reply_to_id)
+            print("[DEBUG CONTROLLER]- "+message_id)
 
             return self.send_email_service.send_email_smtp(
                 email, subject, body, smtp_port, smtp_server, smtp_email, smtp_password, reply_to_id, message_id

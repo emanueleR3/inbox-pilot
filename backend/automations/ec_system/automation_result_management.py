@@ -214,7 +214,7 @@ def process_automation_result(workflow_result: dict):
     sender_email = extracted_info.get("from", "unknown")
     subject = extracted_info.get("subject", "No subject")
     thread_id = extracted_info.get("thread_id", None)
-    replay_to_id = extracted_info.get("reply_to_id", None)
+    reply_to_id = extracted_info.get("reply_to_id", None)
     summary = workflow_result.get("mail_summary", "")
     extended_summary = workflow_result.get("extended_summary", None)
     cc_emails = extracted_info.get("cc", "")
@@ -910,7 +910,7 @@ def process_automation_result(workflow_result: dict):
                         payload["smtp_port"] = email_service_data.get("smtp_port")
                         payload["smtp_email"] = box_email
                         payload["hashed_password"] = email_service_data.get("hashed_password")
-                        payload["reply_to_id"] = replay_to_id
+                        payload["reply_to_id"] = reply_to_id
                         payload["message_id"] = message_id
                     else:
                         raise Exception(f"Unknown email provider: {provider}")
