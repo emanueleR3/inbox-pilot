@@ -1,6 +1,5 @@
 """
-Main email processor that orchestrates filtering, thread management, and AI workflow routing.
-This is the central processing hub for all email messages.
+Improved EmailProcessor with structured, colored logging and better error reporting.
 """
 
 from src.filters.advanced_filter import AdvancedEmailFilter
@@ -8,335 +7,296 @@ from src.managers.thread_manager import ThreadManager
 from src.utils.attachment_service import AttachmentService
 from src.utils.email_cleaner import EmailCleaner
 from src.repositories.thread_repository import ThreadRepository
+
 from typing import Optional
 import aiohttp
+import json
 import os
+import traceback
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# ---------------------------------------------------------
+# 🔵 Utility: colored, structured logger
+# ---------------------------------------------------------
+def log_info(msg):
+    print(f"\033[96mℹ️  {msg}\033[0m")
+
+def log_success(msg):
+    print(f"\033[92m✅ {msg}\033[0m")
+
+def log_warn(msg):
+    print(f"\033[93m⚠️  {msg}\033[0m")
+
+def log_error(msg):
+    print(f"\033[91m❌ {msg}\033[0m")
+
+def log_section(title):
+    print(f"\n\033[95m🔷 --- {title} --- 🔷\033[0m")
+
+def log_debug_object(label, obj, max_chars=800):
+    """
+    Pretty-print objects (payloads, errors, responses)
+    truncated if too large.
+    """
+    try:
+        text = json.dumps(obj, indent=2, ensure_ascii=False)
+    except:
+        text = str(obj)
+
+    if len(text) > max_chars:
+        text = text[:max_chars] + " ... (truncated)"
+
+    print(f"\033[90m📦 {label}:\n{text}\033[0m")
+
+
+# ======================================================================
+#                        EMAIL PROCESSOR
+# ======================================================================
+
 class EmailProcessor:
-    """
-    Central email processor that coordinates all email processing operations.
-    Handles filtering, thread management, database operations, and AI workflow routing.
-    """
-    
+
     def __init__(self):
         self.filter = AdvancedEmailFilter()
         self.thread_manager = ThreadManager()
         self.attachment_service = AttachmentService()
         self.email_cleaner = EmailCleaner()
         self.thread_repo = ThreadRepository()
-        # Automation API endpoint configuration
-        self.automation_api_url = os.getenv("AUTOMATION_API_URL", "http://automations:8010/") + "workflows/process-email"
-    
+
+        base = os.getenv("AUTOMATION_API_URL", "http://automations:8010/")
+        self.automation_api_url = base.rstrip("/") + "/workflows/process-email"
+
+        log_info(f"[INIT] Automation API URL set to: {self.automation_api_url}")
+
+    # ==================================================================
+    #                 MAIN EMAIL PROCESSING PIPELINE
+    # ==================================================================
     async def process_message(self, email_data: dict) -> Optional[dict]:
-        """
-        Main processing method for incoming email messages.
-        
-        Flow:
-        1. Advanced filtering and thread creation
-        2. Determine AI processing need
-        3. Route to appropriate workflow
-        
-        Args:
-            email_data: Email data from listeners
-            
-        Returns:
-            Processing result or None if message was filtered out
-        """
+        log_section("PROCESSING MESSAGE")
+
         try:
-            print(f"🚀 [PROCESSOR] Processing message: {email_data.get('message_id')} from {email_data.get('from')}")
-            
-            # Step 1: Clean email content before processing
+            log_info(f"Processing message_id={email_data.get('message_id')} from={email_data.get('from')}")
+
+            # Clean body
             email_data = self.email_cleaner.clean_email_content(email_data)
-            
-            # Step 2: Apply advanced filtering
+
+            # Filter
             filter_result = await self.filter.process_message(email_data)
-            
             if not filter_result:
-                print(f"🚫 [PROCESSOR] Message filtered out")
+                log_warn("Message filtered out by AdvancedEmailFilter")
                 return None
-            
-            # Step 3: Handle the result based on filter outcome
+
             action = filter_result.get("action")
             summarizer_only = filter_result.get("summarizer_only", False)
+
             email_data["action"] = action
             email_data["summarizer_only"] = summarizer_only
-            
+
+            log_info(f"Filter decided action: {action}")
+
+            # ----------------------------------------------------------
+            # SUMMARIZER ONLY WORKFLOW
+            # ----------------------------------------------------------
             if action == "send_to_summarizer":
-                print(f"📝 [PROCESSOR] Message sent to summarizer only")
+                log_section("SUMMARIZER ONLY")
                 needs_ai = filter_result.get("needs_ai", False)
 
                 if not needs_ai:
-                    print(f"❗ [PROCESSOR] Warning: Message marked for summarizer but no AI processing needed")
-                    return {
-                        "status": "skipped",
-                        "reason": "no_ai_needed_for_summarizer",
-                        "needs_ai_processing": False
-                    }
-                
-                # Find thread_id using reply_to_id since this is a user reply
+                    log_warn("Marked for summarizer but no AI processing required")
+                    return {"status": "skipped", "reason": "no_ai_needed_for_summarizer", "needs_ai_processing": False}
+
                 reply_to_id = email_data.get("reply_to_id")
                 box_email = email_data.get("user_email")
                 thread_id = None
-                
+
                 if reply_to_id and reply_to_id.lower() != "no":
                     thread = self.thread_repo.find_thread_by_reply_to(reply_to_id, box_email)
                     if thread:
                         thread_id = thread.get("thread_id")
-                        print(f"🔍 [PROCESSOR] Found thread {thread_id} for summarizer using reply_to_id")
+                        log_success(f"Found thread_id={thread_id} for summarizer reply")
                     else:
-                        print(f"⚠️ [PROCESSOR] No thread found for reply_to_id: {reply_to_id}")
-                
+                        log_warn(f"No thread found for reply_to_id={reply_to_id}")
+
                 if not thread_id:
-                    print(f"❌ [PROCESSOR] Cannot send to summarizer without thread_id")
-                    return {
-                        "status": "skipped",
-                        "reason": "no_thread_found_for_summarizer",
-                        "needs_ai_processing": False
-                    }
-                
-                try:
-                    processed_attachments = []
-                    # Process attachments for the summarizer
-                    if thread_id and email_data.get("attachments"):
-                        print(f"📎 [PROCESSOR] Processing attachments for summarizer in thread {thread_id}")
-                        try:
-                            processed_attachments = await self.attachment_service.process_attachments(
-                                email_data, thread_id
-                            )
-                        except Exception as e:
-                            print(f"❌ [PROCESSOR] Attachment processing failed: {e}")
-                    
-                    automation_payload = self._prepare_automation_payload(
-                        email_data, {"thread_id": thread_id, "box_email": box_email}, 
-                        processed_attachments
-                    )
+                    log_error("Summarizer requested but thread_id missing — skipping.")
+                    return {"status": "skipped", "reason": "no_thread_found_for_summarizer"}
 
-                    await self.send_to_automation(automation_payload)
-                except Exception as e:
-                    print(f"❌ [PROCESSOR] Failed to send to summarizer: {e}")
-
-                return {
-                    "status": "sent_to_summarizer",
-                    "thread_id": thread_id,
-                    "needs_ai_processing": False,
-                }
-
-
-            if action == "thread_created":
-                # New thread was created
-                thread_data = filter_result.get("thread", {})
-                needs_ai = filter_result.get("needs_ai", False)
-                thread_id = thread_data.get("thread_id")
-                
-                # Process attachments for the new thread
-                if thread_id and email_data.get("attachments"):
-                    print(f"📎 [PROCESSOR] Processing attachments for new thread {thread_id}")
+                # Attachments
+                processed_attachments = []
+                if email_data.get("attachments"):
                     try:
-                        processed_attachments = await self.attachment_service.process_attachments(
-                            email_data, thread_id
-                        )
+                        processed_attachments = await self.attachment_service.process_attachments(email_data, thread_id)
+                    except Exception as e:
+                        log_error(f"Failed to process attachments: {e}")
+
+                payload = self._prepare_automation_payload(email_data, {"thread_id": thread_id, "box_email": box_email}, processed_attachments)
+
+                try:
+                    await self.send_to_automation(payload)
+                except Exception as e:
+                    log_error(f"Could not send summarizer payload: {e}")
+
+                return {"status": "sent_to_summarizer", "thread_id": thread_id}
+
+            # ----------------------------------------------------------
+            # NEW THREAD CREATED
+            # ----------------------------------------------------------
+            if action == "thread_created":
+                log_section("THREAD CREATED")
+
+                thread_data = filter_result.get("thread", {})
+                thread_id = thread_data.get("thread_id")
+                needs_ai = filter_result.get("needs_ai", False)
+
+                # Attachments
+                processed_attachments = []
+                if email_data.get("attachments"):
+                    try:
+                        processed_attachments = await self.attachment_service.process_attachments(email_data, thread_id)
                         thread_data["attachments_processed"] = len(processed_attachments)
                     except Exception as e:
-                        print(f"❌ [PROCESSOR] Attachment processing failed: {e}")
+                        log_error(f"Attachment processing error: {e}")
                         thread_data["attachments_processed"] = 0
-                
+
                 if needs_ai:
-                    print(f"🤖 [PROCESSOR] Thread created from external user - sending to AI workflow")
-                    print(f"🧵 Thread ID: {thread_data.get('thread_id')}")
-                    print(f"📧 Subject: {thread_data.get('subject')}")
-                    print(f"👤 Sender: {thread_data.get('sender_email')}")
-                    print(f"📮 Mailbox: {thread_data.get('box_email')}")
-                    
-                    # Prepare and send automation payload
-                    automation_payload = self._prepare_automation_payload(
-                        email_data, thread_data, processed_attachments if 'processed_attachments' in locals() else []
-                    )
-                    await self.send_to_automation(automation_payload)
+                    log_success(f"Thread {thread_id} requires AI processing")
+
+                    payload = self._prepare_automation_payload(email_data, thread_data, processed_attachments)
+                    await self.send_to_automation(payload)
                 else:
-                    print(f"👤 [PROCESSOR] Thread created from user - no AI processing needed")
-                
-                return {
-                    "status": "thread_created",
-                    "thread_id": thread_data.get("thread_id"),
-                    "needs_ai_processing": needs_ai,
-                    "attachments_processed": thread_data.get("attachments_processed", 0)
-                }
-            
-            elif action == "process":
-                # Message needs further processing
-                print(f"📋 [PROCESSOR] Message ready for AI processing")
-                # TODO: Implement AI workflow routing
-                return {
-                    "status": "ready_for_ai",
-                    "needs_ai_processing": filter_result.get("needs_ai", True)
-                }
-            
-            elif action == "thread_updated":
-                # Existing thread was updated with new message
+                    log_info(f"Thread {thread_id} created but no AI processing required")
+
+                return {"status": "thread_created", "thread_id": thread_id}
+
+            # ----------------------------------------------------------
+            # THREAD UPDATED
+            # ----------------------------------------------------------
+            if action == "thread_updated":
+                log_section("THREAD UPDATED")
+
                 thread_id = filter_result.get("thread_id")
-                
-                # Process attachments for the updated thread
-                if thread_id and email_data.get("attachments"):
-                    print(f"📎 [PROCESSOR] Processing attachments for updated thread {thread_id}")
+                processed_attachments = []
+
+                if email_data.get("attachments"):
                     try:
-                        processed_attachments = await self.attachment_service.process_attachments(
-                            email_data, thread_id
-                        )
-                        attachments_count = len(processed_attachments)
+                        processed_attachments = await self.attachment_service.process_attachments(email_data, thread_id)
                     except Exception as e:
-                        print(f"❌ [PROCESSOR] Attachment processing failed: {e}")
-                        attachments_count = 0
-                else:
-                    attachments_count = 0
-                
-                print(f"📝 [PROCESSOR] Thread {thread_id} updated with reply - sending to AI workflow")
-                
-                # Prepare and send automation payload for thread update
-                automation_payload = self._prepare_automation_payload(
-                    email_data, {"thread_id": thread_id, "box_email": email_data.get("user_email")}, 
-                    processed_attachments if 'processed_attachments' in locals() else []
-                )
-                await self.send_to_automation(automation_payload)
-                
-                return {
-                    "status": "thread_updated",
-                    "thread_id": thread_id,
-                    "needs_ai_processing": True,
-                    "attachments_processed": attachments_count
-                }
-            
-            elif action == "human_response_marked":
-                # Human response was marked for thread
+                        log_error(f"Attachment processing error: {e}")
+
+                payload = self._prepare_automation_payload(email_data, {"thread_id": thread_id, "box_email": email_data.get("user_email")}, processed_attachments)
+                await self.send_to_automation(payload)
+
+                return {"status": "thread_updated", "thread_id": thread_id}
+
+            # ----------------------------------------------------------
+            # HUMAN RESPONSE
+            # ----------------------------------------------------------
+            if action == "human_response_marked":
+                log_section("HUMAN RESPONSE REQUIRED")
                 thread_id = filter_result.get("thread_id")
-                print(f"👤 [PROCESSOR] Human response marked for thread {thread_id}")
-                # TODO: Send notification, update summary and category
-                return {
-                    "status": "human_response_needed",
-                    "thread_id": thread_id,
-                    "needs_ai_processing": False
-                }
-            
-            elif action == "skip":
-                # Message should be skipped (duplicate)
-                reason = filter_result.get("reason", "unknown")
-                print(f"🚫 [PROCESSOR] Message skipped: {reason}")
-                return {
-                    "status": "skipped",
-                    "reason": reason,
-                    "needs_ai_processing": False
-                }
-            
-            else:
-                print(f"❓ [PROCESSOR] Unknown filter result action: {action}")
-                return None
-                
-        except Exception as e:
-            print(f"❌ [PROCESSOR] Error processing message: {e}")
+                return {"status": "human_response_needed", "thread_id": thread_id}
+
+            # ----------------------------------------------------------
+            # SKIPPED
+            # ----------------------------------------------------------
+            if action == "skip":
+                log_warn(f"Message skipped: {filter_result.get('reason')}")
+                return {"status": "skipped", "reason": filter_result.get("reason")}
+
+            log_warn(f"Unknown action returned by filter: {action}")
             return None
-    
+
+        except Exception as e:
+            log_error("Fatal error in EmailProcessor:")
+            traceback.print_exc()
+            return None
+
+    # ==================================================================
+    #                    SEND TO AUTOMATION SERVICE
+    # ==================================================================
     async def send_to_automation(self, automation_payload: dict) -> bool:
-        """
-        Send automation payload to automations module via HTTP.
-        
-        Args:
-            automation_payload: Complete automation payload dictionary
-            
-        Returns:
-            #TODO
-        """
+        log_section("SENDING TO AUTOMATION")
+
+        log_debug_object("Payload", automation_payload)
+
         try:
-            print(f"📤 [PROCESSOR] Sending to automation API: {self.automation_api_url}")
-            print(f"🧵 Thread ID: {automation_payload.get('thread_id')}")
-            print(f"📦 [PAYLOAD] {automation_payload}")  # Log del payload completo
-            
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.automation_api_url,
                     json=automation_payload,
                     timeout=aiohttp.ClientTimeout(total=30)
-                ) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        print(f"✅ [PROCESSOR] Successfully sent to automation API")
-                        print(f"📋 Response: {result.get('status')} - {result.get('message')}")
+                ) as resp:
+
+                    text = await resp.text()
+
+                    if resp.status == 200:
+                        log_success("Automation API accepted payload")
                         return True
-                    else:
-                        error_text = await response.text()
-                        print(f"❌ [PROCESSOR] Automation API error ({response.status}): {error_text}")
-                        return False
-                
+
+                    log_error(f"Automation API returned error {resp.status}")
+                    print(text)
+                    return False
+
         except aiohttp.ClientError as e:
-            print(f"❌ [PROCESSOR] HTTP request failed: {e}")
+            log_error(f"HTTP client error: {e}")
             return False
         except Exception as e:
-            print(f"❌ [PROCESSOR] Unexpected error sending to automation: {e}")
+            log_error(f"Unexpected send_to_automation error: {e}")
+            traceback.print_exc()
             return False
-    
+
+    # ==================================================================
+    #                  PREPARE AUTOMATION PAYLOAD
+    # ==================================================================
     def _prepare_automation_payload(self, email_data: dict, thread_data: dict, processed_attachments: list) -> dict:
-        """
-        Prepare payload for automation service with all thread information.
-        
-        Args:
-            email_data: Original email data
-            thread_data: Thread information (must contain thread_id)
-            processed_attachments: List of processed attachments with IDs
-            
-        Returns:
-            Complete automation payload dictionary
-        """
-        # Extract attachment IDs from processed attachments
-        attachment_ids = []
-        for attachment in processed_attachments:
-            if attachment.get("attachment_id"):
-                attachment_ids.append(attachment["attachment_id"])
-        
-        # Get full thread data from database to retrieve category, subcategory, extended_summary
+
+        attachment_ids = [a["attachment_id"] for a in processed_attachments if a.get("attachment_id")]
+
         thread_id = thread_data.get("thread_id")
-        full_thread_data = None
-        
-        if thread_id:
-            try:
-                full_thread_data = self.thread_repo.get_thread_by_id(thread_id)
-            except Exception as e:
-                print(f"⚠️ [PROCESSOR] Failed to retrieve full thread data: {e}")
-        
-        # Extract thread fields with fallbacks
         category = None
         subcategory = None
         extended_summary = None
         has_attachments = len(attachment_ids) > 0
-        
-        if full_thread_data:
-            category = full_thread_data.get("category")
-            subcategory = full_thread_data.get("subcategory")
-            extended_summary = full_thread_data.get("extended_summary")
-            has_attachments = full_thread_data.get("has_attachments", has_attachments)
-        
-        # Build complete automation payload
-        automation_payload = {
+
+        # Load full thread metadata
+        if thread_id:
+            try:
+                full = self.thread_repo.get_thread_by_id(thread_id)
+                if full:
+                    category = full.get("category")
+                    subcategory = full.get("subcategory")
+                    extended_summary = full.get("extended_summary")
+                    has_attachments = full.get("has_attachments", has_attachments)
+            except Exception as e:
+                log_warn(f"Could not load thread metadata: {e}")
+
+        payload = {
             "thread_id": thread_id,
             "message_id": email_data.get("message_id"),
-            "microsoft_message_id": email_data.get("microsoft_message_id"),  # Microsoft Graph internal ID for replies
+            "microsoft_message_id": email_data.get("microsoft_message_id"),
             "reply_to_id": email_data.get("reply_to_id", "no"),
             "box_email": thread_data.get("box_email") or email_data.get("user_email"),
+
             "from": email_data.get("from"),
             "to": email_data.get("to"),
             "cc": email_data.get("cc"),
             "subject": email_data.get("subject"),
+
+            "body": email_data.get("body_text", email_data.get("body", "")),
+            "provider": email_data.get("provider"),
+
             "subcategory": subcategory,
             "category": category,
-            "body": email_data.get("body_text", email_data.get("body", "")),  # Use cleaned body first, fallback to original
-            "provider": email_data.get("provider"),
+            "extended_summary": extended_summary,
+
             "attachment_ids": attachment_ids,
             "has_attachments": has_attachments,
-            "extended_summary": extended_summary,
+
             "no_reply": email_data.get("no_reply", False),
             "action": email_data.get("action"),
             "summarizer_only": email_data.get("summarizer_only", False),
-            "original_thread_id": email_data.get("original_thread_id", None)
+            "original_thread_id": email_data.get("original_thread_id"),
         }
-        
-        return automation_payload
+
+        return payload

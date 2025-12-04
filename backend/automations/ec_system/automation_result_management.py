@@ -909,7 +909,7 @@ def process_automation_result(workflow_result: dict):
                         payload["smtp_server"] = email_service_data.get("smtp_server")
                         payload["smtp_port"] = email_service_data.get("smtp_port")
                         payload["smtp_email"] = box_email
-                        payload["hashed_password"] = email_service_data.get("hashed_password")
+                        payload["password"] = email_service_data.get("hashed_password")
                         payload["reply_to_id"] = reply_to_id
                         payload["message_id"] = message_id
                     else:
