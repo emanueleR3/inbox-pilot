@@ -302,7 +302,7 @@ class SendEmailService:
         smtp_port: int,
         smtp_server: str,
         smtp_email: str,
-        smtp_password: str,
+        hashed_password: str,
         reply_to_id: Optional[str] = None,
         message_id: Optional[str] = None
     ) -> dict:
@@ -351,7 +351,7 @@ class SendEmailService:
             context = ssl.create_default_context()
 
             print("[DEBUG-SERVICE] Decrypting password...")
-            password = decrypt(smtp_password, "pass")
+            password = decrypt(hashed_password, "pass")
             print("[DEBUG-SERVICE] Password decrypted (hidden)")
 
             if not password:

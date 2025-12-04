@@ -68,7 +68,7 @@ class SendEmailController:
             smtp_port = req.get("smtp_port")
             smtp_server = req.get("smtp_server")
             smtp_email = req.get("smtp_email")
-            smtp_password = req.get("smtp_password")
+            hashed_password = req.get("hashed_password")
 
             if not email:   
                 raise ValueError("Email is required")
@@ -82,7 +82,7 @@ class SendEmailController:
                 raise ValueError("Smtp server is required")
             if not smtp_email:
                 raise ValueError("Smtp email is required")
-            if not smtp_password:
+            if not hashed_password:
                 raise ValueError("Smtp password is required")
             
             print("[DEBUG CONTROLLER]- "+email)
@@ -91,7 +91,7 @@ class SendEmailController:
             print("[DEBUG CONTROLLER]- "+smtp_port)
             print("[DEBUG CONTROLLER]- "+smtp_server)
             print("[DEBUG CONTROLLER]- "+smtp_email)
-            print("[DEBUG CONTROLLER]- "+smtp_password)
+            print("[DEBUG CONTROLLER]- "+hashed_password)
 
             reply_to_id = req.get("reply_to_id")
             message_id = req.get("message_id")
@@ -100,7 +100,7 @@ class SendEmailController:
             print("[DEBUG CONTROLLER]- "+message_id)
 
             return self.send_email_service.send_email_smtp(
-                email, subject, body, smtp_port, smtp_server, smtp_email, smtp_password, reply_to_id, message_id
+                email, subject, body, smtp_port, smtp_server, smtp_email, hashed_password, reply_to_id, message_id
             )
             
         except Exception as e:
