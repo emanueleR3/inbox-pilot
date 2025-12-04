@@ -10,6 +10,8 @@ from db_client import (
 )
 import os
 import requests
+import aiohttp
+import asyncio
 from .services.notification_client import (
     send_high_priority_notification, 
     send_low_confidence_notification,
@@ -189,6 +191,43 @@ def _get_timestamp_in_user_timezone(box_email: str) -> str:
         print(f"❌ [TIMESTAMP] Error converting timestamp for {box_email}: {e}")
         # Fallback to UTC
         return datetime.now(timezone.utc).isoformat()
+
+
+async def _send_email_async(endpoint: str, payload: dict, timeout: int = 120) -> dict:
+    """
+    Send email asynchronously with timeout to prevent blocking on slow SMTP servers.
+    
+    Args:
+        endpoint: URL endpoint for sending email
+        payload: Email data payload
+        timeout: Maximum time to wait for response in seconds (default 120s)
+        
+    Returns:
+        dict: Response with success status and message_id
+    """
+    try:
+        print(f"📧 [ASYNC] Sending email to {endpoint} with timeout={timeout}s")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                endpoint,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=timeout)
+            ) as response:
+                result = await response.json()
+                
+                if response.status != 200:
+                    raise Exception(f"HTTP {response.status}: {result}")
+                
+                print(f"✅ [ASYNC] Email sent successfully")
+                return result
+                
+    except asyncio.TimeoutError:
+        print(f"⏱️ [ASYNC] Timeout after {timeout}s sending email")
+        raise Exception(f"Email sending timed out after {timeout}s")
+    except Exception as e:
+        print(f"❌ [ASYNC] Error sending email: {e}")
+        raise
 
 
 def process_automation_result(workflow_result: dict):
@@ -915,11 +954,9 @@ def process_automation_result(workflow_result: dict):
                     else:
                         raise Exception(f"Unknown email provider: {provider}")
 
-                    # Send request
-                    response = requests.post(endpoint, json=payload)
-                    response.raise_for_status()
+                    # Send request asynchronously
+                    result = asyncio.run(_send_email_async(endpoint, payload, timeout=120))
                     
-                    result = response.json()
                     new_message_id = result.get("message_id") # TODO da inserire
                     
                     if not result.get("success"):
