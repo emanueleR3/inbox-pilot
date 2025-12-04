@@ -218,20 +218,21 @@ class EmailProcessor:
                 ) as response:
 
                     text = await response.text()
+                    log(f"[PROCESSOR] Automation API responded: status={response.status}, text={text}")
 
                     if response.status == 200:
-                        log("[PROCESSOR] Automation API responded with 200 OK")
+                        log("[PROCESSOR] Successfully sent to automation API")
                         return True
 
                     log(f"[PROCESSOR] Automation API error {response.status}: {text}")
                     return False
 
         except aiohttp.ClientError as e:
-            log(f"[PROCESSOR] ClientError sending to automation: {e}")
+            log(f"[PROCESSOR] HTTP ClientError sending to automation: {type(e).__name__}: {e}")
             return False
 
         except Exception as e:
-            log(f"[PROCESSOR] Unexpected error sending to automation: {e}")
+            log(f"[PROCESSOR] Unexpected error sending to automation: {type(e).__name__}: {repr(e)}")
             return False
     
     def _prepare_automation_payload(self, email_data: dict, thread_data: dict, processed_attachments: list) -> dict:
