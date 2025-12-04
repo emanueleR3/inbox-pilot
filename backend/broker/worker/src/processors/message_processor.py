@@ -214,7 +214,7 @@ class EmailProcessor:
                 async with session.post(
                     self.automation_api_url,
                     json=automation_payload,
-                    timeout=aiohttp.ClientTimeout(total=30)
+                    timeout=aiohttp.ClientTimeout(total=180)
                 ) as response:
 
                     text = await response.text()
