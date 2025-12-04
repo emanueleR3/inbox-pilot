@@ -307,90 +307,133 @@ class SendEmailService:
         message_id: Optional[str] = None
     ) -> dict:
         try:
+            print("🔵 [SERVICE] ---- START send_email_smtp ----")
+
+            print(f"🔵 [SERVICE] email={email}")
+            print(f"🔵 [SERVICE] subject={subject}")
+            print(f"🔵 [SERVICE] body_length={len(body) if body else 0}")
+            print(f"🔵 [SERVICE] smtp_port={smtp_port}")
+            print(f"🔵 [SERVICE] smtp_server={smtp_server}")
+            print(f"🔵 [SERVICE] smtp_email={smtp_email}")
+            print(f"🔵 [SERVICE] reply_to_id={reply_to_id}")
+            print(f"🔵 [SERVICE] message_id={message_id}")
+            print("🔵 [SERVICE] hashed_password received (not printed)")
+
             sender_email = smtp_email
 
             message = MIMEMultipart("alternative")
             message["From"] = sender_email
             message["To"] = email
             message["Subject"] = subject
-        
-            # 🆕 Genero Message-ID RFC e lo aggiungo all'header
+
             msg_id = make_msgid()
             message["Message-ID"] = msg_id
+            print(f"🔵 [SERVICE] Generated RFC Message-ID={msg_id}")
 
             if reply_to_id:
-                # Ensure reply_to_id has angle brackets for RFC compliance
                 rfc_reply_to_id = reply_to_id if reply_to_id.startswith('<') else f"<{reply_to_id}>"
                 message["In-Reply-To"] = rfc_reply_to_id
+                print(f"🔵 [SERVICE] In-Reply-To={rfc_reply_to_id}")
+
             if message_id:
-                # Ensure message_id has angle brackets for RFC compliance
                 rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
                 message["References"] = rfc_message_id
+                print(f"🔵 [SERVICE] References={rfc_message_id}")
 
-            # HTML o testo
+            # HTML or text
             if body.strip().startswith("<"):
+                print("🔵 [SERVICE] Body detected as HTML")
                 message.attach(MIMEText(body, "html", "utf-8"))
             else:
+                print("🔵 [SERVICE] Body detected as TEXT")
                 message.attach(MIMEText(body, "plain", "utf-8"))
 
-            # SSL/STARTTLS
-            context = ssl.create_default_context()
-
+            # Decrypt password
+            print("🔵 [SERVICE] Decrypting password...")
             password = decrypt(hashed_password, "pass")
+            print(f"🔵 [SERVICE] Password decrypted: {'OK' if password else 'FAILED'}")
+
             if not password:
                 raise ValueError("Failed to decrypt hashed password")
 
+            context = ssl.create_default_context()
+
+            print(f"🔵 [SERVICE] Selecting SMTP flow for port {smtp_port}...")
+
             if smtp_port == 465:
+                print("🟣 [SERVICE] Connecting with SMTP_SSL...")
                 with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
+                    print("🟣 [SERVICE] Connected via SSL")
                     server.ehlo()
+                    print("🟣 [SERVICE] Logging in...")
                     server.login(sender_email, password)
+                    print("🟣 [SERVICE] Login OK")
                     server.send_message(message)
+                    print("🟣 [SERVICE] Message sent via SSL")
 
             elif smtp_port == 587:
+                print("🟠 [SERVICE] Connecting on port 587 with STARTTLS...")
                 with smtplib.SMTP(smtp_server, smtp_port) as server:
                     server.ehlo()
+                    print("🟠 [SERVICE] Starting TLS...")
                     server.starttls(context=context)
                     server.ehlo()
+                    print("🟠 [SERVICE] Logging in...")
                     server.login(sender_email, password)
+                    print("🟠 [SERVICE] Login OK")
                     server.send_message(message)
+                    print("🟠 [SERVICE] Message sent via STARTTLS")
 
             elif smtp_port == 25:
+                print("🟢 [SERVICE] Connecting on port 25...")
                 with smtplib.SMTP(smtp_server, smtp_port) as server:
                     server.ehlo()
                     try:
+                        print("🟢 [SERVICE] Trying STARTTLS (optional)...")
                         server.starttls(context=context)
                         server.ehlo()
-                    except:
-                        pass
+                        print("🟢 [SERVICE] STARTTLS OK")
+                    except Exception as e_tls:
+                        print(f"🟡 [SERVICE] STARTTLS not available: {e_tls}")
 
                     try:
+                        print("🟢 [SERVICE] Logging in (optional)...")
                         server.login(sender_email, password)
-                    except:
-                        pass
+                        print("🟢 [SERVICE] Login OK")
+                    except Exception as e_login:
+                        print(f"🟡 [SERVICE] Login failed or not required: {type(e_login).__name__}: {e_login}")
 
+                    print("🟢 [SERVICE] Sending message...")
                     server.send_message(message)
+                    print("🟢 [SERVICE] Message sent via port 25")
 
             else:
+                print(f"🔴 [SERVICE] Unsupported port: {smtp_port}")
                 return {
                     "success": False,
                     "message": f"Unsupported SMTP port {smtp_port}. Use 465 / 587 / 25.",
                     "message_id": None
                 }
 
-            # Clean message_id by removing angle brackets
             cleaned_message_id = _clean_message_id(msg_id)
+            print(f"🟩 [SERVICE] Email sent successfully. Cleaned Message-ID={cleaned_message_id}")
 
             return {
                 "success": True,
                 "message": "Email sent",
-                "message_id": cleaned_message_id,     # RFC Message-ID (cleaned)
-                "notification_id": cleaned_message_id  # Per uniformità con gli altri metodi
+                "message_id": cleaned_message_id,
+                "notification_id": cleaned_message_id
             }
 
         except Exception as e:
+            print("🔴 [SERVICE] ERROR sending email!")
+            print(f"🔴 [SERVICE] Exception type: {type(e).__name__}")
+            print(f"🔴 [SERVICE] Exception message: {str(e)}")
+            print(f"🔴 [SERVICE] Exception repr: {repr(e)}")
+
             return {
                 "success": False,
-                "message": str(e),
+                "message": str(e) or repr(e),
                 "message_id": None,
                 "notification_id": None
             }

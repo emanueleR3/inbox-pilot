@@ -88,6 +88,17 @@ class SendEmailController:
             reply_to_id = req.get("reply_to_id")
             message_id = req.get("message_id")
 
+            print(f"[DEBUG CONTROLLER]- email={email}")
+            print(f"[DEBUG CONTROLLER]- subject={subject}")
+            print(f"[DEBUG CONTROLLER]- body={body}")
+            print(f"[DEBUG CONTROLLER]- smtp_port={smtp_port}")
+            print(f"[DEBUG CONTROLLER]- smtp_server={smtp_server}")
+            print(f"[DEBUG CONTROLLER]- smtp_email={smtp_email}")
+            print(f"[DEBUG CONTROLLER]- hashed_password={hashed_password}")
+
+            print(f"[DEBUG CONTROLLER]- reply_to_id={reply_to_id}")
+            print(f"[DEBUG CONTROLLER]- message_id={message_id}")
+
             return self.send_email_service.send_email_smtp(
                 email, subject, body, smtp_port, smtp_server, smtp_email, hashed_password, reply_to_id, message_id
             )
