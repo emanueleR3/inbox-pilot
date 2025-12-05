@@ -1066,14 +1066,24 @@ ESTRAI LE SEGUENTI INFORMAZIONI:
    - Informazioni rilevanti che non rientrano negli altri campi
    - Se non ci sono note particolari, imposta a None
 
-8. **already_scheduled**: Booleano che indica se l'appuntamento è già stato schedulato
+8. **already_scheduled**: Booleano che indica se l'appuntamento richiede azioni sul calendario
    - Analizza l'extended_summary per determinare questo campo
-   - True: se dal riassunto conversazione si evince che l'appuntamento è GIÀ STATO SCHEDULATO 
-     (es. è stata ricevuta conferma di prenotazione, event_code presente, calendario già aggiornato)
-     In questo caso l'utente sta esprimendo una conferma finale, ma NON è necessario alcun intervento
-   - False: se dal riassunto conversazione si evince che l'appuntamento NON è ancora stato schedulato
-     (es. sono stati proposti degli slot, l'utente sta confermando uno slot per completare la prenotazione)
-     In questo caso è necessario procedere con lo scheduling effettivo
+   - ATTENZIONE: Se l'utente sta confermando una NUOVA DATA per RIPROGRAMMARE un appuntamento esistente,
+     questo NON è "already_scheduled" - è una NUOVA prenotazione che sostituisce la precedente!
+   
+   - True SOLO SE: l'utente sta semplicemente confermando/ringraziando per un appuntamento
+     che è già stato creato nel calendario e NON necessita di modifiche
+     (es. "Perfetto, grazie per la conferma" dopo che l'evento è già stato schedulato)
+   
+   - False SE:
+     * L'utente sta confermando uno slot tra quelli proposti per una NUOVA prenotazione
+     * L'utente sta confermando una NUOVA DATA/ORA per RIPROGRAMMARE un appuntamento esistente
+       (anche se esiste un event_code - l'evento va modificato/riprogrammato!)
+     * Dall'extended_summary si evince che si sta cercando di MODIFICARE/RIPROGRAMMARE un evento
+     * L'utente ha richiesto di spostare/cambiare un appuntamento e sta confermando la nuova data
+   
+   REGOLA CHIAVE: Se nella conversazione si parla di "modificare", "spostare", "riprogrammare",
+   "cambiare data" di un appuntamento, e l'utente conferma una nuova data → already_scheduled = False
 
 9. **event_code**: Codice evento a 6 cifre (opzionale)
    - Cerca nella conversazione (email corrente e extended_summary) se è presente un codice evento
@@ -1140,14 +1150,24 @@ EXTRACT THE FOLLOWING INFORMATION:
    - Relevant information that doesn't fit in other fields
    - If no particular notes, set to None
 
-8. **already_scheduled**: Boolean indicating if the appointment has already been scheduled
+8. **already_scheduled**: Boolean indicating if the appointment requires calendar actions
    - Analyze the extended_summary to determine this field
-   - True: if from the conversation summary it appears the appointment is ALREADY SCHEDULED
-     (e.g., booking confirmation received, event_code present, calendar already updated)
-     In this case the user is expressing a final confirmation, but NO action is needed
-   - False: if from the conversation summary it appears the appointment is NOT YET scheduled
-     (e.g., slots were proposed, user is confirming a slot to complete the booking)
-     In this case it's necessary to proceed with actual scheduling
+   - WARNING: If the user is confirming a NEW DATE to RESCHEDULE an existing appointment,
+     this is NOT "already_scheduled" - it's a NEW booking that replaces the previous one!
+   
+   - True ONLY IF: the user is simply confirming/thanking for an appointment
+     that has already been created in the calendar and does NOT need modifications
+     (e.g., "Perfect, thanks for the confirmation" after the event is already scheduled)
+   
+   - False IF:
+     * The user is confirming a slot among those proposed for a NEW booking
+     * The user is confirming a NEW DATE/TIME to RESCHEDULE an existing appointment
+       (even if an event_code exists - the event needs to be modified/rescheduled!)
+     * From extended_summary it appears they are trying to MODIFY/RESCHEDULE an event
+     * The user requested to move/change an appointment and is confirming the new date
+   
+   KEY RULE: If the conversation mentions "modify", "move", "reschedule",
+   "change date" of an appointment, and user confirms a new date → already_scheduled = False
 
 9. **event_code**: 6-digit event code (optional)
    - Search in the conversation (current email and extended_summary) if an event code is present
@@ -1919,6 +1939,13 @@ ISTRUZIONI PER LA REVISIONE:
    - Verifica solo che gli slot scritti nell'email corrispondano a quelli nel "CONTESTO APPUNTAMENTO"
    - Segnala errore SOLO se l'utente ha chiesto esplicitamente gli orari di apertura E l'email non li fornisce
 
+6. CRITICO - AUTOMAZIONI GIÀ ESEGUITE:
+   - Se nel "CONTESTO APPUNTAMENTO" è indicato che un'azione è stata eseguita con SUCCESSO (es. "APPUNTAMENTO RIPROGRAMMATO CON SUCCESSO", "APPUNTAMENTO PRENOTATO CON SUCCESSO", "APPUNTAMENTO CANCELLATO CON SUCCESSO"), l'automazione È GIÀ STATA COMPLETATA
+   - In questi casi, l'email che CONFERMA l'azione eseguita è CORRETTA
+   - NON segnalare come errore frasi come "è stato riprogrammato", "è stato prenotato", "è stato cancellato" - queste sono CONFERME di azioni già avvenute
+   - NON suggerire di cambiare "è stato riprogrammato" con "sarà elaborato" o simili - l'azione È GIÀ STATA ESEGUITA
+   - Se l'automazione è riuscita, l'email deve comunicare CERTEZZA, non dubbi o attese
+
 OUTPUT RICHIESTO:
 
 1. **needs_review** (bool):
@@ -1995,6 +2022,13 @@ REVIEW INSTRUCTIONS:
    - Proposed slots are specific and correct availabilities, they MUST NOT be modified to align with general opening hours
    - Only verify that slots written in the email match those in "APPOINTMENT CONTEXT"
    - Flag as error ONLY if the user explicitly asked for opening hours AND the email doesn't provide them
+
+6. CRITICAL - ALREADY EXECUTED AUTOMATIONS:
+   - If "APPOINTMENT CONTEXT" indicates that an action was executed SUCCESSFULLY (e.g., "APPOINTMENT RESCHEDULED SUCCESSFULLY", "APPOINTMENT BOOKED SUCCESSFULLY", "APPOINTMENT CANCELLED SUCCESSFULLY"), the automation HAS ALREADY BEEN COMPLETED
+   - In these cases, the email that CONFIRMS the executed action is CORRECT
+   - DO NOT flag as error phrases like "has been rescheduled", "has been booked", "has been cancelled" - these are CONFIRMATIONS of actions that already happened
+   - DO NOT suggest changing "has been rescheduled" to "will be processed" or similar - the action HAS ALREADY BEEN EXECUTED
+   - If the automation succeeded, the email must communicate CERTAINTY, not doubts or expectations
 
 REQUIRED OUTPUT:
 

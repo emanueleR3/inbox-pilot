@@ -1725,6 +1725,22 @@ class LLMClient:
             if not check_event_code_exists(event_code):
                 break
         
+        # Extract sender email from created_by (format: "Name <email>" or just "email")
+        sender_email = None
+        if created_by:
+            import re
+            email_match = re.search(r'<([^>]+)>', created_by)
+            if email_match:
+                sender_email = email_match.group(1)
+            elif '@' in created_by:
+                sender_email = created_by.strip()
+        
+        # Add sender email to attendees list so they get notified
+        final_attendees = list(attendees) if attendees else []
+        if sender_email and sender_email not in final_attendees:
+            final_attendees.append(sender_email)
+            print(f"📧 Added sender {sender_email} to attendees for notification")
+        
         # Create event in external calendar
         provider_event_id = None
         if calendar_provider == "google":
@@ -1733,7 +1749,7 @@ class LLMClient:
                 title=title_of_event,
                 start_time=start_dt,
                 end_time=end_dt,
-                attendees=attendees,
+                attendees=final_attendees if final_attendees else None,
                 location=place,
                 description=additional_notes
             )
@@ -1744,7 +1760,7 @@ class LLMClient:
                 title=title_of_event,
                 start_time=start_dt,
                 end_time=end_dt,
-                attendees=attendees,
+                attendees=final_attendees if final_attendees else None,
                 location=place,
                 description=additional_notes
             )
@@ -1889,6 +1905,23 @@ class LLMClient:
             print("❌ Overlap detected with existing calendar events")
             return {'scheduled': False, 'overlap': True, 'invalid_event_code': False, 'proposed_slots': None}
         
+        # Extract sender email from event.created_by (format: "Name <email>" or just "email")
+        sender_email = None
+        created_by = event.get('created_by', '')
+        if created_by:
+            import re
+            email_match = re.search(r'<([^>]+)>', created_by)
+            if email_match:
+                sender_email = email_match.group(1)
+            elif '@' in created_by:
+                sender_email = created_by.strip()
+        
+        # Add sender email to attendees list so they get notified
+        final_attendees = list(new_attendees) if new_attendees else []
+        if sender_email and sender_email not in final_attendees:
+            final_attendees.append(sender_email)
+            print(f"📧 Added sender {sender_email} to attendees for notification")
+        
         # Update event in external calendar
         updated_provider_event_id = None
         if calendar_provider == "google":
@@ -1898,7 +1931,7 @@ class LLMClient:
                 title=new_title,
                 start_time=start_dt,
                 end_time=end_dt,
-                attendees=new_attendees,
+                attendees=final_attendees if final_attendees else None,
                 location=new_place,
                 description=additional_notes
             )
@@ -1909,7 +1942,7 @@ class LLMClient:
                 title=new_title,
                 start_time=start_dt,
                 end_time=end_dt,
-                attendees=new_attendees,
+                attendees=final_attendees if final_attendees else None,
                 location=new_place,
                 description=additional_notes
             )
@@ -2277,12 +2310,29 @@ class LLMClient:
         """Format appointment context for Italian reviewer prompt."""
         lines = []
         
-        if ctx.get("scheduled"):
-            lines.append(f"- Appuntamento prenotato: Sì")
+        # Handle rescheduled appointments
+        if ctx.get("rescheduled"):
+            lines.append(f"- ⚠️ APPUNTAMENTO RIPROGRAMMATO CON SUCCESSO: Sì")
+            lines.append(f"  IMPORTANTE: L'automazione di riprogrammazione è stata ESEGUITA con successo.")
+            lines.append(f"  L'email DEVE confermare che l'appuntamento è stato riprogrammato, NON che 'sarà elaborato'.")
+            if ctx.get("change_event_code"):
+                lines.append(f"- Codice evento originale modificato: {ctx['change_event_code']}")
+            if ctx.get("event_code"):
+                lines.append(f"- Nuovo codice evento: {ctx['event_code']}")
+        elif ctx.get("scheduled"):
+            lines.append(f"- ⚠️ APPUNTAMENTO PRENOTATO CON SUCCESSO: Sì")
+            lines.append(f"  IMPORTANTE: L'automazione di prenotazione è stata ESEGUITA con successo.")
+            lines.append(f"  L'email DEVE confermare che l'appuntamento è stato prenotato, NON che 'sarà elaborato'.")
             if ctx.get("event_code"):
                 lines.append(f"- Codice evento: {ctx['event_code']}")
         else:
             lines.append(f"- Appuntamento prenotato: No")
+        
+        # Handle cancelled appointments
+        if ctx.get("cancelled"):
+            lines.append(f"- ⚠️ APPUNTAMENTO CANCELLATO CON SUCCESSO: Sì")
+            lines.append(f"  IMPORTANTE: L'automazione di cancellazione è stata ESEGUITA con successo.")
+            lines.append(f"  L'email DEVE confermare che l'appuntamento è stato cancellato.")
         
         if ctx.get("proposed_slots"):
             lines.append(f"- Slot proposti dal sistema di scheduling (disponibilità reali del calendario):")
@@ -2305,12 +2355,29 @@ class LLMClient:
         """Format appointment context for English reviewer prompt."""
         lines = []
         
-        if ctx.get("scheduled"):
-            lines.append(f"- Appointment booked: Yes")
+        # Handle rescheduled appointments
+        if ctx.get("rescheduled"):
+            lines.append(f"- ⚠️ APPOINTMENT RESCHEDULED SUCCESSFULLY: Yes")
+            lines.append(f"  IMPORTANT: The rescheduling automation was EXECUTED successfully.")
+            lines.append(f"  The email MUST confirm that the appointment was rescheduled, NOT that it 'will be processed'.")
+            if ctx.get("change_event_code"):
+                lines.append(f"- Original event code modified: {ctx['change_event_code']}")
+            if ctx.get("event_code"):
+                lines.append(f"- New event code: {ctx['event_code']}")
+        elif ctx.get("scheduled"):
+            lines.append(f"- ⚠️ APPOINTMENT BOOKED SUCCESSFULLY: Yes")
+            lines.append(f"  IMPORTANT: The booking automation was EXECUTED successfully.")
+            lines.append(f"  The email MUST confirm that the appointment was booked, NOT that it 'will be processed'.")
             if ctx.get("event_code"):
                 lines.append(f"- Event code: {ctx['event_code']}")
         else:
             lines.append(f"- Appointment booked: No")
+        
+        # Handle cancelled appointments
+        if ctx.get("cancelled"):
+            lines.append(f"- ⚠️ APPOINTMENT CANCELLED SUCCESSFULLY: Yes")
+            lines.append(f"  IMPORTANT: The cancellation automation was EXECUTED successfully.")
+            lines.append(f"  The email MUST confirm that the appointment was cancelled.")
         
         if ctx.get("proposed_slots"):
             lines.append(f"- Slots proposed by scheduling system (actual calendar availability):")

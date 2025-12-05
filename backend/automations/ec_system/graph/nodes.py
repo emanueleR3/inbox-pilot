@@ -1888,11 +1888,13 @@ def reviewer_node(state):
         if subcategory_value in appointment_subcategories:
             appointment_context = {
                 "scheduled": state.get("appointment_scheduled"),
+                "rescheduled": state.get("appointment_scheduled") and subcategory_value in ["REQUEST_APPOINTMENT_CHANGE", "CONFIRM_APPOINTMENT"] and state.get("change_event_code"),
                 "event_code": state.get("appointment_event_code"),
                 "proposed_slots": state.get("appointment_proposed_slots"),
                 "overlap": state.get("appointment_overlap"),
                 "change_event_code": state.get("change_event_code"),
                 "cancellation_event_code": state.get("cancellation_event_code"),
+                "cancelled": state.get("cancellation_event_code") and subcategory_value == "CANCEL_APPOINTMENT" and state.get("automation_executed"),
             }
             print(f"   📅 Appointment context built for subcategory: {subcategory_value}")
         
