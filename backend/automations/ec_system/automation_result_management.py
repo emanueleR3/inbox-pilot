@@ -764,6 +764,12 @@ def process_automation_result(workflow_result: dict):
             if status == "LOW_CONFIDENCE_WRITER":
                 print(f"⚠️ [WORKFLOW] LOW CONFIDENCE WRITER DETECTED!")
                 
+                service_id = None
+                try:
+                    service_id = get_subscription_service_id_by_email(box_email)
+                except Exception as e:
+                    print(f"❌ [WORKFLOW] Error getting service_id: {e}")
+
                 thread_data = {
                     "category": category,
                     "subcategory": subcategory,
