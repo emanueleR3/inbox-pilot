@@ -13,6 +13,7 @@ class CustomProviderController:
         email = payload.get("email")
         password = payload.get("password")
         subscription_id = payload.get("subscription_id")
+        calendar_provider = payload.get("calendar_provider")
 
         missing_fields = []
         if not server_imap:
@@ -49,7 +50,7 @@ class CustomProviderController:
 
         try:
             res = SubscriptionServiceDAO().save_custom_provider_credentials(
-                server_imap, server_smtp, imap_port, smtp_port, email, password, subscription_id
+                server_imap, server_smtp, imap_port, smtp_port, email, password, subscription_id, calendar_provider
             )
 
             return res

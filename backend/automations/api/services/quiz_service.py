@@ -152,5 +152,5 @@ def persist_quiz_result(service_id: str, markdown: str) -> None:
     """Persist the final extracted markdown into subscription_services.information column."""
     supabase = get_supabase_client()
     (
-        supabase.table("subscription_services").update({"information": markdown}).eq("service_id", service_id).execute()
+        supabase.table("subscription_services").update({"information": markdown, "config_completed": True, "activated": True}).eq("service_id", service_id).execute()
     )
