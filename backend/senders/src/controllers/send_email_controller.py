@@ -25,8 +25,9 @@ class SendEmailController:
             
             thread_id = req.get("original_thread_id")
             message_id = req.get("message_id")
+            attachments = req.get("attachments")  # Optional list of attachments
             
-            return self.send_email_service.send_email_gmail(email, subject, body, hashed_access_token, thread_id, message_id)
+            return self.send_email_service.send_email_gmail(email, subject, body, hashed_access_token, thread_id, message_id, attachments)
             
         except Exception as e:
             raise HTTPException(
@@ -51,8 +52,9 @@ class SendEmailController:
                 raise ValueError("Hashed access token is required")
 
             reply_to_id = req.get("message_id")
+            attachments = req.get("attachments")  # Optional list of attachments
 
-            return self.send_email_service.send_email_microsoft(email, subject, body, hashed_access_token, reply_to_id)
+            return self.send_email_service.send_email_microsoft(email, subject, body, hashed_access_token, reply_to_id, attachments)
             
         except Exception as e:
             raise HTTPException(
@@ -94,11 +96,12 @@ class SendEmailController:
 
             reply_to_id = req.get("reply_to_id")
             message_id = req.get("message_id")
+            attachments = req.get("attachments")  # Optional list of attachments
 
             print("[DEBUG-SENDER-CONTROLLER]"+str(req))
 
             return self.send_email_service.send_email_smtp(
-                email, subject, body, smtp_port, smtp_server, smtp_email, password, reply_to_id, message_id
+                email, subject, body, smtp_port, smtp_server, smtp_email, password, reply_to_id, message_id, attachments
             )
             
         except Exception as e:

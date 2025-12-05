@@ -3,13 +3,15 @@ from db_client import (
     save_ai_generated_email,
     get_subscription_service_id_by_email,
     update_thread,
-    update_ai_generated_email_outcome,
     get_email_service_data,
     insert_new_mail_in_history_thread,
     get_calendar_service_data
 )
 import os
 import requests
+import base64
+import uuid
+import html
 from .services.notification_client import (
     send_high_priority_notification, 
     send_low_confidence_notification,
@@ -35,6 +37,141 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _generate_ics_content(event_details: dict) -> str:
+    """
+    Generate an ICS (iCalendar) file content from event details.
+    
+    Args:
+        event_details: Dictionary containing event information:
+            - title: Event title
+            - start_time: Start time in ISO format
+            - end_time: End time in ISO format
+            - location: Event location (optional)
+            - description: Event description (optional)
+            - attendees: List of attendee emails (optional)
+            - event_code: Unique event code
+            - timezone: Event timezone
+            
+    Returns:
+        ICS file content as string
+    """
+    try:
+        title = event_details.get('title', 'Appuntamento')
+        start_time_str = event_details.get('start_time')
+        end_time_str = event_details.get('end_time')
+        location = event_details.get('location', '')
+        description = event_details.get('description', '')
+        attendees = event_details.get('attendees', [])
+        event_code = event_details.get('event_code', '')
+        event_timezone = event_details.get('timezone', 'Europe/Rome')
+        
+        # Parse times
+        start_dt = datetime.fromisoformat(start_time_str)
+        end_dt = datetime.fromisoformat(end_time_str)
+        
+        # Format times for ICS (UTC format)
+        # Convert to UTC for DTSTART/DTEND
+        if start_dt.tzinfo is not None:
+            start_utc = start_dt.astimezone(timezone.utc)
+            end_utc = end_dt.astimezone(timezone.utc)
+        else:
+            # If naive, assume it's in the specified timezone
+            tz = ZoneInfo(event_timezone)
+            start_utc = start_dt.replace(tzinfo=tz).astimezone(timezone.utc)
+            end_utc = end_dt.replace(tzinfo=tz).astimezone(timezone.utc)
+        
+        # Format as YYYYMMDDTHHMMSSZ
+        start_ics = start_utc.strftime('%Y%m%dT%H%M%SZ')
+        end_ics = end_utc.strftime('%Y%m%dT%H%M%SZ')
+        
+        # Create timestamp for DTSTAMP
+        now_utc = datetime.now(timezone.utc)
+        dtstamp = now_utc.strftime('%Y%m%dT%H%M%SZ')
+        
+        # Generate unique UID
+        uid = f"{event_code}-{uuid.uuid4()}@corretto.ai"
+        
+        # Escape special characters for ICS
+        def escape_ics(text):
+            if not text:
+                return ''
+            return text.replace('\\', '\\\\').replace(';', '\\;').replace(',', '\\,').replace('\n', '\\n')
+        
+        # Build ICS content
+        ics_lines = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Corretto AI//Email Assistant//IT',
+            'CALSCALE:GREGORIAN',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            f'UID:{uid}',
+            f'DTSTAMP:{dtstamp}',
+            f'DTSTART:{start_ics}',
+            f'DTEND:{end_ics}',
+            f'SUMMARY:{escape_ics(title)}',
+        ]
+        
+        if location:
+            ics_lines.append(f'LOCATION:{escape_ics(location)}')
+        
+        if description:
+            ics_lines.append(f'DESCRIPTION:{escape_ics(description)}')
+        
+        # Add attendees
+        for attendee in attendees:
+            if attendee and '@' in attendee:
+                ics_lines.append(f'ATTENDEE;RSVP=TRUE:mailto:{attendee}')
+        
+        # Add event code as custom property
+        if event_code:
+            ics_lines.append(f'X-CORRETTO-EVENT-CODE:{event_code}')
+        
+        ics_lines.extend([
+            'STATUS:CONFIRMED',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ])
+        
+        return '\r\n'.join(ics_lines)
+        
+    except Exception as e:
+        print(f"❌ [ICS] Error generating ICS content: {e}")
+        return None
+
+
+def _create_ics_attachment(event_details: dict) -> dict:
+    """
+    Create an ICS attachment dictionary for email sending.
+    
+    Args:
+        event_details: Event details dictionary
+        
+    Returns:
+        Attachment dictionary with filename, content (base64), and content_type
+        Returns None if ICS generation fails
+    """
+    try:
+        ics_content = _generate_ics_content(event_details)
+        if not ics_content:
+            return None
+        
+        # Encode to base64
+        ics_bytes = ics_content.encode('utf-8')
+        ics_base64 = base64.b64encode(ics_bytes).decode('utf-8')
+        
+        return {
+            'filename': 'invite.ics',
+            'content': ics_base64,
+            'content_type': 'text/calendar; method=REQUEST'
+        }
+        
+    except Exception as e:
+        print(f"❌ [ICS] Error creating ICS attachment: {e}")
+        return None
 
 
 def _get_ai_disclaimer() -> str:
@@ -63,7 +200,6 @@ def _convert_plain_text_to_html(text: str) -> str:
     Returns:
         HTML formatted content
     """
-    import html
     
     # Escape HTML special characters to prevent injection
     escaped_text = html.escape(text)
@@ -228,6 +364,7 @@ def process_automation_result(workflow_result: dict):
     now_tz = datetime.now(timezone.utc).isoformat()
     original_thread_id = workflow_result.get("original_thread_id", None)
     microsoft_message_id = workflow_result.get("microsoft_message_id", None)  # Microsoft Graph internal ID for replies
+    scheduled_event_details = workflow_result.get("scheduled_event_details", None)  # Event details for ICS attachment
 
     # Get timestamp in user's timezone for notification formatting
     notification_timestamp = _get_timestamp_in_user_timezone(box_email)
@@ -896,6 +1033,13 @@ def process_automation_result(workflow_result: dict):
                         "subject": subject,
                         "body": response_body_with_disclaimer,
                     }
+
+                    # Generate ICS attachment if event was scheduled/rescheduled
+                    if scheduled_event_details:
+                        ics_attachment = _create_ics_attachment(scheduled_event_details)
+                        if ics_attachment:
+                            payload["attachments"] = [ics_attachment]
+                            print(f"📎 [WORKFLOW] ICS attachment generated for event code: {scheduled_event_details.get('event_code')}")
 
                     senders_url = os.getenv("SENDERS_URL")
                     endpoint = ""

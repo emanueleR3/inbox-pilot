@@ -1289,8 +1289,8 @@ def scheduler_node(state):
         created_by = extracted_info.get("from", "unknown")
         event_type = "APPOINTMENT"  # Default event type
         
-        # Determine if we need to propose slots or book directly 
-        # TODO migliorare logica -> prompt engineering
+        # Determine if we need to propose slots or book directly
+        # If date contains T--:-- it means only day preference without specific time
         propose_slots = False
         if appointment_date is None:
             propose_slots = True
@@ -1298,8 +1298,8 @@ def scheduler_node(state):
             try:
                 if isinstance(appointment_date, str) and 'T' in appointment_date:
                     time_part = appointment_date.split('T', 1)[1]
-                    hh_mm = ':'.join(time_part.split(':')[:2])  # "hh:mm"
-                    propose_slots = (hh_mm == "00:00")
+                    # Check for day preference format (--:--) which indicates no specific time
+                    propose_slots = time_part.startswith('--:--')
                 else:
                     propose_slots = False
             except Exception:
@@ -1326,6 +1326,13 @@ def scheduler_node(state):
             "additional_notes": state.get("appointment_notes")
         }
         
+        # Extract favorite_day from appointment_date if available (only date part, not time)
+        # This avoids LLM miscalculating relative dates like "lunedì prossimo"
+        favorite_day = None
+        if appointment_date and isinstance(appointment_date, str) and 'T' in appointment_date:
+            favorite_day = appointment_date.split('T')[0]  # Extract YYYY-MM-DD
+            print(f"📅 [SCHEDULER] Pre-extracted favorite_day from reader: {favorite_day}")
+        
         # Call LLM scheduler with tool functions
         scheduler_response = llm_client.schedule_appointment(
             current_timestamp=current_timestamp,
@@ -1337,7 +1344,8 @@ def scheduler_node(state):
             event_type=event_type,
             created_by=created_by,
             thread_id=thread_id,
-            language=language
+            language=language,
+            favorite_day=favorite_day
         )
         
         # Update state with scheduling results
@@ -1346,6 +1354,7 @@ def scheduler_node(state):
         state["appointment_event_code"] = scheduler_response.event_code
         state["appointment_proposed_slots"] = scheduler_response.proposed_slots
         state["appointment_favorite_day_unavailable"] = scheduler_response.favorite_day_unavailable
+        state["scheduled_event_details"] = scheduler_response.event_details
         
         print(f"✅ [SCHEDULER] Scheduling completed successfully")
         print(f"   ✓ Scheduled: {scheduler_response.scheduled}")
@@ -1353,6 +1362,7 @@ def scheduler_node(state):
         print(f"   🔢 Event code: {scheduler_response.event_code}")
         print(f"   📆 Proposed slots: {scheduler_response.proposed_slots}")
         print(f"   📅 Favorite day unavailable: {scheduler_response.favorite_day_unavailable}")
+        print(f"   📋 Event details: {'Yes' if scheduler_response.event_details else 'No'}")
         
         return state
         
@@ -1417,6 +1427,7 @@ def rescheduler_node(state):
         thread_id = extracted_info.get("thread_id")
         
         # Determine if we need to propose slots or reschedule directly
+        # If date contains T--:-- it means only day preference without specific time
         propose_slots = False
         if new_date is None:
             propose_slots = True
@@ -1424,8 +1435,8 @@ def rescheduler_node(state):
             try:
                 if isinstance(new_date, str) and 'T' in new_date:
                     time_part = new_date.split('T', 1)[1]
-                    hh_mm = ':'.join(time_part.split(':')[:2])  # "hh:mm"
-                    propose_slots = (hh_mm == "00:00")
+                    # Check for day preference format (--:--) which indicates no specific time
+                    propose_slots = time_part.startswith('--:--')
                 else:
                     propose_slots = False
             except Exception:
@@ -1452,6 +1463,13 @@ def rescheduler_node(state):
             "additional_notes": state.get("change_additional_notes")
         }
         
+        # Extract favorite_day from new_date if available (only date part, not time)
+        # This avoids LLM miscalculating relative dates like "lunedì prossimo"
+        favorite_day = None
+        if new_date and isinstance(new_date, str) and 'T' in new_date:
+            favorite_day = new_date.split('T')[0]  # Extract YYYY-MM-DD
+            print(f"📅 [RESCHEDULER] Pre-extracted favorite_day from reader: {favorite_day}")
+        
         # Call LLM rescheduler with tool functions
         rescheduler_response = llm_client.reschedule_appointment(
             current_timestamp=current_timestamp,
@@ -1462,7 +1480,8 @@ def rescheduler_node(state):
             appointment_info=appointment_info,
             service_id=service_id,
             thread_id=thread_id,
-            language=language
+            language=language,
+            favorite_day=favorite_day
         )
         
         # Update state with rescheduling results
@@ -1475,6 +1494,7 @@ def rescheduler_node(state):
         state["appointment_event_code"] = rescheduler_response.event_code
         state["appointment_proposed_slots"] = rescheduler_response.proposed_slots
         state["appointment_favorite_day_unavailable"] = rescheduler_response.favorite_day_unavailable
+        state["scheduled_event_details"] = rescheduler_response.event_details
         
         print(f"✅ [RESCHEDULER] Rescheduling completed successfully")
         print(f"   ✓ Scheduled: {rescheduler_response.scheduled}")
@@ -1482,6 +1502,7 @@ def rescheduler_node(state):
         print(f"   🔢 Event code: {rescheduler_response.event_code}")
         print(f"   📆 Proposed slots: {rescheduler_response.proposed_slots}")
         print(f"   📅 Favorite day unavailable: {rescheduler_response.favorite_day_unavailable}")
+        print(f"   📋 Event details: {'Yes' if rescheduler_response.event_details else 'No'}")
         
         return state
         

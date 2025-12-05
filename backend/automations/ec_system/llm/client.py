@@ -102,6 +102,40 @@ from db_client import get_supabase_client
 T = TypeVar('T')
 
 
+def _generate_weekday_map(language: str = "ITA") -> str:
+    """
+    Generate a map of weekday names to actual dates for the next 7 days.
+    This helps LLM correctly calculate dates when users say "lunedì", "martedì", etc.
+    
+    Args:
+        language: "ITA" or "ENG" for weekday names
+        
+    Returns:
+        Formatted string with weekday-to-date mapping
+    """
+    today = datetime.now()
+    
+    weekday_names_ita = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+    weekday_names_eng = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    
+    weekday_names = weekday_names_ita if language == "ITA" else weekday_names_eng
+    
+    lines = []
+    for i in range(8):  # Next 7 days + today
+        day = today + timedelta(days=i)
+        weekday_name = weekday_names[day.weekday()]
+        date_str = day.strftime("%Y-%m-%d")
+        if i == 0:
+            prefix = "(OGGI) " if language == "ITA" else "(TODAY) "
+        elif i == 1:
+            prefix = "(DOMANI) " if language == "ITA" else "(TOMORROW) "
+        else:
+            prefix = ""
+        lines.append(f"   - {prefix}{weekday_name}: {date_str}")
+    
+    return "\n".join(lines)
+
+
 class LLMClient:
     """Client for interacting with OpenAI LLMs via Langchain."""
     
@@ -805,6 +839,9 @@ class LLMClient:
             else:
                 used_extended_summary = extended_summary
 
+            # Generate weekday map to help LLM calculate dates correctly
+            weekday_map = _generate_weekday_map(language)
+
             # Format prompt
             prompt_text = prompt_template.format(
                 current_timestamp=current_timestamp,
@@ -813,8 +850,11 @@ class LLMClient:
                 sender_email=sender_email
             )
             
+            # Add weekday map before format instructions
+            weekday_section = f"\n\nMAPPA GIORNI SETTIMANA (USA QUESTE DATE):\n{weekday_map}\n" if language == "ITA" else f"\n\nWEEKDAY MAP (USE THESE DATES):\n{weekday_map}\n"
+            
             # Add format instructions
-            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            prompt_with_format = f"{prompt_text}{weekday_section}\n{parser.get_format_instructions()}"
             
             # Create message
             message = HumanMessage(content=prompt_with_format)
@@ -887,6 +927,9 @@ class LLMClient:
             else:
                 used_extended_summary = extended_summary
 
+            # Generate weekday map to help LLM calculate dates correctly
+            weekday_map = _generate_weekday_map(language)
+
             # Format prompt
             prompt_text = prompt_template.format(
                 current_timestamp=current_timestamp,
@@ -895,8 +938,11 @@ class LLMClient:
                 sender_email=sender_email
             )
             
+            # Add weekday map before format instructions
+            weekday_section = f"\n\nMAPPA GIORNI SETTIMANA (USA QUESTE DATE):\n{weekday_map}\n" if language == "ITA" else f"\n\nWEEKDAY MAP (USE THESE DATES):\n{weekday_map}\n"
+            
             # Add format instructions
-            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            prompt_with_format = f"{prompt_text}{weekday_section}\n{parser.get_format_instructions()}"
             
             # Create message
             message = HumanMessage(content=prompt_with_format)
@@ -947,7 +993,8 @@ class LLMClient:
         event_type: str,
         created_by: str,
         thread_id: Optional[str] = None,
-        language: str = "ITA"
+        language: str = "ITA",
+        favorite_day: Optional[str] = None
     ) -> SchedulerResponse:
         """
         Schedule an appointment or propose new slots using LLM with tool functions.
@@ -963,6 +1010,7 @@ class LLMClient:
             created_by: Email of the creator
             thread_id: Optional thread ID
             language: Language for prompts (ITA or ENG)
+            favorite_day: Optional preferred day in YYYY-MM-DD format (pre-extracted by reader)
             
         Returns:
             SchedulerResponse with scheduling results
@@ -1066,15 +1114,20 @@ class LLMClient:
             event_code = None
             proposed_slots = None
             favorite_day_unavailable = False
+            event_details = None
             
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 for tool_call in response.tool_calls:
                     if tool_call['name'] == 'propose_new_slots':
                         # Call the propose_new_slots tool function
                         args = tool_call['args']
+                        # Use pre-extracted favorite_day if available, otherwise use LLM's extraction
+                        # This avoids LLM miscalculating relative dates like "lunedì"
+                        effective_favorite_day = favorite_day if favorite_day else args.get('favorite_day')
+                        print(f"📅 [LLM] propose_new_slots: pre-extracted={favorite_day}, llm_extracted={args.get('favorite_day')}, using={effective_favorite_day}")
                         slots_result = self._propose_new_slots_tool(
                             service_id=service_id,
-                            favorite_day=args.get('favorite_day'),
+                            favorite_day=effective_favorite_day,
                             not_available_dates=args.get('not_available_dates', [])
                         )
                         proposed_slots = slots_result.get('slots', [])
@@ -1097,6 +1150,7 @@ class LLMClient:
                         scheduled = booking_result.get('scheduled', False)
                         overlap = booking_result.get('overlap', False)
                         event_code = booking_result.get('event_code')
+                        event_details = booking_result.get('event_details')
             
             print(f"📅 [LLM] Scheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}, favorite_day_unavailable={favorite_day_unavailable}")
             
@@ -1105,7 +1159,8 @@ class LLMClient:
                 overlap=overlap,
                 event_code=event_code,
                 proposed_slots=proposed_slots,
-                favorite_day_unavailable=favorite_day_unavailable
+                favorite_day_unavailable=favorite_day_unavailable,
+                event_details=event_details
             )
             
         except Exception as e:
@@ -1116,7 +1171,8 @@ class LLMClient:
                 overlap=False,
                 event_code=None,
                 proposed_slots=None,
-                favorite_day_unavailable=False
+                favorite_day_unavailable=False,
+                event_details=None
             )
 
     def read_appointment_change_request(
@@ -1168,6 +1224,9 @@ class LLMClient:
                 else:
                     used_mail_summary = mail_summary
                 
+                # Generate weekday map to help LLM calculate dates correctly
+                weekday_map = _generate_weekday_map(language)
+                
                 # Format prompt
                 prompt_text = prompt_text.format(
                     current_timestamp=current_timestamp,
@@ -1177,8 +1236,11 @@ class LLMClient:
                     sender_email=sender_email
                 )
                 
+                # Add weekday map before format instructions
+                weekday_section = f"\n\nMAPPA GIORNI SETTIMANA (USA QUESTE DATE):\n{weekday_map}\n" if language == "ITA" else f"\n\nWEEKDAY MAP (USE THESE DATES):\n{weekday_map}\n"
+                
                 # Add format instructions
-                prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+                prompt_with_format = f"{prompt_text}{weekday_section}\n{parser.get_format_instructions()}"
                 
                 # Create message
                 message = HumanMessage(content=prompt_with_format)
@@ -1317,7 +1379,8 @@ class LLMClient:
         appointment_info: dict,
         service_id: str,
         thread_id: Optional[str] = None,
-        language: str = "ITA"
+        language: str = "ITA",
+        favorite_day: Optional[str] = None
     ) -> SchedulerResponse:
         """
         Reschedule an appointment or propose new slots using LLM with tool functions.
@@ -1332,6 +1395,7 @@ class LLMClient:
             service_id: Service ID from subscription_services
             thread_id: Optional thread ID
             language: Language for prompts (ITA or ENG)
+            favorite_day: Optional preferred day in YYYY-MM-DD format (pre-extracted by reader)
             
         Returns:
             SchedulerResponse with rescheduling results
@@ -1438,7 +1502,7 @@ class LLMClient:
             scheduled = False
             overlap = False
             proposed_slots = None
-            
+            event_details = None
             favorite_day_unavailable = False
             
             if hasattr(response, 'tool_calls') and response.tool_calls:
@@ -1446,9 +1510,13 @@ class LLMClient:
                     if tool_call['name'] == 'propose_new_slots':
                         # Call the propose_new_slots tool function
                         args = tool_call['args']
+                        # Use pre-extracted favorite_day if available, otherwise use LLM's extraction
+                        # This avoids LLM miscalculating relative dates like "lunedì"
+                        effective_favorite_day = favorite_day if favorite_day else args.get('favorite_day')
+                        print(f"📅 [LLM] propose_new_slots (reschedule): pre-extracted={favorite_day}, llm_extracted={args.get('favorite_day')}, using={effective_favorite_day}")
                         slots_result = self._propose_new_slots_tool(
                             service_id=service_id,
-                            favorite_day=args.get('favorite_day'),
+                            favorite_day=effective_favorite_day,
                             not_available_dates=args.get('not_available_dates', [])
                         )
                         # Extract slots and favorite_day_unavailable from dict return
@@ -1469,6 +1537,7 @@ class LLMClient:
                         scheduled = reschedule_result.get('scheduled', False)
                         overlap = reschedule_result.get('overlap', False)
                         proposed_slots = reschedule_result.get('proposed_slots')
+                        event_details = reschedule_result.get('event_details')
             
             print(f"📅 [LLM] Rescheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}, favorite_day_unavailable={favorite_day_unavailable}")
             
@@ -1477,7 +1546,8 @@ class LLMClient:
                 overlap=overlap,
                 event_code=event_code,
                 proposed_slots=proposed_slots,
-                favorite_day_unavailable=favorite_day_unavailable
+                favorite_day_unavailable=favorite_day_unavailable,
+                event_details=event_details
             )
             
         except Exception as e:
@@ -1487,7 +1557,8 @@ class LLMClient:
                 scheduled=False,
                 overlap=False,
                 event_code=event_code,
-                proposed_slots=None
+                proposed_slots=None,
+                event_details=None
             )
 
     
@@ -1785,9 +1856,24 @@ class LLMClient:
         
         # Insert into scheduled_events table
         if insert_scheduled_event(event_data):
-            return {"scheduled": True, "overlap": False, "event_code": event_code}
+            # Return event details for ICS generation
+            return {
+                "scheduled": True, 
+                "overlap": False, 
+                "event_code": event_code,
+                "event_details": {
+                    "title": title_of_event,
+                    "start_time": start_dt.isoformat(),
+                    "end_time": end_dt.isoformat(),
+                    "location": place,
+                    "description": additional_notes,
+                    "attendees": final_attendees,
+                    "event_code": event_code,
+                    "timezone": user_timezone
+                }
+            }
         else:
-            return {"scheduled": False, "overlap": False, "event_code": None}
+            return {"scheduled": False, "overlap": False, "event_code": None, "event_details": None}
 
 
     def _reschedule_appointment_tool(
@@ -1960,11 +2046,22 @@ class LLMClient:
             if not update_success:
                 print(f"⚠️ Failed to update provider_event_id in database, but event was rescheduled")
         
+        # Return event details for ICS generation
         return {
             'scheduled': True,
             'overlap': False,
             'invalid_event_code': False,
-            'proposed_slots': None
+            'proposed_slots': None,
+            'event_details': {
+                'title': new_title,
+                'start_time': start_dt.isoformat(),
+                'end_time': end_dt.isoformat(),
+                'location': new_place,
+                'description': additional_notes,
+                'attendees': final_attendees,
+                'event_code': event_code,
+                'timezone': user_timezone
+            }
         }
     
     def extract_company_info(
