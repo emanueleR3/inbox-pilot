@@ -1066,6 +1066,7 @@ class LLMClient:
             event_code = None
             proposed_slots = None
             favorite_day_unavailable = False
+            event_details = None
             
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 for tool_call in response.tool_calls:
@@ -1097,6 +1098,7 @@ class LLMClient:
                         scheduled = booking_result.get('scheduled', False)
                         overlap = booking_result.get('overlap', False)
                         event_code = booking_result.get('event_code')
+                        event_details = booking_result.get('event_details')
             
             print(f"📅 [LLM] Scheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}, favorite_day_unavailable={favorite_day_unavailable}")
             
@@ -1105,7 +1107,8 @@ class LLMClient:
                 overlap=overlap,
                 event_code=event_code,
                 proposed_slots=proposed_slots,
-                favorite_day_unavailable=favorite_day_unavailable
+                favorite_day_unavailable=favorite_day_unavailable,
+                event_details=event_details
             )
             
         except Exception as e:
@@ -1116,7 +1119,8 @@ class LLMClient:
                 overlap=False,
                 event_code=None,
                 proposed_slots=None,
-                favorite_day_unavailable=False
+                favorite_day_unavailable=False,
+                event_details=None
             )
 
     def read_appointment_change_request(
@@ -1438,7 +1442,7 @@ class LLMClient:
             scheduled = False
             overlap = False
             proposed_slots = None
-            
+            event_details = None
             favorite_day_unavailable = False
             
             if hasattr(response, 'tool_calls') and response.tool_calls:
@@ -1469,6 +1473,7 @@ class LLMClient:
                         scheduled = reschedule_result.get('scheduled', False)
                         overlap = reschedule_result.get('overlap', False)
                         proposed_slots = reschedule_result.get('proposed_slots')
+                        event_details = reschedule_result.get('event_details')
             
             print(f"📅 [LLM] Rescheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}, favorite_day_unavailable={favorite_day_unavailable}")
             
@@ -1477,7 +1482,8 @@ class LLMClient:
                 overlap=overlap,
                 event_code=event_code,
                 proposed_slots=proposed_slots,
-                favorite_day_unavailable=favorite_day_unavailable
+                favorite_day_unavailable=favorite_day_unavailable,
+                event_details=event_details
             )
             
         except Exception as e:
@@ -1487,7 +1493,8 @@ class LLMClient:
                 scheduled=False,
                 overlap=False,
                 event_code=event_code,
-                proposed_slots=None
+                proposed_slots=None,
+                event_details=None
             )
 
     
@@ -1785,9 +1792,24 @@ class LLMClient:
         
         # Insert into scheduled_events table
         if insert_scheduled_event(event_data):
-            return {"scheduled": True, "overlap": False, "event_code": event_code}
+            # Return event details for ICS generation
+            return {
+                "scheduled": True, 
+                "overlap": False, 
+                "event_code": event_code,
+                "event_details": {
+                    "title": title_of_event,
+                    "start_time": start_dt.isoformat(),
+                    "end_time": end_dt.isoformat(),
+                    "location": place,
+                    "description": additional_notes,
+                    "attendees": final_attendees,
+                    "event_code": event_code,
+                    "timezone": user_timezone
+                }
+            }
         else:
-            return {"scheduled": False, "overlap": False, "event_code": None}
+            return {"scheduled": False, "overlap": False, "event_code": None, "event_details": None}
 
 
     def _reschedule_appointment_tool(
@@ -1960,11 +1982,22 @@ class LLMClient:
             if not update_success:
                 print(f"⚠️ Failed to update provider_event_id in database, but event was rescheduled")
         
+        # Return event details for ICS generation
         return {
             'scheduled': True,
             'overlap': False,
             'invalid_event_code': False,
-            'proposed_slots': None
+            'proposed_slots': None,
+            'event_details': {
+                'title': new_title,
+                'start_time': start_dt.isoformat(),
+                'end_time': end_dt.isoformat(),
+                'location': new_place,
+                'description': additional_notes,
+                'attendees': final_attendees,
+                'event_code': event_code,
+                'timezone': user_timezone
+            }
         }
     
     def extract_company_info(

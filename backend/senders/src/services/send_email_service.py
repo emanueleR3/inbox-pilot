@@ -9,8 +9,10 @@ import base64
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from email.utils import make_msgid
-from typing import Optional
+from typing import Optional, List, Dict
 from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -53,8 +55,24 @@ class SendEmailService:
         body: str, 
         hashed_access_token: str,
         thread_id: Optional[str] = None,
-        message_id: Optional[str] = None
+        message_id: Optional[str] = None,
+        attachments: Optional[List[Dict]] = None
     ) -> dict:
+        """
+        Send email via Gmail API.
+        
+        Args:
+            email: Recipient email
+            subject: Email subject
+            body: Email body (HTML or plain text)
+            hashed_access_token: Encrypted access token
+            thread_id: Optional Gmail thread ID for replies
+            message_id: Optional RFC message ID for In-Reply-To header
+            attachments: Optional list of attachments, each dict with:
+                - filename: str (e.g., "invite.ics")
+                - content: str (base64 encoded content)
+                - content_type: str (e.g., "text/calendar")
+        """
         try:
             print("\n=== SEND EMAIL VIA GMAIL ===")
             print(f"TO: {email}")
@@ -107,6 +125,28 @@ class SendEmailService:
                 part = MIMEText(body, 'plain', 'utf-8')
 
             message.attach(part)
+
+            # Handle attachments
+            if attachments:
+                for attachment in attachments:
+                    filename = attachment.get('filename', 'attachment')
+                    content_b64 = attachment.get('content', '')
+                    content_type = attachment.get('content_type', 'application/octet-stream')
+                    
+                    try:
+                        # Decode base64 content
+                        content_bytes = base64.b64decode(content_b64)
+                        
+                        # Create attachment part
+                        maintype, subtype = content_type.split('/', 1) if '/' in content_type else ('application', 'octet-stream')
+                        att_part = MIMEBase(maintype, subtype)
+                        att_part.set_payload(content_bytes)
+                        encoders.encode_base64(att_part)
+                        att_part.add_header('Content-Disposition', 'attachment', filename=filename)
+                        message.attach(att_part)
+                        print(f"   📎 Attached: {filename} ({content_type})")
+                    except Exception as att_err:
+                        print(f"   ⚠️ Failed to attach {filename}: {att_err}")
 
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
 
@@ -173,10 +213,22 @@ class SendEmailService:
         subject: str, 
         body: str, 
         hashed_access_token: str,
-        message_id: Optional[str] = None
+        message_id: Optional[str] = None,
+        attachments: Optional[List[Dict]] = None
     ) -> dict:
         """
         Send an email using Microsoft Graph API and return RFC Message-ID (internetMessageId).
+        
+        Args:
+            email: Recipient email
+            subject: Email subject
+            body: Email body (HTML or plain text)
+            hashed_access_token: Encrypted access token
+            message_id: Optional message ID for reply
+            attachments: Optional list of attachments, each dict with:
+                - filename: str (e.g., "invite.ics")
+                - content: str (base64 encoded content)
+                - content_type: str (e.g., "text/calendar")
         """
         try:
             logger.info(f"📤 Sending email via Microsoft Graph to {email}")
@@ -237,7 +289,31 @@ class SendEmailService:
             msg_id = created_msg.get("id")
             logger.info(f"📝 Draft created in Microsoft Graph. ID: {msg_id}")
         
-            # 2️⃣ INVIA IL MESSAGGIO
+            # 2️⃣ ADD ATTACHMENTS (if any)
+            if attachments and msg_id:
+                for attachment in attachments:
+                    try:
+                        filename = attachment.get('filename', 'attachment')
+                        content_b64 = attachment.get('content', '')
+                        content_type = attachment.get('content_type', 'application/octet-stream')
+                        
+                        attach_url = f"https://graph.microsoft.com/v1.0/me/messages/{msg_id}/attachments"
+                        attach_payload = {
+                            "@odata.type": "#microsoft.graph.fileAttachment",
+                            "name": filename,
+                            "contentType": content_type,
+                            "contentBytes": content_b64
+                        }
+                        attach_resp = requests.post(attach_url, json=attach_payload, headers=headers)
+                        
+                        if attach_resp.status_code in (200, 201):
+                            logger.info(f"📎 Attached: {filename} ({content_type})")
+                        else:
+                            logger.warning(f"⚠️ Failed to attach {filename}: {attach_resp.status_code} - {attach_resp.text}")
+                    except Exception as att_err:
+                        logger.warning(f"⚠️ Error attaching {filename}: {att_err}")
+        
+            # 3️⃣ INVIA IL MESSAGGIO
             send_url = f"https://graph.microsoft.com/v1.0/me/messages/{msg_id}/send"
             send_resp = requests.post(send_url, headers=headers)
         
@@ -253,7 +329,7 @@ class SendEmailService:
         
             logger.info(f"✅ Email sent successfully via Microsoft Graph to {email}")
         
-            # 3️⃣ RECUPERA l'RFC Message-ID (internetMessageId)
+            # 4️⃣ RECUPERA l'RFC Message-ID (internetMessageId)
             rfc_message_id = None
             try:
                 get_url = f"https://graph.microsoft.com/v1.0/me/messages/{msg_id}"
@@ -304,8 +380,27 @@ class SendEmailService:
         smtp_email: str,
         password: str,
         reply_to_id: Optional[str] = None,
-        message_id: Optional[str] = None
+        message_id: Optional[str] = None,
+        attachments: Optional[List[Dict]] = None
     ) -> dict:
+        """
+        Send email via SMTP.
+        
+        Args:
+            email: Recipient email
+            subject: Email subject
+            body: Email body (HTML or plain text)
+            smtp_port: SMTP port (465, 587, or 25)
+            smtp_server: SMTP server hostname
+            smtp_email: Sender email
+            password: SMTP password
+            reply_to_id: Optional message ID for In-Reply-To header
+            message_id: Optional message ID for References header
+            attachments: Optional list of attachments, each dict with:
+                - filename: str (e.g., "invite.ics")
+                - content: str (base64 encoded content)
+                - content_type: str (e.g., "text/calendar")
+        """
         try:
             print("🔵 [SERVICE] ---- START send_email_smtp ----")
 
@@ -350,6 +445,28 @@ class SendEmailService:
             else:
                 print("🔵 [SERVICE] Body detected as TEXT")
                 message.attach(MIMEText(body, "plain", "utf-8"))
+
+            # Handle attachments
+            if attachments:
+                for attachment in attachments:
+                    filename = attachment.get('filename', 'attachment')
+                    content_b64 = attachment.get('content', '')
+                    content_type = attachment.get('content_type', 'application/octet-stream')
+                    
+                    try:
+                        # Decode base64 content
+                        content_bytes = base64.b64decode(content_b64)
+                        
+                        # Create attachment part
+                        maintype, subtype = content_type.split('/', 1) if '/' in content_type else ('application', 'octet-stream')
+                        att_part = MIMEBase(maintype, subtype)
+                        att_part.set_payload(content_bytes)
+                        encoders.encode_base64(att_part)
+                        att_part.add_header('Content-Disposition', 'attachment', filename=filename)
+                        message.attach(att_part)
+                        print(f"🔵 [SERVICE] Attached: {filename} ({content_type})")
+                    except Exception as att_err:
+                        print(f"🟡 [SERVICE] Failed to attach {filename}: {att_err}")
 
             context = ssl.create_default_context()
             print(f"🔵 [SERVICE] Selecting SMTP flow for port {smtp_port}...")

@@ -227,6 +227,10 @@ class SchedulerResponse(BaseModel):
         False,
         description="True se il giorno preferito non aveva slot disponibili e sono stati proposti gli slot settimanali"
     )
+    event_details: Optional[dict] = Field(
+        None,
+        description="Dettagli dell'evento creato per generare file ICS (title, start_time, end_time, location, description, attendees, event_code, timezone)"
+    )
 
 
 class ReaderAppointmentChangeResponse(BaseModel):

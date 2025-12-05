@@ -1346,6 +1346,7 @@ def scheduler_node(state):
         state["appointment_event_code"] = scheduler_response.event_code
         state["appointment_proposed_slots"] = scheduler_response.proposed_slots
         state["appointment_favorite_day_unavailable"] = scheduler_response.favorite_day_unavailable
+        state["scheduled_event_details"] = scheduler_response.event_details
         
         print(f"✅ [SCHEDULER] Scheduling completed successfully")
         print(f"   ✓ Scheduled: {scheduler_response.scheduled}")
@@ -1353,6 +1354,7 @@ def scheduler_node(state):
         print(f"   🔢 Event code: {scheduler_response.event_code}")
         print(f"   📆 Proposed slots: {scheduler_response.proposed_slots}")
         print(f"   📅 Favorite day unavailable: {scheduler_response.favorite_day_unavailable}")
+        print(f"   📋 Event details: {'Yes' if scheduler_response.event_details else 'No'}")
         
         return state
         
@@ -1475,6 +1477,7 @@ def rescheduler_node(state):
         state["appointment_event_code"] = rescheduler_response.event_code
         state["appointment_proposed_slots"] = rescheduler_response.proposed_slots
         state["appointment_favorite_day_unavailable"] = rescheduler_response.favorite_day_unavailable
+        state["scheduled_event_details"] = rescheduler_response.event_details
         
         print(f"✅ [RESCHEDULER] Rescheduling completed successfully")
         print(f"   ✓ Scheduled: {rescheduler_response.scheduled}")
@@ -1482,6 +1485,7 @@ def rescheduler_node(state):
         print(f"   🔢 Event code: {rescheduler_response.event_code}")
         print(f"   📆 Proposed slots: {rescheduler_response.proposed_slots}")
         print(f"   📅 Favorite day unavailable: {rescheduler_response.favorite_day_unavailable}")
+        print(f"   📋 Event details: {'Yes' if rescheduler_response.event_details else 'No'}")
         
         return state
         
