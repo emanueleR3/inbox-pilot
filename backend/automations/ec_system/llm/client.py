@@ -907,7 +907,7 @@ class LLMClient:
             # Parse response
             parsed_response = parser.parse(response.content)
             
-            print(f"✅ [LLM] Confirm appointment analyzed ({language}): date={parsed_response.date}, already_scheduled={parsed_response.already_scheduled}, needs_response={parsed_response.needs_response}")
+            print(f"✅ [LLM] Confirm appointment analyzed ({language}): date={parsed_response.date}, already_scheduled={parsed_response.already_scheduled}, event_code={parsed_response.event_code}, needs_response={parsed_response.needs_response}")
             return parsed_response
             
         except Exception as e:
@@ -927,6 +927,7 @@ class LLMClient:
                 },
                 title_of_event=f"[AI] APPUNTAMENTO {sender_email}",
                 date=None,
+                event_code=None,
                 duration=60,
                 attendees=None,
                 place=None,
@@ -1455,15 +1456,15 @@ class LLMClient:
                         favorite_day_unavailable = slots_result.get('favorite_day_unavailable', False)
                     elif tool_call['name'] == 'reschedule_appointment':
                         # Call the reschedule_appointment tool function
-                        args = tool_call['args']
+                        
                         reschedule_result = self._reschedule_appointment_tool(
                             event_code=event_code,
-                            new_title=args.get('new_title'),
-                            new_date=args.get('new_date'),
-                            new_duration=args.get('new_duration') or 60,
-                            new_attendees=args.get('new_attendees'),
-                            new_place=args.get('new_place'),
-                            additional_notes=args.get('additional_notes')
+                            new_title=appointment_info.get('title_of_event'),
+                            new_date=appointment_info.get('date'),
+                            new_duration=appointment_info.get('duration') or 60,
+                            new_attendees=appointment_info.get('attendees'),
+                            new_place=appointment_info.get('place'),
+                            additional_notes=appointment_info.get('additional_notes')
                         )
                         scheduled = reschedule_result.get('scheduled', False)
                         overlap = reschedule_result.get('overlap', False)

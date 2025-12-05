@@ -180,6 +180,22 @@ MICROSOFT_TIMEZONE_MAP = {
     "Pacific Standard Time": "America/Los_Angeles",
 }
 
+# Reverse lookup to convert IANA -> Microsoft timezone IDs when calling Microsoft Graph
+IANA_TO_MICROSOFT_TIMEZONE_MAP = {iana: windows for windows, iana in MICROSOFT_TIMEZONE_MAP.items()}
+
+
+def _iana_to_microsoft_timezone(iana_timezone: Optional[str]) -> str:
+    """Convert IANA timezone names (e.g. Europe/Rome) to Microsoft timezone IDs."""
+    if not iana_timezone:
+        return "UTC"
+    if iana_timezone in IANA_TO_MICROSOFT_TIMEZONE_MAP:
+        return IANA_TO_MICROSOFT_TIMEZONE_MAP[iana_timezone]
+    # Handle fixed-offset timezone strings like "UTC+01:00"
+    if iana_timezone.startswith("UTC"):
+        return "UTC"
+    print(f"⚠️ Unknown IANA timezone '{iana_timezone}' for Microsoft Graph, defaulting to UTC")
+    return "UTC"
+
 
 def get_microsoft_calendar_timezone(token: str, user_email: Optional[str] = None) -> str:
     """
@@ -733,16 +749,9 @@ def create_microsoft_calendar_event(
         end_time = end_time.replace(tzinfo=timezone.utc)
     
     # Get the timezone name from the datetime object
-    # Microsoft Graph API expects the dateTime to be in the specified timezone
-    # We send the local time as-is and specify its timezone
+    # Microsoft Graph API expects the dateTime to be in the specified timezone (Windows ID)
     tz_name = str(start_time.tzinfo)
-    
-    # Map IANA timezone to Microsoft timezone name if needed
-    # Microsoft accepts IANA timezones in the timeZone field
-    microsoft_tz = tz_name
-    if tz_name == "UTC+01:00" or tz_name == "UTC+02:00":
-        # Handle fixed offset timezones by using a standard name
-        microsoft_tz = "Europe/Rome"
+    microsoft_tz = _iana_to_microsoft_timezone(tz_name)
     
     # Format datetime without timezone suffix - Microsoft uses the timeZone field
     body = {
@@ -756,6 +765,8 @@ def create_microsoft_calendar_event(
             "timeZone": microsoft_tz
         }
     }
+
+    print(f"\n\n==================\n[DEBUG] Microsoft Event Body: {body}\n==================\n\n")
     
     # Add optional fields
     if description:
@@ -859,9 +870,7 @@ def update_microsoft_calendar_event(
         
         # Get the timezone name from the datetime object
         tz_name = str(start_time.tzinfo)
-        microsoft_tz = tz_name
-        if tz_name == "UTC+01:00" or tz_name == "UTC+02:00":
-            microsoft_tz = "Europe/Rome"
+        microsoft_tz = _iana_to_microsoft_timezone(tz_name)
         
         # Send time in the original timezone, not converted to UTC
         body["start"] = {"dateTime": start_time.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": microsoft_tz}

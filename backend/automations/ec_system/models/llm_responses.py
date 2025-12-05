@@ -175,6 +175,10 @@ class ReaderConfirmAppointmentResponse(BaseModel):
         None,
         description="Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss, None se non specificato data e orario completi"
     )
+    event_code: Optional[str] = Field(
+        None,
+        description="Codice evento a 6 cifre se presente nella conversazione (usato per reschedulare). None se non trovato."
+    )
     duration: int = Field(
         60,
         description="Durata dell'appuntamento in minuti, default 60 se non specificato"

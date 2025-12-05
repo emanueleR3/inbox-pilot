@@ -1208,6 +1208,7 @@ def reader_node(state):
             state["appointment_place"] = confirm_response.place
             state["appointment_notes"] = confirm_response.additional_notes
             state["already_scheduled"] = confirm_response.already_scheduled
+            state["confirm_event_code"] = confirm_response.event_code
             state["needs_response"] = confirm_response.needs_response
             
             print(f"✅ [READER] Confirm appointment analysis completed successfully")
@@ -1218,6 +1219,7 @@ def reader_node(state):
             print(f"   📍 Place: {confirm_response.place}")
             print(f"   📝 Notes: {confirm_response.additional_notes}")
             print(f"   📆 Already Scheduled: {confirm_response.already_scheduled}")
+            print(f"   🔑 Event Code: {confirm_response.event_code}")
             print(f"   💬 Needs Response: {confirm_response.needs_response}")
             
         else:

@@ -1075,7 +1075,14 @@ ESTRAI LE SEGUENTI INFORMAZIONI:
      (es. sono stati proposti degli slot, l'utente sta confermando uno slot per completare la prenotazione)
      In questo caso è necessario procedere con lo scheduling effettivo
 
-9. **needs_response**: Booleano che indica se è necessaria una risposta
+9. **event_code**: Codice evento a 6 cifre (opzionale)
+   - Cerca nella conversazione (email corrente e extended_summary) se è presente un codice evento
+   - Il codice evento è un codice numerico di ESATTAMENTE 6 cifre (es. "123456", "789012")
+   - È tipicamente presente quando si parla di riprogrammare/reschedulare un appuntamento esistente
+   - Se trovato, restituisci il codice come stringa (es. "123456")
+   - Se NON trovato, imposta a None
+
+10. **needs_response**: Booleano che indica se è necessaria una risposta
    - True: se l'email richiede esplicitamente una risposta o azione
    - False: se l'email è conclusiva e non richiede ulteriori comunicazioni
 
@@ -1142,7 +1149,14 @@ EXTRACT THE FOLLOWING INFORMATION:
      (e.g., slots were proposed, user is confirming a slot to complete the booking)
      In this case it's necessary to proceed with actual scheduling
 
-9. **needs_response**: Boolean indicating if a response is needed
+9. **event_code**: 6-digit event code (optional)
+   - Search in the conversation (current email and extended_summary) if an event code is present
+   - The event code is a numeric code of EXACTLY 6 digits (e.g., "123456", "789012")
+   - It's typically present when discussing rescheduling an existing appointment
+   - If found, return the code as a string (e.g., "123456")
+   - If NOT found, set to None
+
+10. **needs_response**: Boolean indicating if a response is needed
    - True: if the email explicitly requests a response or action
    - False: if the email is conclusive and doesn't require further communication
 

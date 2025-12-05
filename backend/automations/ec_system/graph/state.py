@@ -49,6 +49,7 @@ class EmailState(TypedDict):
     appointment_favorite_day_unavailable: Optional[bool]  # True if favorite day had no slots and weekly slots were returned instead
     # Confirm appointment-specific fields (for CONFIRM_APPOINTMENT subcategory)
     already_scheduled: Optional[bool]  # True if appointment was already scheduled (final confirmation), False if needs scheduling
+    confirm_event_code: Optional[str]  # Event code (6 digits) found in conversation for rescheduling
     # Appointment change fields (for REQUEST_APPOINTMENT_CHANGE subcategory)
     change_event_code: Optional[str]  # Code of event to modify
     change_new_title: Optional[str]  # New title for appointment
@@ -109,6 +110,7 @@ def create_initial_state() -> EmailState:
         "appointment_proposed_slots": None,
         "appointment_favorite_day_unavailable": None,
         "already_scheduled": None,
+        "confirm_event_code": None,
         "change_event_code": None,
         "change_new_title": None,
         "change_new_date": None,

@@ -470,9 +470,10 @@ def create_email_classification_graph():
             print(f"❌ [READER] Routing to CANCEL_APPOINTMENT for CANCEL_APPOINTMENT")
             return NodeNames.CANCELLATION
         
-        # Special routing for CONFIRM_APPOINTMENT based on already_scheduled flag
+        # Special routing for CONFIRM_APPOINTMENT based on already_scheduled flag and event_code
         if subcategory == "CONFIRM_APPOINTMENT":
             already_scheduled = state.get("already_scheduled", False)
+            confirm_event_code = state.get("confirm_event_code")
             
             if already_scheduled:
                 # Appointment is already scheduled - follow standard flow based on needs_response
@@ -483,9 +484,17 @@ def create_email_classification_graph():
                 else:
                     return NodeNames.EXTRACTOR_COMPANY_INFO
             else:
-                # Appointment not yet scheduled - route to SCHEDULER
-                print(f"📅 [READER] CONFIRM_APPOINTMENT - already_scheduled=False, routing to SCHEDULER")
-                return NodeNames.SCHEDULER
+                # Appointment not yet scheduled - check if we have an event_code for rescheduling
+                if confirm_event_code and len(confirm_event_code) == 6 and confirm_event_code.isdigit():
+                    # Valid event_code found - route to RESCHEDULER
+                    print(f"🔄 [READER] CONFIRM_APPOINTMENT - event_code={confirm_event_code} found, routing to RESCHEDULER")
+                    # Copy event_code to change_event_code for rescheduler compatibility
+                    state["change_event_code"] = confirm_event_code
+                    return NodeNames.RESCHEDULER
+                else:
+                    # No valid event_code - route to SCHEDULER
+                    print(f"📅 [READER] CONFIRM_APPOINTMENT - already_scheduled=False, no event_code, routing to SCHEDULER")
+                    return NodeNames.SCHEDULER
         
         # Subcategories that should check needs_response for conditional automation
         conditional_automation_subcategories = {
