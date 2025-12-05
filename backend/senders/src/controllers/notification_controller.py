@@ -38,18 +38,18 @@ class NotificationController:
             summary_attachment = req.get("summary_attachment")
             overlap = req.get("overlap")
             
-            # Validate required fields
-            if not notification_type:
+            # Validate required fields (check for None, not empty strings)
+            if notification_type is None:
                 raise ValueError("Notification type is required")
-            if not sender_email:
+            if sender_email is None:
                 raise ValueError("Sender email is required")
-            if not box_email:
+            if box_email is None:
                 raise ValueError("Box email is required")
-            if not subject:
+            if subject is None:
                 raise ValueError("Subject is required")
-            if not body:
+            if body is None:
                 raise ValueError("Body is required")
-            if not timestamp:
+            if timestamp is None:
                 raise ValueError("Timestamp is required")
             
             # Call service to process notification

@@ -31,6 +31,7 @@ from ..models.llm_responses import (
     ReaderAppointmentResponse,
     ReaderAppointmentChangeResponse,
     ReaderCancellationResponse,
+    ReaderConfirmAppointmentResponse,
     SchedulerResponse,
     ExtractorCompanyInfoResponse,
     WriteResponse,
@@ -68,6 +69,8 @@ from ..prompts.templates import (
     READER_APPOINTMENT_PROMPT_ENG,
     READER_APPOINTMENT_CHANGE_PROMPT_ITA,
     READER_APPOINTMENT_CHANGE_PROMPT_ENG,
+    READER_CONFIRM_APPOINTMENT_PROMPT_ITA,
+    READER_CONFIRM_APPOINTMENT_PROMPT_ENG,
     READER_CANCELLATION_PROMPT_ITA,
     READER_CANCELLATION_PROMPT_ENG,
     SCHEDULER_PROMPT_ITA,
@@ -82,6 +85,8 @@ from ..prompts.templates import (
     WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ENG,
     WRITER_CANCEL_APPOINTMENT_PROMPT_ITA,
     WRITER_CANCEL_APPOINTMENT_PROMPT_ENG,
+    WRITER_CONFIRM_APPOINTMENT_PROMPT_ITA,
+    WRITER_CONFIRM_APPOINTMENT_PROMPT_ENG,
     WRITER_GENERIC_PROMPT_ITA,
     WRITER_GENERIC_PROMPT_ENG,
     GUIDELINES_SECTION_ITA,
@@ -845,6 +850,91 @@ class LLMClient:
                 place=None,
                 additional_notes=None
             )
+
+    def read_confirm_appointment(self, filtered_body: str, extended_summary: str, 
+                                current_timestamp: str, sender_email: str, 
+                                language: str) -> ReaderConfirmAppointmentResponse:
+        """
+        Extract appointment confirmation details from CONFIRM_APPOINTMENT emails.
+        
+        Args:
+            filtered_body: Filtered email body
+            extended_summary: Extended conversation summary
+            current_timestamp: Current timestamp for relative date calculations
+            sender_email: Email of the sender
+            language: Language of the email ("ITA" or "ENG")
+            
+        Returns:
+            ReaderConfirmAppointmentResponse with appointment details and scheduling status
+        """
+        try:
+            # Choose prompt based on language
+            if language == "ENG":
+                prompt_template = READER_CONFIRM_APPOINTMENT_PROMPT_ENG
+            else:
+                prompt_template = READER_CONFIRM_APPOINTMENT_PROMPT_ITA
+            
+            # Create output parser
+            parser = PydanticOutputParser(pydantic_object=ReaderConfirmAppointmentResponse)
+            
+            # Gestione default extended_summary in base alla lingua
+            if not extended_summary:
+                if language == "ENG":
+                    default_summary = "No previous summary."
+                else:
+                    default_summary = "Nessun riassunto precedente."
+                used_extended_summary = default_summary
+            else:
+                used_extended_summary = extended_summary
+
+            # Format prompt
+            prompt_text = prompt_template.format(
+                current_timestamp=current_timestamp,
+                filtered_body=filtered_body,
+                extended_summary=used_extended_summary,
+                sender_email=sender_email
+            )
+            
+            # Add format instructions
+            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            
+            # Create message
+            message = HumanMessage(content=prompt_with_format)
+            
+            # Get response from LLM
+            response = self.llm.invoke([message])
+            
+            # Parse response
+            parsed_response = parser.parse(response.content)
+            
+            print(f"✅ [LLM] Confirm appointment analyzed ({language}): date={parsed_response.date}, already_scheduled={parsed_response.already_scheduled}, event_code={parsed_response.event_code}, needs_response={parsed_response.needs_response}")
+            return parsed_response
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in confirm appointment reading: {e}")
+            # Return default response on error
+            return ReaderConfirmAppointmentResponse(
+                key_entities={
+                    "dates": [],
+                    "locations": [],
+                    "people": [],
+                    "organizations": [],
+                    "requests": [],
+                    "actions": [],
+                    "amounts": [],
+                    "documents": [],
+                    "other_info": []
+                },
+                title_of_event=f"[AI] APPUNTAMENTO {sender_email}",
+                date=None,
+                event_code=None,
+                duration=60,
+                attendees=None,
+                place=None,
+                additional_notes=None,
+                already_scheduled=False,
+                needs_response=True
+            )
     
     def schedule_appointment(
         self,
@@ -975,17 +1065,20 @@ class LLMClient:
             overlap = False
             event_code = None
             proposed_slots = None
+            favorite_day_unavailable = False
             
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 for tool_call in response.tool_calls:
                     if tool_call['name'] == 'propose_new_slots':
                         # Call the propose_new_slots tool function
                         args = tool_call['args']
-                        proposed_slots = self._propose_new_slots_tool(
+                        slots_result = self._propose_new_slots_tool(
                             service_id=service_id,
                             favorite_day=args.get('favorite_day'),
                             not_available_dates=args.get('not_available_dates', [])
                         )
+                        proposed_slots = slots_result.get('slots', [])
+                        favorite_day_unavailable = slots_result.get('favorite_day_unavailable', False)
                     elif tool_call['name'] == 'book_appointment':
                         # Call the book_appointment tool function
                         args = tool_call['args']
@@ -1005,13 +1098,14 @@ class LLMClient:
                         overlap = booking_result.get('overlap', False)
                         event_code = booking_result.get('event_code')
             
-            print(f"📅 [LLM] Scheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}")
+            print(f"📅 [LLM] Scheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}, favorite_day_unavailable={favorite_day_unavailable}")
             
             return SchedulerResponse(
                 scheduled=scheduled,
                 overlap=overlap,
                 event_code=event_code,
-                proposed_slots=proposed_slots
+                proposed_slots=proposed_slots,
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         except Exception as e:
@@ -1021,7 +1115,8 @@ class LLMClient:
                 scheduled=False,
                 overlap=False,
                 event_code=None,
-                proposed_slots=None
+                proposed_slots=None,
+                favorite_day_unavailable=False
             )
 
     def read_appointment_change_request(
@@ -1344,39 +1439,45 @@ class LLMClient:
             overlap = False
             proposed_slots = None
             
+            favorite_day_unavailable = False
+            
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 for tool_call in response.tool_calls:
                     if tool_call['name'] == 'propose_new_slots':
                         # Call the propose_new_slots tool function
                         args = tool_call['args']
-                        proposed_slots = self._propose_new_slots_tool(
+                        slots_result = self._propose_new_slots_tool(
                             service_id=service_id,
                             favorite_day=args.get('favorite_day'),
                             not_available_dates=args.get('not_available_dates', [])
                         )
+                        # Extract slots and favorite_day_unavailable from dict return
+                        proposed_slots = slots_result.get('slots', [])
+                        favorite_day_unavailable = slots_result.get('favorite_day_unavailable', False)
                     elif tool_call['name'] == 'reschedule_appointment':
                         # Call the reschedule_appointment tool function
-                        args = tool_call['args']
-                        reschedule_appointment = self._reschedule_appointment_tool(
+                        
+                        reschedule_result = self._reschedule_appointment_tool(
                             event_code=event_code,
-                            new_title=args.get('new_title'),
-                            new_date=args.get('new_date'),
-                            new_duration=args.get('new_duration'),
-                            new_attendees=args.get('new_attendees'),
-                            new_place=args.get('new_place'),
-                            additional_notes=args.get('additional_notes')
+                            new_title=appointment_info.get('title_of_event'),
+                            new_date=appointment_info.get('date'),
+                            new_duration=appointment_info.get('duration') or 60,
+                            new_attendees=appointment_info.get('attendees'),
+                            new_place=appointment_info.get('place'),
+                            additional_notes=appointment_info.get('additional_notes')
                         )
-                        scheduled = reschedule_appointment['scheduled']
-                        overlap = reschedule_appointment['overlap']
-                        proposed_slots = reschedule_appointment['proposed_slots']
+                        scheduled = reschedule_result.get('scheduled', False)
+                        overlap = reschedule_result.get('overlap', False)
+                        proposed_slots = reschedule_result.get('proposed_slots')
             
-            print(f"📅 [LLM] Rescheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}")
+            print(f"📅 [LLM] Rescheduler completed ({language}): scheduled={scheduled}, proposed_slots={proposed_slots}, favorite_day_unavailable={favorite_day_unavailable}")
             
             return SchedulerResponse(
                 scheduled=scheduled,
                 overlap=overlap,
                 event_code=event_code,
-                proposed_slots=proposed_slots
+                proposed_slots=proposed_slots,
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         except Exception as e:
@@ -1395,7 +1496,15 @@ class LLMClient:
         service_id: str,
         favorite_day: Optional[str] = None, 
         not_available_dates: Optional[list] = None
-    ) -> list:
+    ) -> dict:
+        """
+        Tool function to propose available appointment slots.
+        
+        Returns:
+            Dictionary with:
+                - slots: List of available time slots in ISO format
+                - favorite_day_unavailable: True if favorite_day was specified but had no slots
+        """
         print(f"\n🛠️ [TOOL] propose_new_slots called: favorite_day={favorite_day}, not_available={not_available_dates}")
         
         from db_client import get_calendar_service_data
@@ -1403,26 +1512,31 @@ class LLMClient:
         # Get calendar service data from DB
         service_data = get_calendar_service_data(service_id)
         if not service_data:
-            return []
+            return {"slots": [], "favorite_day_unavailable": False}
         
         calendar_provider = service_data["calendar_provider"]
         token = service_data["access_token"]
         business_hours = service_data["business_hours"]
         appointment_duration = service_data["appointment_duration"]
+        mailbox_email = service_data.get("email")
         
         # Get timezone from calendar provider API
         if calendar_provider == "google":
             user_timezone = utils.get_google_calendar_timezone(token)
         elif calendar_provider == "microsoft":
-            user_timezone = utils.get_microsoft_calendar_timezone(token)
+            user_timezone = utils.get_microsoft_calendar_timezone(token, mailbox_email)
         else:
             print(f"⚠️ Unknown calendar provider: {calendar_provider}, using default Europe/Rome")
             user_timezone = "Europe/Rome"
         
-        # Time range
+        # Time range - default is next 7 days
         now = datetime.now()
-        start_time = now
-        end_time = now + timedelta(days=7)
+        weekly_start_time = now
+        weekly_end_time = now + timedelta(days=7)
+        
+        # Track if we're searching for a specific favorite_day
+        searching_favorite_day = False
+        favorite_day_unavailable = False
         
         if favorite_day:
             try:
@@ -1431,27 +1545,35 @@ class LLMClient:
                 end_time = fav_date.replace(hour=23, minute=59, second=59, microsecond=0)
                 if start_time < now:
                     start_time = now
+                searching_favorite_day = True
             except ValueError:
                 print(f"❌ Invalid favourite_day format: {favorite_day}")
-        
-        # Busy slots
-        if calendar_provider == "google":
-            busy_slots = utils.get_google_busy_slots(token, start_time, end_time)
-        elif calendar_provider == "microsoft":
-            busy_slots = utils.get_microsoft_busy_slots(token, start_time, end_time)
+                start_time = weekly_start_time
+                end_time = weekly_end_time
         else:
-            print(f"❌ Unknown calendar provider: {calendar_provider}")
-            return []
+            start_time = weekly_start_time
+            end_time = weekly_end_time
+        
+        # Helper function to get busy slots
+        def get_busy_slots(s_time, e_time):
+            if calendar_provider == "google":
+                return utils.get_google_busy_slots(token, s_time, e_time)
+            elif calendar_provider == "microsoft":
+                return utils.get_microsoft_busy_slots(token, s_time, e_time)
+            else:
+                print(f"❌ Unknown calendar provider: {calendar_provider}")
+                return []
+        
+        # Get busy slots for the selected time range
+        busy_slots = get_busy_slots(start_time, end_time)
         
         # DEBUG FULL STATE
         print("\n====== DEBUG BEFORE calculate_free_slots() ======")
         print(f"start_time: {start_time}")
-        # Debug: print first 10 busy slots
         print(f"busy_slots: {len(busy_slots)}")
         if len(busy_slots) > 0:
             print(f"\n🗓️ Showing first {min(10, len(busy_slots))} busy slots:")
             for i, busy_slot in enumerate(busy_slots[:10]):
-                # Handle both 2-tuple (old format) and 3-tuple (new format with event_id)
                 if len(busy_slot) == 3:
                     bs, be, b_event_id = busy_slot
                 else:
@@ -1472,8 +1594,29 @@ class LLMClient:
             user_timezone=user_timezone
         )
         
-        print(f"✅ Found {len(free_slots)} free slots.")
-        return free_slots[:3]
+        print(f"✅ Found {len(free_slots)} free slots for {'favorite day ' + favorite_day if searching_favorite_day else 'next 7 days'}.")
+        
+        # If favorite_day was specified but no slots found, fallback to weekly slots
+        if searching_favorite_day and len(free_slots) == 0:
+            print(f"⚠️ No slots available for favorite day {favorite_day}, falling back to weekly slots...")
+            favorite_day_unavailable = True
+            
+            # Get busy slots for the full week
+            busy_slots = get_busy_slots(weekly_start_time, weekly_end_time)
+            
+            # Calculate free slots for the full week
+            free_slots = utils.calculate_free_slots(
+                weekly_start_time,
+                weekly_end_time,
+                busy_slots,
+                business_hours,
+                appointment_duration,
+                not_available_dates,
+                user_timezone=user_timezone
+            )
+            print(f"✅ Found {len(free_slots)} free slots for next 7 days (fallback).")
+        
+        return {"slots": free_slots, "favorite_day_unavailable": favorite_day_unavailable}
 
     
     def _book_appointment_tool(
@@ -1518,12 +1661,13 @@ class LLMClient:
         
         calendar_provider = service_data["calendar_provider"]
         token = service_data["access_token"]
+        mailbox_email = service_data.get("email")
         
         # Get user timezone from calendar API
         if calendar_provider == "google":
             user_timezone = utils.get_google_calendar_timezone(token)
         elif calendar_provider == "microsoft":
-            user_timezone = utils.get_microsoft_calendar_timezone(token)
+            user_timezone = utils.get_microsoft_calendar_timezone(token, mailbox_email)
         else:
             user_timezone = "Europe/Rome"  # Default fallback
         
@@ -1581,6 +1725,22 @@ class LLMClient:
             if not check_event_code_exists(event_code):
                 break
         
+        # Extract sender email from created_by (format: "Name <email>" or just "email")
+        sender_email = None
+        if created_by:
+            import re
+            email_match = re.search(r'<([^>]+)>', created_by)
+            if email_match:
+                sender_email = email_match.group(1)
+            elif '@' in created_by:
+                sender_email = created_by.strip()
+        
+        # Add sender email to attendees list so they get notified
+        final_attendees = list(attendees) if attendees else []
+        if sender_email and sender_email not in final_attendees:
+            final_attendees.append(sender_email)
+            print(f"📧 Added sender {sender_email} to attendees for notification")
+        
         # Create event in external calendar
         provider_event_id = None
         if calendar_provider == "google":
@@ -1589,17 +1749,18 @@ class LLMClient:
                 title=title_of_event,
                 start_time=start_dt,
                 end_time=end_dt,
-                attendees=attendees,
+                attendees=final_attendees if final_attendees else None,
                 location=place,
                 description=additional_notes
             )
         elif calendar_provider == "microsoft":
+            print(f"Creating event in Microsoft calendar with dates start_time={start_dt}, end_time={end_dt}")
             provider_event_id = utils.create_microsoft_calendar_event(
                 token=token,
                 title=title_of_event,
                 start_time=start_dt,
                 end_time=end_dt,
-                attendees=attendees,
+                attendees=final_attendees if final_attendees else None,
                 location=place,
                 description=additional_notes
             )
@@ -1667,7 +1828,8 @@ class LLMClient:
             return {
                 'invalid_event_code': True,
                 'scheduled': False,
-                'overlap': False
+                'overlap': False,
+                'proposed_slots': None
             }
         
         # Get event details
@@ -1680,16 +1842,17 @@ class LLMClient:
         service_data = get_calendar_service_data(service_id)
         if not service_data:
             print(f"❌ Calendar service data not found for service_id: {service_id}")
-            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False}
+            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False, 'proposed_slots': None}
         
         calendar_provider = service_data["calendar_provider"]
         token = service_data["access_token"]
+        mailbox_email = service_data.get("email")
         
         # Get user timezone
         if calendar_provider == "google":
             user_timezone = utils.get_google_calendar_timezone(token)
         elif calendar_provider == "microsoft":
-            user_timezone = utils.get_microsoft_calendar_timezone(token)
+            user_timezone = utils.get_microsoft_calendar_timezone(token, mailbox_email)
         else:
             user_timezone = "Europe/Rome"
         
@@ -1704,7 +1867,7 @@ class LLMClient:
             end_dt = end_dt_naive.replace(tzinfo=tz)
         except ValueError as e:
             print(f"❌ Invalid date format: {new_date}, error: {e}")
-            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False}
+            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False, 'proposed_slots': None}
         
         # Get busy slots from calendar provider to check for overlaps
         busy_slots = []
@@ -1740,7 +1903,24 @@ class LLMClient:
         
         if is_overlap:
             print("❌ Overlap detected with existing calendar events")
-            return {'scheduled': False, 'overlap': True, 'invalid_event_code': False}
+            return {'scheduled': False, 'overlap': True, 'invalid_event_code': False, 'proposed_slots': None}
+        
+        # Extract sender email from event.created_by (format: "Name <email>" or just "email")
+        sender_email = None
+        created_by = event.get('created_by', '')
+        if created_by:
+            import re
+            email_match = re.search(r'<([^>]+)>', created_by)
+            if email_match:
+                sender_email = email_match.group(1)
+            elif '@' in created_by:
+                sender_email = created_by.strip()
+        
+        # Add sender email to attendees list so they get notified
+        final_attendees = list(new_attendees) if new_attendees else []
+        if sender_email and sender_email not in final_attendees:
+            final_attendees.append(sender_email)
+            print(f"📧 Added sender {sender_email} to attendees for notification")
         
         # Update event in external calendar
         updated_provider_event_id = None
@@ -1751,7 +1931,7 @@ class LLMClient:
                 title=new_title,
                 start_time=start_dt,
                 end_time=end_dt,
-                attendees=new_attendees,
+                attendees=final_attendees if final_attendees else None,
                 location=new_place,
                 description=additional_notes
             )
@@ -1762,14 +1942,14 @@ class LLMClient:
                 title=new_title,
                 start_time=start_dt,
                 end_time=end_dt,
-                attendees=new_attendees,
+                attendees=final_attendees if final_attendees else None,
                 location=new_place,
                 description=additional_notes
             )
         
         if not updated_provider_event_id:
             print(f"❌ Failed to update event in {calendar_provider} calendar")
-            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False}
+            return {'scheduled': False, 'overlap': False, 'invalid_event_code': False, 'proposed_slots': None}
         
         print(f"✅ Event updated in {calendar_provider} calendar")
         
@@ -1783,7 +1963,8 @@ class LLMClient:
         return {
             'scheduled': True,
             'overlap': False,
-            'invalid_event_code': False
+            'invalid_event_code': False,
+            'proposed_slots': None
         }
     
     def extract_company_info(
@@ -1860,6 +2041,7 @@ class LLMClient:
         scheduled: bool = None,
         event_code: str = None,
         proposed_slots: list = None,
+        favorite_day_unavailable: bool = False,
         # Request appointment change specific params
         change_event_code: str = None,
         status: str = None,
@@ -1880,6 +2062,7 @@ class LLMClient:
             scheduled: Whether appointment was scheduled (for REQUEST_APPOINTMENT/CHANGE)
             event_code: Event code if appointment was scheduled
             proposed_slots: Proposed slots if appointment couldn't be scheduled
+            favorite_day_unavailable: True if the requested favorite day had no slots available
             change_event_code: Event code from change request
             status: Status of the operation
             cancellation_event_code: Event code from cancellation request
@@ -1923,6 +2106,7 @@ class LLMClient:
                     scheduled=scheduled,
                     event_code=event_code or "N/A",
                     proposed_slots=proposed_slots or [],
+                    favorite_day_unavailable=favorite_day_unavailable,
                     guidelines_section=guidelines_section
                 )
                 
@@ -1942,6 +2126,7 @@ class LLMClient:
                     scheduled=scheduled,
                     event_code=event_code or "N/A",
                     proposed_slots=proposed_slots or [],
+                    favorite_day_unavailable=favorite_day_unavailable,
                     guidelines_section=guidelines_section
                 )
                 
@@ -1960,6 +2145,41 @@ class LLMClient:
                     status=status or "UNKNOWN",
                     guidelines_section=guidelines_section
                 )
+            
+            elif subcategory == "CONFIRM_APPOINTMENT":
+                # Use appointment-specific prompt when scheduling was involved (already_scheduled=False path)
+                # For already_scheduled=True with needs_response=True, use generic prompt
+                if scheduled is not None:  # This means it went through scheduler
+                    if language == "ITA":
+                        prompt_template = WRITER_CONFIRM_APPOINTMENT_PROMPT_ITA
+                    else:
+                        prompt_template = WRITER_CONFIRM_APPOINTMENT_PROMPT_ENG
+                    
+                    prompt = prompt_template.format(
+                        extended_summary=extended_summary or "",
+                        mail_summary=mail_summary or "",
+                        chunked_company_info=company_info_str,
+                        attachment_summary=attachment_text,
+                        scheduled=scheduled,
+                        event_code=event_code or "N/A",
+                        proposed_slots=proposed_slots or [],
+                        favorite_day_unavailable=favorite_day_unavailable,
+                        guidelines_section=guidelines_section
+                    )
+                else:
+                    # already_scheduled=True case - use generic prompt
+                    if language == "ITA":
+                        prompt_template = WRITER_GENERIC_PROMPT_ITA
+                    else:
+                        prompt_template = WRITER_GENERIC_PROMPT_ENG
+                    
+                    prompt = prompt_template.format(
+                        extended_summary=extended_summary or "",
+                        mail_summary=mail_summary or "",
+                        chunked_company_info=company_info_str,
+                        attachment_summary=attachment_text,
+                        guidelines_section=guidelines_section
+                    )
                 
             else:
                 # Generic prompt for all other subcategories
@@ -2000,7 +2220,8 @@ class LLMClient:
         extended_summary: str,
         mail_summary: str,
         edit_history: list,
-        language: str = "ITA"
+        language: str = "ITA",
+        appointment_context: dict = None
     ):
         """
         Review a written email body and provide feedback.
@@ -2012,6 +2233,7 @@ class LLMClient:
             mail_summary: Current email summary
             edit_history: History of previous editing iterations
             language: Language (ITA or ENG)
+            appointment_context: Optional appointment-related context (scheduled, event_code, proposed_slots, etc.)
             
         Returns:
             ReviewerResponse with needs_review, correctness_score, and guidelines
@@ -2038,18 +2260,32 @@ class LLMClient:
             import json
             company_info_str = json.dumps(chunked_company_info, ensure_ascii=False, indent=2) if chunked_company_info else "{}"
             
+            # Format appointment context
+            if appointment_context:
+                if language == "ITA":
+                    appointment_context_text = self._format_appointment_context_ita(appointment_context)
+                else:
+                    appointment_context_text = self._format_appointment_context_eng(appointment_context)
+            else:
+                if language == "ITA":
+                    appointment_context_text = "Nessun contesto appuntamento applicabile."
+                else:
+                    appointment_context_text = "No appointment context applicable."
+            
             # Build the prompt
             prompt = prompt_template.format(
                 extended_summary=extended_summary or "",
                 mail_summary=mail_summary or "",
                 chunked_company_info=company_info_str,
                 edit_history_text=edit_history_text,
-                written_email_body=written_email_body
+                written_email_body=written_email_body,
+                appointment_context=appointment_context_text
             )
             
             print(f"   📊 Email length: {len(written_email_body)} characters")
             print(f"   🗣️ Language: {language}")
             print(f"   📝 Edit history entries: {len(edit_history)}")
+            print(f"   📅 Appointment context: {'Yes' if appointment_context else 'No'}")
             
             # Use structured completion to get ReviewerResponse
             response = self.structured_completion(prompt, ReviewerResponse)
@@ -2069,6 +2305,96 @@ class LLMClient:
                 correctness_score=0.8,
                 guidelines=[]
             )
+    
+    def _format_appointment_context_ita(self, ctx: dict) -> str:
+        """Format appointment context for Italian reviewer prompt."""
+        lines = []
+        
+        # Handle rescheduled appointments
+        if ctx.get("rescheduled"):
+            lines.append(f"- ⚠️ APPUNTAMENTO RIPROGRAMMATO CON SUCCESSO: Sì")
+            lines.append(f"  IMPORTANTE: L'automazione di riprogrammazione è stata ESEGUITA con successo.")
+            lines.append(f"  L'email DEVE confermare che l'appuntamento è stato riprogrammato, NON che 'sarà elaborato'.")
+            if ctx.get("change_event_code"):
+                lines.append(f"- Codice evento originale modificato: {ctx['change_event_code']}")
+            if ctx.get("event_code"):
+                lines.append(f"- Nuovo codice evento: {ctx['event_code']}")
+        elif ctx.get("scheduled"):
+            lines.append(f"- ⚠️ APPUNTAMENTO PRENOTATO CON SUCCESSO: Sì")
+            lines.append(f"  IMPORTANTE: L'automazione di prenotazione è stata ESEGUITA con successo.")
+            lines.append(f"  L'email DEVE confermare che l'appuntamento è stato prenotato, NON che 'sarà elaborato'.")
+            if ctx.get("event_code"):
+                lines.append(f"- Codice evento: {ctx['event_code']}")
+        else:
+            lines.append(f"- Appuntamento prenotato: No")
+        
+        # Handle cancelled appointments
+        if ctx.get("cancelled"):
+            lines.append(f"- ⚠️ APPUNTAMENTO CANCELLATO CON SUCCESSO: Sì")
+            lines.append(f"  IMPORTANTE: L'automazione di cancellazione è stata ESEGUITA con successo.")
+            lines.append(f"  L'email DEVE confermare che l'appuntamento è stato cancellato.")
+        
+        if ctx.get("proposed_slots"):
+            lines.append(f"- Slot proposti dal sistema di scheduling (disponibilità reali del calendario):")
+            for slot in ctx["proposed_slots"]:
+                lines.append(f"  • {slot}")
+            lines.append("  NOTA: Questi slot sono calcolati in base alla disponibilità effettiva e NON devono essere confusi con gli orari di apertura generali.")
+        
+        if ctx.get("overlap"):
+            lines.append(f"- Sovrapposizione con altri eventi: Sì")
+        
+        if ctx.get("change_event_code"):
+            lines.append(f"- Codice evento da modificare: {ctx['change_event_code']}")
+        
+        if ctx.get("cancellation_event_code"):
+            lines.append(f"- Codice evento da cancellare: {ctx['cancellation_event_code']}")
+        
+        return "\n".join(lines) if lines else "Nessun contesto appuntamento applicabile."
+    
+    def _format_appointment_context_eng(self, ctx: dict) -> str:
+        """Format appointment context for English reviewer prompt."""
+        lines = []
+        
+        # Handle rescheduled appointments
+        if ctx.get("rescheduled"):
+            lines.append(f"- ⚠️ APPOINTMENT RESCHEDULED SUCCESSFULLY: Yes")
+            lines.append(f"  IMPORTANT: The rescheduling automation was EXECUTED successfully.")
+            lines.append(f"  The email MUST confirm that the appointment was rescheduled, NOT that it 'will be processed'.")
+            if ctx.get("change_event_code"):
+                lines.append(f"- Original event code modified: {ctx['change_event_code']}")
+            if ctx.get("event_code"):
+                lines.append(f"- New event code: {ctx['event_code']}")
+        elif ctx.get("scheduled"):
+            lines.append(f"- ⚠️ APPOINTMENT BOOKED SUCCESSFULLY: Yes")
+            lines.append(f"  IMPORTANT: The booking automation was EXECUTED successfully.")
+            lines.append(f"  The email MUST confirm that the appointment was booked, NOT that it 'will be processed'.")
+            if ctx.get("event_code"):
+                lines.append(f"- Event code: {ctx['event_code']}")
+        else:
+            lines.append(f"- Appointment booked: No")
+        
+        # Handle cancelled appointments
+        if ctx.get("cancelled"):
+            lines.append(f"- ⚠️ APPOINTMENT CANCELLED SUCCESSFULLY: Yes")
+            lines.append(f"  IMPORTANT: The cancellation automation was EXECUTED successfully.")
+            lines.append(f"  The email MUST confirm that the appointment was cancelled.")
+        
+        if ctx.get("proposed_slots"):
+            lines.append(f"- Slots proposed by scheduling system (actual calendar availability):")
+            for slot in ctx["proposed_slots"]:
+                lines.append(f"  • {slot}")
+            lines.append("  NOTE: These slots are calculated based on actual availability and MUST NOT be confused with general opening hours.")
+        
+        if ctx.get("overlap"):
+            lines.append(f"- Overlap with other events: Yes")
+        
+        if ctx.get("change_event_code"):
+            lines.append(f"- Event code to modify: {ctx['change_event_code']}")
+        
+        if ctx.get("cancellation_event_code"):
+            lines.append(f"- Event code to cancel: {ctx['cancellation_event_code']}")
+        
+        return "\n".join(lines) if lines else "No appointment context applicable."
 
         
 

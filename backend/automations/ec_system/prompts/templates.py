@@ -838,7 +838,7 @@ READER_APPOINTMENT_PROMPT_ITA = """Sei un assistente esperto nell'analisi di ema
 
 Analizza attentamente la seguente email con richiesta di appuntamento ed estrai tutte le informazioni necessarie.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 CORPO EMAIL:
 {filtered_body}
@@ -890,7 +890,7 @@ READER_APPOINTMENT_PROMPT_ENG = """You are an expert assistant in analyzing emai
 
 Carefully analyze the following appointment request email and extract all necessary information.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 EMAIL BODY:
 {filtered_body}
@@ -943,7 +943,7 @@ SCHEDULER_PROMPT_ITA = """Sei un assistente esperto nella gestione di appuntamen
 
 Analizza la conversazione e determina l'azione appropriata per gestire la richiesta di appuntamento.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 RIASSUNTO MAIL CORRENTE:
 {mail_summary}
@@ -981,7 +981,7 @@ SCHEDULER_PROMPT_ENG = """You are an expert assistant in appointment management.
 
 Analyze the conversation and determine the appropriate action to handle the appointment request.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 CURRENT MAIL SUMMARY:
 {mail_summary}
@@ -1015,12 +1015,181 @@ INSTRUCTIONS:
 
 Always respond in JSON format with fields: scheduled, overlap, event_code, proposed_slots."""
 
+# READER PROMPTS FOR CONFIRM_APPOINTMENT
+READER_CONFIRM_APPOINTMENT_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email di conferma appuntamento.
+
+Analizza attentamente la seguente email di conferma appuntamento ed estrai tutte le informazioni necessarie.
+
+DATA E ORA ATTUALE: {current_timestamp}
+
+CORPO EMAIL:
+{filtered_body}
+
+RIASSUNTO CONVERSAZIONE:
+{extended_summary}
+
+ESTRAI LE SEGUENTI INFORMAZIONI:
+
+1. **key_entities**: Dizionario JSON con le entità chiave:
+   - "dates": Date/orari menzionati
+   - "locations": Luoghi menzionati
+   - "people": Nomi di persone
+   - "organizations": Aziende/organizzazioni
+   - "requests": Richieste esplicite
+   - "actions": Azioni richieste
+   - "amounts": Importi monetari
+   - "documents": Documenti menzionati
+   - "other_info": Altre informazioni rilevanti
+
+2. **title_of_event**: Titolo dell'appuntamento nel formato "[AI] APPUNTAMENTO {sender_email}"
+   Esempio: "[AI] APPUNTAMENTO mario.rossi@example.com"
+
+3. **date**: Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss
+   - Analizza sia la mail corrente che il riassunto conversazione per trovare la data completa
+   - Se l'utente sta confermando una data proposta in precedenza, recupera la data dal contesto
+   - Se menzionato "domani", calcola rispetto al timestamp attuale
+   - Se menzionato "prossimo lunedì", "tra tre giorni", ecc., calcola rispetto al timestamp attuale
+   - Se non viene specificata data E orario completi (entrambi necessari), imposta a None
+   - Se specificato solo un giorno senza orario, imposta a None
+
+4. **duration**: Durata in minuti (default: 60 se non specificato)
+
+5. **attendees**: Array di email degli invitati
+   - Se non specificati, imposta a None
+   - Estrai eventuali email menzionate nel testo
+
+6. **place**: Luogo dell'evento
+   - Se non specificato, imposta a None
+   - Può essere un indirizzo fisico o "online", "Teams", "Zoom", ecc.
+
+7. **additional_notes**: Note aggiuntive sull'evento
+   - Informazioni rilevanti che non rientrano negli altri campi
+   - Se non ci sono note particolari, imposta a None
+
+8. **already_scheduled**: Booleano che indica se l'appuntamento richiede azioni sul calendario
+   - Analizza l'extended_summary per determinare questo campo
+   - ATTENZIONE: Se l'utente sta confermando una NUOVA DATA per RIPROGRAMMARE un appuntamento esistente,
+     questo NON è "already_scheduled" - è una NUOVA prenotazione che sostituisce la precedente!
+   
+   - True SOLO SE: l'utente sta semplicemente confermando/ringraziando per un appuntamento
+     che è già stato creato nel calendario e NON necessita di modifiche
+     (es. "Perfetto, grazie per la conferma" dopo che l'evento è già stato schedulato)
+   
+   - False SE:
+     * L'utente sta confermando uno slot tra quelli proposti per una NUOVA prenotazione
+     * L'utente sta confermando una NUOVA DATA/ORA per RIPROGRAMMARE un appuntamento esistente
+       (anche se esiste un event_code - l'evento va modificato/riprogrammato!)
+     * Dall'extended_summary si evince che si sta cercando di MODIFICARE/RIPROGRAMMARE un evento
+     * L'utente ha richiesto di spostare/cambiare un appuntamento e sta confermando la nuova data
+   
+   REGOLA CHIAVE: Se nella conversazione si parla di "modificare", "spostare", "riprogrammare",
+   "cambiare data" di un appuntamento, e l'utente conferma una nuova data → already_scheduled = False
+
+9. **event_code**: Codice evento a 6 cifre (opzionale)
+   - Cerca nella conversazione (email corrente e extended_summary) se è presente un codice evento
+   - Il codice evento è un codice numerico di ESATTAMENTE 6 cifre (es. "123456", "789012")
+   - È tipicamente presente quando si parla di riprogrammare/reschedulare un appuntamento esistente
+   - Se trovato, restituisci il codice come stringa (es. "123456")
+   - Se NON trovato, imposta a None
+
+10. **needs_response**: Booleano che indica se è necessaria una risposta
+   - True: se l'email richiede esplicitamente una risposta o azione
+   - False: se l'email è conclusiva e non richiede ulteriori comunicazioni
+
+MITTENTE EMAIL: {sender_email}
+
+Rispondi in formato JSON con tutte le chiavi richieste."""
+
+READER_CONFIRM_APPOINTMENT_PROMPT_ENG = """You are an expert assistant in analyzing appointment confirmation emails.
+
+Carefully analyze the following appointment confirmation email and extract all necessary information.
+
+CURRENT DATE AND TIME: {current_timestamp}
+
+EMAIL BODY:
+{filtered_body}
+
+CONVERSATION SUMMARY:
+{extended_summary}
+
+EXTRACT THE FOLLOWING INFORMATION:
+
+1. **key_entities**: JSON dictionary with key entities:
+   - "dates": Dates/times mentioned
+   - "locations": Places mentioned
+   - "people": People's names
+   - "organizations": Companies/organizations
+   - "requests": Explicit requests
+   - "actions": Requested actions
+   - "amounts": Monetary amounts
+   - "documents": Documents mentioned
+   - "other_info": Other relevant information
+
+2. **title_of_event**: Appointment title in format "[AI] APPOINTMENT {sender_email}"
+   Example: "[AI] APPOINTMENT mario.rossi@example.com"
+
+3. **date**: Appointment date and time in format YYYY-MM-DDThh:mm:ss
+   - Analyze both the current email and conversation summary to find the complete date
+   - If the user is confirming a previously proposed date, retrieve the date from context
+   - If mentioned "tomorrow", calculate relative to current timestamp
+   - If mentioned "next Monday", "in three days", etc., calculate relative to current timestamp
+   - If date AND time are NOT both specified (both required), set to None
+   - If only day is specified without time, set to None
+
+4. **duration**: Duration in minutes (default: 60 if not specified)
+
+5. **attendees**: Array of attendee emails
+   - If not specified, set to None
+   - Extract any emails mentioned in the text
+
+6. **place**: Event location
+   - If not specified, set to None
+   - Can be a physical address or "online", "Teams", "Zoom", etc.
+
+7. **additional_notes**: Additional event notes
+   - Relevant information that doesn't fit in other fields
+   - If no particular notes, set to None
+
+8. **already_scheduled**: Boolean indicating if the appointment requires calendar actions
+   - Analyze the extended_summary to determine this field
+   - WARNING: If the user is confirming a NEW DATE to RESCHEDULE an existing appointment,
+     this is NOT "already_scheduled" - it's a NEW booking that replaces the previous one!
+   
+   - True ONLY IF: the user is simply confirming/thanking for an appointment
+     that has already been created in the calendar and does NOT need modifications
+     (e.g., "Perfect, thanks for the confirmation" after the event is already scheduled)
+   
+   - False IF:
+     * The user is confirming a slot among those proposed for a NEW booking
+     * The user is confirming a NEW DATE/TIME to RESCHEDULE an existing appointment
+       (even if an event_code exists - the event needs to be modified/rescheduled!)
+     * From extended_summary it appears they are trying to MODIFY/RESCHEDULE an event
+     * The user requested to move/change an appointment and is confirming the new date
+   
+   KEY RULE: If the conversation mentions "modify", "move", "reschedule",
+   "change date" of an appointment, and user confirms a new date → already_scheduled = False
+
+9. **event_code**: 6-digit event code (optional)
+   - Search in the conversation (current email and extended_summary) if an event code is present
+   - The event code is a numeric code of EXACTLY 6 digits (e.g., "123456", "789012")
+   - It's typically present when discussing rescheduling an existing appointment
+   - If found, return the code as a string (e.g., "123456")
+   - If NOT found, set to None
+
+10. **needs_response**: Boolean indicating if a response is needed
+   - True: if the email explicitly requests a response or action
+   - False: if the email is conclusive and doesn't require further communication
+
+EMAIL SENDER: {sender_email}
+
+Respond in JSON format with all required keys."""
+
 # READER PROMPTS FOR REQUEST_APPOINTMENT_CHANGE
 READER_APPOINTMENT_CHANGE_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email per richieste di modifica appuntamenti.
 
 Analizza attentamente la seguente email di richiesta modifica appuntamento ed estrai tutte le informazioni necessarie.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 CORPO EMAIL:
 {filtered_body}
@@ -1081,7 +1250,7 @@ READER_APPOINTMENT_CHANGE_PROMPT_ENG = """You are an expert assistant in analyzi
 
 Carefully analyze the following appointment change request email and extract all necessary information.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 EMAIL BODY:
 {filtered_body}
@@ -1142,7 +1311,7 @@ RESCHEDULER_PROMPT_ITA = """Sei un assistente esperto nella gestione di modifich
 
 Analizza la conversazione e determina l'azione appropriata per gestire la richiesta di modifica appuntamento.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 RIASSUNTO MAIL CORRENTE:
 {mail_summary}
@@ -1182,7 +1351,7 @@ RESCHEDULER_PROMPT_ENG = """You are an expert assistant in managing appointment 
 
 Analyze the conversation and determine the appropriate action to handle the appointment change request.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 CURRENT MAIL SUMMARY:
 {mail_summary}
@@ -1223,7 +1392,7 @@ READER_CANCELLATION_PROMPT_ITA = """Sei un assistente esperto nell'analisi di em
 
 Analizza attentamente la seguente email di richiesta cancellazione appuntamento ed estrai tutte le informazioni necessarie.
 
-TIMESTAMP ATTUALE: {current_timestamp}
+DATA E ORA ATTUALE: {current_timestamp}
 
 CORPO EMAIL:
 {filtered_body}
@@ -1260,7 +1429,7 @@ READER_CANCELLATION_PROMPT_ENG = """You are an expert assistant in analyzing ema
 
 Carefully analyze the following appointment cancellation request email and extract all necessary information.
 
-CURRENT TIMESTAMP: {current_timestamp}
+CURRENT DATE AND TIME: {current_timestamp}
 
 EMAIL BODY:
 {filtered_body}
@@ -1373,6 +1542,7 @@ STATO SCHEDULAZIONE APPUNTAMENTO:
 - APPUNTAMENTO SCHEDULATO: {scheduled}
 - CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
+- GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
 
 {guidelines_section}
 
@@ -1383,7 +1553,9 @@ ISTRUZIONI CRITICHE:
    - Includi il codice evento per riferimento futuro
    - Specifica che per modifiche o cancellazioni è necessario fornire il codice evento
 3. SE l'appuntamento NON è stato schedulato (scheduled=False) ma ci sono slot proposti:
-   - Proponi cortesemente le date disponibili
+   - SE GIORNO PREFERITO NON DISPONIBILE=True: Spiega che purtroppo non ci sono slot disponibili nel giorno richiesto, quindi proponi gli slot disponibili nei prossimi 7 giorni
+   - SE GIORNO PREFERITO NON DISPONIBILE=False: Proponi cortesemente le date disponibili
+   - Devi raggruppare gli slot per giorno (gg/mm) e scrivere in seguito l'elenco degli orari (hh:mm)
    - Chiedi al cliente di indicare la preferenza
 4. SE ci sono altre richieste nell'email oltre all'appuntamento, rispondi anche a quelle
 5. Usa un tono professionale ma cordiale
@@ -1405,6 +1577,7 @@ APPOINTMENT SCHEDULING STATUS:
 - APPOINTMENT SCHEDULED: {scheduled}
 - EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
+- FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
 
 {guidelines_section}
 
@@ -1415,7 +1588,9 @@ CRITICAL INSTRUCTIONS:
    - Include the event code for future reference
    - Specify that for changes or cancellations the event code is required
 3. IF the appointment was NOT scheduled (scheduled=False) but there are proposed slots:
-   - Kindly propose the available dates
+   - IF FAVORITE DAY UNAVAILABLE=True: Explain that unfortunately there are no available slots on the requested day, so you're proposing available slots for the next 7 days
+   - IF FAVORITE DAY UNAVAILABLE=False: Kindly propose the available dates
+   - You must group the slots by day (dd/mm) and then list the times (hh:mm)
    - Ask the client to indicate their preference
 4. IF there are other requests in the email besides the appointment, respond to those as well
 5. Use a professional but friendly tone
@@ -1440,6 +1615,7 @@ STATO MODIFICA APPUNTAMENTO:
 - APPUNTAMENTO RISCHEDULATO: {scheduled}
 - NUOVO CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
+- GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
 
 {guidelines_section}
 
@@ -1455,9 +1631,12 @@ ISTRUZIONI CRITICHE:
 3. SE l'appuntamento NON è stato rischedulato ma ci sono slot proposti:
    - Proponi cortesemente le nuove date disponibili
    - Chiedi al cliente di indicare la preferenza
-4. SE ci sono altre richieste nell'email, rispondi anche a quelle
-5. Basa la risposta sulle informazioni aziendali fornite
-6. Usa un tono professionale ma cordiale
+4. SE il giorno preferito non era disponibile (favorite_day_unavailable=True):
+   - Menziona che il giorno richiesto non aveva disponibilità
+   - Proponi le alternative disponibili nei prossimi 7 giorni
+5. SE ci sono altre richieste nell'email, rispondi anche a quelle
+6. Basa la risposta sulle informazioni aziendali fornite
+7. Usa un tono professionale ma cordiale
 
 Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
 """
@@ -1477,6 +1656,7 @@ APPOINTMENT CHANGE STATUS:
 - APPOINTMENT RESCHEDULED: {scheduled}
 - NEW EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
+- FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
 
 {guidelines_section}
 
@@ -1492,9 +1672,12 @@ CRITICAL INSTRUCTIONS:
 3. IF the appointment was NOT rescheduled but there are proposed slots:
    - Kindly propose the new available dates
    - Ask the client to indicate their preference
-4. IF there are other requests in the email, respond to those as well
-5. Base the response on the provided company information
-6. Use a professional but friendly tone
+4. IF the favorite day was unavailable (favorite_day_unavailable=True):
+   - Mention that the requested day had no availability
+   - Propose the available alternatives in the next 7 days
+5. IF there are other requests in the email, respond to those as well
+6. Base the response on the provided company information
+7. Use a professional but friendly tone
 
 Write ONLY the email response body, without subject or signature.
 """
@@ -1556,6 +1739,83 @@ CRITICAL INSTRUCTIONS:
 3. IF there are other requests in the email, respond to those as well
 4. Base the response on the provided company information
 5. Use a professional and understanding tone
+
+Write ONLY the email response body, without subject or signature.
+"""
+
+# WRITER PROMPT - CONFIRM_APPOINTMENT SUBCATEGORY (when already_scheduled=False, i.e., after scheduling)
+WRITER_CONFIRM_APPOINTMENT_PROMPT_ITA = """
+Sei un assistente AI professionale che scrive risposte email per conto di un'azienda.
+
+CONTESTO EMAIL:
+- RIASSUNTO CONVERSAZIONE: {extended_summary}
+- RIASSUNTO EMAIL CORRENTE: {mail_summary}
+- INFORMAZIONI AZIENDALI RILEVANTI: {chunked_company_info}
+- RIASSUNTO ALLEGATI: {attachment_summary}
+
+STATO CONFERMA APPUNTAMENTO:
+- APPUNTAMENTO SCHEDULATO: {scheduled}
+- CODICE EVENTO: {event_code}
+- SLOT PROPOSTI: {proposed_slots}
+- GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
+
+{guidelines_section}
+
+ISTRUZIONI CRITICHE:
+1. L'utente ha confermato una data o uno slot precedentemente proposto
+2. SE l'appuntamento è stato schedulato con successo (scheduled=True):
+   - Conferma l'appuntamento con entusiasmo e professionalità
+   - Includi SEMPRE il codice evento per riferimento futuro
+   - Specifica che per modifiche o cancellazioni è necessario fornire il codice evento
+   - Se presenti nel contesto, conferma i dettagli (data, ora, luogo)
+3. SE l'appuntamento NON è stato schedulato (scheduled=False) ma ci sono slot proposti:
+   - Spiega cortesemente che gli slot inizialmente proposti non sono più disponibili
+   - Proponi le nuove date disponibili
+   - Chiedi al cliente di indicare la preferenza
+4. SE il giorno preferito non era disponibile (favorite_day_unavailable=True):
+   - Menziona che il giorno richiesto non aveva disponibilità
+   - Proponi le alternative disponibili nei prossimi 7 giorni
+5. SE ci sono altre richieste o domande nell'email oltre alla conferma, rispondi anche a quelle
+6. Usa un tono professionale ma cordiale
+7. Non inventare informazioni non presenti nel contesto
+
+Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
+"""
+
+WRITER_CONFIRM_APPOINTMENT_PROMPT_ENG = """
+You are a professional AI assistant writing email responses on behalf of a company.
+
+EMAIL CONTEXT:
+- CONVERSATION SUMMARY: {extended_summary}
+- CURRENT EMAIL SUMMARY: {mail_summary}
+- RELEVANT COMPANY INFORMATION: {chunked_company_info}
+- ATTACHMENTS SUMMARY: {attachment_summary}
+
+APPOINTMENT CONFIRMATION STATUS:
+- APPOINTMENT SCHEDULED: {scheduled}
+- EVENT CODE: {event_code}
+- PROPOSED SLOTS: {proposed_slots}
+- FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
+
+{guidelines_section}
+
+CRITICAL INSTRUCTIONS:
+1. The user has confirmed a previously proposed date or slot
+2. IF the appointment was successfully scheduled (scheduled=True):
+   - Confirm the appointment with enthusiasm and professionalism
+   - ALWAYS include the event code for future reference
+   - Specify that for changes or cancellations the event code is required
+   - If present in context, confirm the details (date, time, location)
+3. IF the appointment was NOT scheduled (scheduled=False) but there are proposed slots:
+   - Politely explain that the initially proposed slots are no longer available
+   - Propose the new available dates
+   - Ask the client to indicate their preference
+4. IF the favorite day was unavailable (favorite_day_unavailable=True):
+   - Mention that the requested day had no availability
+   - Propose the available alternatives in the next 7 days
+5. IF there are other requests or questions in the email besides the confirmation, respond to those as well
+6. Use a professional but friendly tone
+7. Do not invent information not present in the context
 
 Write ONLY the email response body, without subject or signature.
 """
@@ -1640,6 +1900,9 @@ Riassunto email corrente: {mail_summary}
 INFORMAZIONI AZIENDALI RILEVANTI:
 {chunked_company_info}
 
+CONTESTO APPUNTAMENTO (se applicabile):
+{appointment_context}
+
 STORICO MODIFICHE PRECEDENTI:
 {edit_history_text}
 
@@ -1668,6 +1931,20 @@ ISTRUZIONI PER LA REVISIONE:
    - Se presente uno storico di modifiche precedenti, verifica che le correzioni siano state applicate correttamente
    - Non ripetere le stesse correzioni già fatte nelle iterazioni precedenti
    - Identifica nuovi problemi non evidenziati prima
+
+5. IMPORTANTE - GESTIONE SLOT APPUNTAMENTO:
+   - Se nel "CONTESTO APPUNTAMENTO" sono presenti degli slot proposti, questi sono stati calcolati dal sistema di scheduling in base alla disponibilità reale del calendario
+   - NON segnalare come errore se gli slot proposti nell'email differiscono dagli orari di apertura generali nelle informazioni aziendali
+   - Gli slot proposti sono disponibilità specifiche e corrette, NON devono essere modificati per allinearli agli orari di apertura generali
+   - Verifica solo che gli slot scritti nell'email corrispondano a quelli nel "CONTESTO APPUNTAMENTO"
+   - Segnala errore SOLO se l'utente ha chiesto esplicitamente gli orari di apertura E l'email non li fornisce
+
+6. CRITICO - AUTOMAZIONI GIÀ ESEGUITE:
+   - Se nel "CONTESTO APPUNTAMENTO" è indicato che un'azione è stata eseguita con SUCCESSO (es. "APPUNTAMENTO RIPROGRAMMATO CON SUCCESSO", "APPUNTAMENTO PRENOTATO CON SUCCESSO", "APPUNTAMENTO CANCELLATO CON SUCCESSO"), l'automazione È GIÀ STATA COMPLETATA
+   - In questi casi, l'email che CONFERMA l'azione eseguita è CORRETTA
+   - NON segnalare come errore frasi come "è stato riprogrammato", "è stato prenotato", "è stato cancellato" - queste sono CONFERME di azioni già avvenute
+   - NON suggerire di cambiare "è stato riprogrammato" con "sarà elaborato" o simili - l'azione È GIÀ STATA ESEGUITA
+   - Se l'automazione è riuscita, l'email deve comunicare CERTEZZA, non dubbi o attese
 
 OUTPUT RICHIESTO:
 
@@ -1707,6 +1984,9 @@ Current email summary: {mail_summary}
 RELEVANT COMPANY INFORMATION:
 {chunked_company_info}
 
+APPOINTMENT CONTEXT (if applicable):
+{appointment_context}
+
 PREVIOUS EDIT HISTORY:
 {edit_history_text}
 
@@ -1735,6 +2015,20 @@ REVIEW INSTRUCTIONS:
    - If previous edit history exists, verify that corrections were applied correctly
    - Do not repeat the same corrections already made in previous iterations
    - Identify new problems not highlighted before
+
+5. IMPORTANT - APPOINTMENT SLOTS HANDLING:
+   - If "APPOINTMENT CONTEXT" contains proposed slots, these were calculated by the scheduling system based on actual calendar availability
+   - DO NOT flag as error if proposed slots in the email differ from general opening hours in company information
+   - Proposed slots are specific and correct availabilities, they MUST NOT be modified to align with general opening hours
+   - Only verify that slots written in the email match those in "APPOINTMENT CONTEXT"
+   - Flag as error ONLY if the user explicitly asked for opening hours AND the email doesn't provide them
+
+6. CRITICAL - ALREADY EXECUTED AUTOMATIONS:
+   - If "APPOINTMENT CONTEXT" indicates that an action was executed SUCCESSFULLY (e.g., "APPOINTMENT RESCHEDULED SUCCESSFULLY", "APPOINTMENT BOOKED SUCCESSFULLY", "APPOINTMENT CANCELLED SUCCESSFULLY"), the automation HAS ALREADY BEEN COMPLETED
+   - In these cases, the email that CONFIRMS the executed action is CORRECT
+   - DO NOT flag as error phrases like "has been rescheduled", "has been booked", "has been cancelled" - these are CONFIRMATIONS of actions that already happened
+   - DO NOT suggest changing "has been rescheduled" to "will be processed" or similar - the action HAS ALREADY BEEN EXECUTED
+   - If the automation succeeded, the email must communicate CERTAINTY, not doubts or expectations
 
 REQUIRED OUTPUT:
 

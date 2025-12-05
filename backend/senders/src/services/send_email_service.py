@@ -65,13 +65,11 @@ class SendEmailService:
 
             # Decrypt the access token
             access_token = decrypt(hashed_access_token, "token")
-            print(f"[DEBUG] Access token decrypted: {bool(access_token)}")
 
             if not access_token:
                 raise ValueError("Failed to decrypt access token")
 
             scopes_env = os.getenv("GOOGLE_SCOPES", "")
-            print(f"[DEBUG] GOOGLE_SCOPES env: {scopes_env}")
 
             if scopes_env:
                 scopes = [scope.strip() for scope in scopes_env.split() if scope.strip()]
@@ -80,8 +78,6 @@ class SendEmailService:
                     "https://www.googleapis.com/auth/gmail.send",
                     "https://www.googleapis.com/auth/gmail.modify",
                 ]
-
-            print(f"[DEBUG] Final scopes: {scopes}")
 
             creds = Credentials(
                 token=access_token,
@@ -92,7 +88,6 @@ class SendEmailService:
             )
 
             service = build('gmail', 'v1', credentials=creds)
-            print("[DEBUG] Gmail service built successfully")
 
             # Create email
             message = MIMEMultipart('alternative')
@@ -102,34 +97,23 @@ class SendEmailService:
             if message_id:
                 # Ensure message_id has angle brackets for RFC compliance
                 rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
-                print(f"[DEBUG] Adding In-Reply-To and References headers -> {rfc_message_id}")
                 message['In-Reply-To'] = rfc_message_id
                 message['References'] = rfc_message_id
-            else:
-                print("[DEBUG] No message_id given — sending as NEW email")
 
             # Detect body type
             if body.strip().startswith("<") and body.strip().endswith(">"):
-                print("[DEBUG] Body detected as HTML")
                 part = MIMEText(body, 'html', 'utf-8')
             else:
-                print("[DEBUG] Body detected as PLAIN TEXT")
                 part = MIMEText(body, 'plain', 'utf-8')
 
             message.attach(part)
 
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
-            print(f"[DEBUG] Raw message length: {len(raw_message)}")
 
             message_body = {"raw": raw_message}
 
             if thread_id:
-                print(f"[DEBUG] Adding threadId to send body: {thread_id}")
                 message_body["threadId"] = thread_id
-            else:
-                print("[DEBUG] No threadId given — Gmail may create new thread")
-
-            print("[DEBUG] Sending email...")
 
             send_result = service.users().messages().send(
                 userId='me',
@@ -137,14 +121,11 @@ class SendEmailService:
             ).execute()
 
             gmail_internal_id = send_result.get("id")
-            print(f"[DEBUG] Gmail send() result ID: {gmail_internal_id}")
 
             # Retrieve RFC Message-ID
             rfc_message_id = None
 
             try:
-                print("[DEBUG] Fetching Message-ID from Gmail...")
-
                 msg = service.users().messages().get(
                     userId="me",
                     id=gmail_internal_id,
@@ -152,14 +133,10 @@ class SendEmailService:
                     metadataHeaders=["Message-ID", "Message-Id"]
                 ).execute()
 
-                print("[DEBUG] Received metadata headers:")
-
                 for h in msg.get("payload", {}).get("headers", []):
                     print(f"   - {h.get('name')}: {h.get('value')}")
                     if h.get("name", "").lower() == "message-id":
                         rfc_message_id = h.get("value")
-
-                print(f"[DEBUG] Extracted RFC Message-ID: {rfc_message_id}")
 
             except Exception as err:
                 print(f"[DEBUG] Could not fetch RFC Message-ID: {err}")
@@ -325,95 +302,136 @@ class SendEmailService:
         smtp_port: int,
         smtp_server: str,
         smtp_email: str,
-        smtp_password: str,
+        password: str,
         reply_to_id: Optional[str] = None,
         message_id: Optional[str] = None
     ) -> dict:
         try:
+            print("🔵 [SERVICE] ---- START send_email_smtp ----")
+
+            print(f"🔵 [SERVICE] email={email}")
+            print(f"🔵 [SERVICE] subject={subject}")
+            print(f"🔵 [SERVICE] body_length={len(body) if body else 0}")
+            print(f"🔵 [SERVICE] smtp_port={smtp_port}")
+            print(f"🔵 [SERVICE] smtp_server={smtp_server}")
+            print(f"🔵 [SERVICE] smtp_email={smtp_email}")
+            print(f"🔵 [SERVICE] reply_to_id={reply_to_id}")
+            print(f"🔵 [SERVICE] message_id={message_id}")
+            print("🔵 [SERVICE] password received (not printed)")
+
             sender_email = smtp_email
 
+            # Create message
             message = MIMEMultipart("alternative")
             message["From"] = sender_email
             message["To"] = email
             message["Subject"] = subject
-        
-            # 🆕 Genero Message-ID RFC e lo aggiungo all'header
+
+            # RFC Message-ID
             msg_id = make_msgid()
             message["Message-ID"] = msg_id
+            print(f"🔵 [SERVICE] Generated RFC Message-ID={msg_id}")
 
+            # Reply headers
             if reply_to_id:
-                # Ensure reply_to_id has angle brackets for RFC compliance
                 rfc_reply_to_id = reply_to_id if reply_to_id.startswith('<') else f"<{reply_to_id}>"
                 message["In-Reply-To"] = rfc_reply_to_id
+                print(f"🔵 [SERVICE] In-Reply-To={rfc_reply_to_id}")
+
             if message_id:
-                # Ensure message_id has angle brackets for RFC compliance
                 rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
                 message["References"] = rfc_message_id
+                print(f"🔵 [SERVICE] References={rfc_message_id}")
 
-            # HTML o testo
+            # Body type
             if body.strip().startswith("<"):
+                print("🔵 [SERVICE] Body detected as HTML")
                 message.attach(MIMEText(body, "html", "utf-8"))
             else:
+                print("🔵 [SERVICE] Body detected as TEXT")
                 message.attach(MIMEText(body, "plain", "utf-8"))
 
-            # SSL/STARTTLS
             context = ssl.create_default_context()
+            print(f"🔵 [SERVICE] Selecting SMTP flow for port {smtp_port}...")
 
-            password = decrypt(smtp_password, "pass")
-            if not password:
-                raise ValueError("Failed to decrypt hashed password")
-
+            # SMTP 465 SSL
             if smtp_port == 465:
+                print("🟣 [SERVICE] Connecting with SMTP_SSL...")
                 with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
                     server.ehlo()
+                    print("🟣 [SERVICE] Logging in...")
                     server.login(sender_email, password)
+                    print("🟣 [SERVICE] Login OK")
                     server.send_message(message)
+                    print("🟣 [SERVICE] Message sent via SSL")
 
+            # SMTP 587 STARTTLS
             elif smtp_port == 587:
+                print("🟠 [SERVICE] Connecting with STARTTLS...")
                 with smtplib.SMTP(smtp_server, smtp_port) as server:
                     server.ehlo()
+                    print("🟠 [SERVICE] Starting TLS...")
                     server.starttls(context=context)
                     server.ehlo()
+                    print("🟠 [SERVICE] Logging in...")
                     server.login(sender_email, password)
+                    print("🟠 [SERVICE] Login OK")
                     server.send_message(message)
+                    print("🟠 [SERVICE] Message sent via STARTTLS")
 
+            # SMTP 25 (optional TLS/login)
             elif smtp_port == 25:
+                print("🟢 [SERVICE] Connecting on port 25...")
                 with smtplib.SMTP(smtp_server, smtp_port) as server:
                     server.ehlo()
+
                     try:
+                        print("🟢 [SERVICE] Trying STARTTLS...")
                         server.starttls(context=context)
                         server.ehlo()
-                    except:
-                        pass
+                        print("🟢 [SERVICE] STARTTLS OK")
+                    except Exception as e_tls:
+                        print(f"🟡 [SERVICE] STARTTLS not available: {e_tls}")
 
                     try:
+                        print("🟢 [SERVICE] Logging in...")
                         server.login(sender_email, password)
-                    except:
-                        pass
+                        print("🟢 [SERVICE] Login OK")
+                    except Exception as e_login:
+                        print(f"🟡 [SERVICE] Login failed/not required: {e_login}")
 
+                    print("🟢 [SERVICE] Sending message...")
                     server.send_message(message)
+                    print("🟢 [SERVICE] Message sent via port 25")
 
             else:
+                print(f"🔴 [SERVICE] Unsupported port: {smtp_port}")
                 return {
                     "success": False,
                     "message": f"Unsupported SMTP port {smtp_port}. Use 465 / 587 / 25.",
                     "message_id": None
                 }
 
-            # Clean message_id by removing angle brackets
             cleaned_message_id = _clean_message_id(msg_id)
+            print(f"🟩 [SERVICE] Email sent successfully. Cleaned Message-ID={cleaned_message_id}")
 
             return {
                 "success": True,
                 "message": "Email sent",
-                "message_id": cleaned_message_id,     # RFC Message-ID (cleaned)
-                "notification_id": cleaned_message_id  # Per uniformità con gli altri metodi
+                "message_id": cleaned_message_id,
+                "notification_id": cleaned_message_id
             }
 
         except Exception as e:
+            print("🔴 [SERVICE] ERROR sending email!")
+            print(f"🔴 [SERVICE] Exception type: {type(e).__name__}")
+            print(f"🔴 [SERVICE] Exception message: {str(e)}")
+            print(f"🔴 [SERVICE] Exception repr: {repr(e)}")
+
             return {
                 "success": False,
-                "message": str(e),
+                "message": str(e) or repr(e),
                 "message_id": None,
                 "notification_id": None
             }
+

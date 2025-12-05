@@ -279,7 +279,8 @@ def create_email_classification_graph():
         if state.get("high_priority_email") and subcategory in [
             "REQUEST_APPOINTMENT",
             "REQUEST_APPOINTMENT_CHANGE",
-            "CANCEL_APPOINTMENT"
+            "CANCEL_APPOINTMENT",
+            "CONFIRM_APPOINTMENT"
         ]:
             return END # TODO valutare di continuare i flussi con scheduler
 
@@ -448,6 +449,9 @@ def create_email_classification_graph():
         If needs_response is True, continue (momentarily to END).
         EVENT_FOLLOWUP has special behavior: always returns AutomationExecutedResponse with different human_response values.
         REQUEST_APPOINTMENT routes to SCHEDULER node for appointment scheduling.
+        CONFIRM_APPOINTMENT routes based on already_scheduled flag:
+          - If already_scheduled=True: follow standard flow based on needs_response
+          - If already_scheduled=False: route to SCHEDULER for scheduling
         """
         needs_response = state.get("needs_response", True)
         subcategory = state.get("subcategory", "")
@@ -466,9 +470,34 @@ def create_email_classification_graph():
             print(f"❌ [READER] Routing to CANCEL_APPOINTMENT for CANCEL_APPOINTMENT")
             return NodeNames.CANCELLATION
         
+        # Special routing for CONFIRM_APPOINTMENT based on already_scheduled flag and event_code
+        if subcategory == "CONFIRM_APPOINTMENT":
+            already_scheduled = state.get("already_scheduled", False)
+            confirm_event_code = state.get("confirm_event_code")
+            
+            if already_scheduled:
+                # Appointment is already scheduled - follow standard flow based on needs_response
+                print(f"✅ [READER] CONFIRM_APPOINTMENT - already_scheduled=True, following standard flow")
+                if not needs_response:
+                    state["automation_executed"] = True
+                    return END
+                else:
+                    return NodeNames.EXTRACTOR_COMPANY_INFO
+            else:
+                # Appointment not yet scheduled - check if we have an event_code for rescheduling
+                if confirm_event_code and len(confirm_event_code) == 6 and confirm_event_code.isdigit():
+                    # Valid event_code found - route to RESCHEDULER
+                    print(f"🔄 [READER] CONFIRM_APPOINTMENT - event_code={confirm_event_code} found, routing to RESCHEDULER")
+                    # Copy event_code to change_event_code for rescheduler compatibility
+                    state["change_event_code"] = confirm_event_code
+                    return NodeNames.RESCHEDULER
+                else:
+                    # No valid event_code - route to SCHEDULER
+                    print(f"📅 [READER] CONFIRM_APPOINTMENT - already_scheduled=False, no event_code, routing to SCHEDULER")
+                    return NodeNames.SCHEDULER
+        
         # Subcategories that should check needs_response for conditional automation
         conditional_automation_subcategories = {
-            "CONFIRM_APPOINTMENT",
             "FORWARD_INFO", 
             "RESPONSE_TO_REQUEST",
             "INVOICE_OR_RECEIPT",
@@ -728,6 +757,7 @@ def run_workflow(email_data: dict = None):
                 "automation_executed": False,
                 "summarizer_only": email_data.get("summarizer_only", False),
                 "original_thread_id": email_data.get("original_thread_id", None),
+                "microsoft_message_id": email_data.get("microsoft_message_id", None),
                 "review_iteration": 0,
                 "edit_history": []
             }

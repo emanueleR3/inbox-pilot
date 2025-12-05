@@ -1075,7 +1075,8 @@ def reader_node(state):
             extended_summary = state.get("extended_summary", "")
             extracted_info = state.get("extracted_info", {})
             sender_email = extracted_info.get("from", "mail not available")
-            current_timestamp = datetime.now().isoformat()
+            now = datetime.now()
+            current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
             
             # Analyze appointment request using specialized LLM method
             appointment_response = llm_client.read_appointment_request(
@@ -1115,7 +1116,8 @@ def reader_node(state):
             mail_summary = state.get("mail_summary", "")
             extracted_info = state.get("extracted_info", {})
             sender_email = extracted_info.get("from", "mail not available")
-            current_timestamp = datetime.now().isoformat()
+            now = datetime.now()
+            current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
             
             # Analyze appointment change request using specialized LLM method
             change_response = llm_client.read_appointment_change_request(
@@ -1157,7 +1159,8 @@ def reader_node(state):
             mail_summary = state.get("mail_summary", "")
             extracted_info = state.get("extracted_info", {})
             sender_email = extracted_info.get("from", "mail not available")
-            current_timestamp = datetime.now().isoformat()
+            now = datetime.now()
+            current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
             
             # Analyze cancellation request using specialized LLM method
             cancellation_response = llm_client.read_cancellation_request(
@@ -1175,6 +1178,49 @@ def reader_node(state):
             
             print(f"✅ [READER] Cancellation analysis completed successfully")
             print(f"   🔑 Event code: {cancellation_response.event_code}")
+        
+        # Check if this is a CONFIRM_APPOINTMENT email
+        elif subcategory == "CONFIRM_APPOINTMENT":
+            print(f"✅ [READER] Detected CONFIRM_APPOINTMENT - using confirm appointment analysis")
+            
+            # Get additional data for confirm appointment analysis
+            extended_summary = state.get("extended_summary", "")
+            extracted_info = state.get("extracted_info", {})
+            sender_email = extracted_info.get("from", "mail not available")
+            now = datetime.now()
+            current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
+            
+            # Analyze confirm appointment using specialized LLM method
+            confirm_response = llm_client.read_confirm_appointment(
+                filtered_body,
+                extended_summary,
+                current_timestamp,
+                sender_email,
+                language
+            )
+            
+            # Update state with confirm appointment details
+            state["key_entities"] = confirm_response.key_entities
+            state["appointment_title"] = confirm_response.title_of_event
+            state["appointment_date"] = confirm_response.date
+            state["appointment_duration"] = confirm_response.duration
+            state["appointment_attendees"] = confirm_response.attendees
+            state["appointment_place"] = confirm_response.place
+            state["appointment_notes"] = confirm_response.additional_notes
+            state["already_scheduled"] = confirm_response.already_scheduled
+            state["confirm_event_code"] = confirm_response.event_code
+            state["needs_response"] = confirm_response.needs_response
+            
+            print(f"✅ [READER] Confirm appointment analysis completed successfully")
+            print(f"   📅 Title: {confirm_response.title_of_event}")
+            print(f"   🕐 Date: {confirm_response.date}")
+            print(f"   ⏱️ Duration: {confirm_response.duration} minutes")
+            print(f"   👥 Attendees: {confirm_response.attendees}")
+            print(f"   📍 Place: {confirm_response.place}")
+            print(f"   📝 Notes: {confirm_response.additional_notes}")
+            print(f"   📆 Already Scheduled: {confirm_response.already_scheduled}")
+            print(f"   🔑 Event Code: {confirm_response.event_code}")
+            print(f"   💬 Needs Response: {confirm_response.needs_response}")
             
         else:
             # Standard email analysis for non-appointment emails
@@ -1266,8 +1312,9 @@ def scheduler_node(state):
         print(f"   🔑 Service ID: {service_id}")
         print(f"   👤 Created by: {created_by}")
         
-        # Get current timestamp
-        current_timestamp = datetime.now().isoformat()
+        # Get current timestamp with day of week
+        now = datetime.now()
+        current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
         
         # Get appointment details from state (for booking)
         appointment_info = {
@@ -1298,12 +1345,14 @@ def scheduler_node(state):
         state["appointment_overlap"] = scheduler_response.overlap
         state["appointment_event_code"] = scheduler_response.event_code
         state["appointment_proposed_slots"] = scheduler_response.proposed_slots
+        state["appointment_favorite_day_unavailable"] = scheduler_response.favorite_day_unavailable
         
         print(f"✅ [SCHEDULER] Scheduling completed successfully")
         print(f"   ✓ Scheduled: {scheduler_response.scheduled}")
         print(f"   ⚠️ Overlap: {scheduler_response.overlap}")
         print(f"   🔢 Event code: {scheduler_response.event_code}")
         print(f"   📆 Proposed slots: {scheduler_response.proposed_slots}")
+        print(f"   📅 Favorite day unavailable: {scheduler_response.favorite_day_unavailable}")
         
         return state
         
@@ -1314,6 +1363,7 @@ def scheduler_node(state):
         state["appointment_overlap"] = False
         state["appointment_event_code"] = None
         state["appointment_proposed_slots"] = None
+        state["appointment_favorite_day_unavailable"] = False
         return state
 
 
@@ -1388,8 +1438,9 @@ def rescheduler_node(state):
         print(f"   🔑 Service ID: {service_id}")
         print(f"   🔑 Event code: {event_code}")
         
-        # Get current timestamp
-        current_timestamp = datetime.now().isoformat()
+        # Get current timestamp with day of week
+        now = datetime.now()
+        current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
         
         # Get appointment change details from state
         appointment_info = {
@@ -1423,12 +1474,14 @@ def rescheduler_node(state):
         state["appointment_overlap"] = rescheduler_response.overlap
         state["appointment_event_code"] = rescheduler_response.event_code
         state["appointment_proposed_slots"] = rescheduler_response.proposed_slots
+        state["appointment_favorite_day_unavailable"] = rescheduler_response.favorite_day_unavailable
         
         print(f"✅ [RESCHEDULER] Rescheduling completed successfully")
         print(f"   ✓ Scheduled: {rescheduler_response.scheduled}")
         print(f"   ⚠️ Overlap: {rescheduler_response.overlap}")
         print(f"   🔢 Event code: {rescheduler_response.event_code}")
         print(f"   📆 Proposed slots: {rescheduler_response.proposed_slots}")
+        print(f"   📅 Favorite day unavailable: {rescheduler_response.favorite_day_unavailable}")
         
         return state
         
@@ -1600,8 +1653,7 @@ def extractor_company_info_node(state):
 
         # DEBUG
         print(f"✅ [EXTRACTOR_COMPANY_INFO] Company information extracted successfully")
-        print(f"   📝 [DEBUG] Chunked company informations extracted:\n {extraction_result.chunked_company_informations} ")
-        
+
         return state
         
     except Exception as e:
@@ -1649,10 +1701,12 @@ def writer_node(state):
             scheduled = state.get("appointment_scheduled", False)
             event_code = state.get("appointment_event_code")
             proposed_slots = state.get("appointment_proposed_slots")
+            favorite_day_unavailable = state.get("appointment_favorite_day_unavailable", False)
             
             print(f"   📅 Scheduled: {scheduled}")
             print(f"   🔢 Event code: {event_code}")
             print(f"   📆 Proposed slots: {proposed_slots}")
+            print(f"   ⚠️ Favorite day unavailable: {favorite_day_unavailable}")
             
             # Call LLM to write email
             write_response = llm_client.write_email(
@@ -1665,7 +1719,8 @@ def writer_node(state):
                 language=language,
                 scheduled=scheduled,
                 event_code=event_code,
-                proposed_slots=proposed_slots
+                proposed_slots=proposed_slots,
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         elif subcategory == "REQUEST_APPOINTMENT_CHANGE":
@@ -1675,12 +1730,14 @@ def writer_node(state):
             scheduled = state.get("appointment_scheduled", False)
             event_code = state.get("appointment_event_code")
             proposed_slots = state.get("appointment_proposed_slots")
+            favorite_day_unavailable = state.get("appointment_favorite_day_unavailable", False)
             
             print(f"   🔑 Change event code: {change_event_code}")
             print(f"   📊 Status: {status}")
             print(f"   📅 Scheduled: {scheduled}")
             print(f"   🔢 Event code: {event_code}")
             print(f"   📆 Proposed slots: {proposed_slots}")
+            print(f"   ⚠️ Favorite day unavailable: {favorite_day_unavailable}")
             
             # Call LLM to write email
             write_response = llm_client.write_email(
@@ -1695,7 +1752,8 @@ def writer_node(state):
                 status=status,
                 scheduled=scheduled,
                 event_code=event_code,
-                proposed_slots=proposed_slots
+                proposed_slots=proposed_slots,
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         elif subcategory == "CANCEL_APPOINTMENT":
@@ -1717,6 +1775,34 @@ def writer_node(state):
                 language=language,
                 cancellation_event_code=cancellation_event_code,
                 status=status
+            )
+        
+        elif subcategory == "CONFIRM_APPOINTMENT":
+            # Get confirm appointment-specific parameters
+            scheduled = state.get("appointment_scheduled")
+            event_code = state.get("appointment_event_code")
+            proposed_slots = state.get("appointment_proposed_slots")
+            favorite_day_unavailable = state.get("appointment_favorite_day_unavailable", False)
+            
+            print(f"   📅 Scheduled: {scheduled}")
+            print(f"   🔢 Event code: {event_code}")
+            print(f"   📆 Proposed slots: {proposed_slots}")
+            print(f"   ⚠️ Favorite day unavailable: {favorite_day_unavailable}")
+            
+            # If already_scheduled=False, it went through scheduler and needs appointment-specific response
+            # If already_scheduled=True, use generic prompt (scheduled will be None)
+            write_response = llm_client.write_email(
+                subcategory=subcategory,
+                extended_summary=extended_summary,
+                mail_summary=mail_summary,
+                chunked_company_info=chunked_company_info,
+                attachment_summary=attachment_summary,
+                guidelines=guidelines,
+                language=language,
+                scheduled=scheduled,
+                event_code=event_code,
+                proposed_slots=proposed_slots,
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         else:
@@ -1787,9 +1873,32 @@ def reviewer_node(state):
         edit_history = state.get("edit_history", [])
         language = state.get("language", "ITA")
         
+        # Build appointment context if applicable
+        appointment_context = None
+        subcategory = state.get("subcategory")
+        
+        # Check if this is an appointment-related subcategory
+        appointment_subcategories = [
+            "REQUEST_APPOINTMENT", "REQUEST_APPOINTMENT_CHANGE", "CANCEL_APPOINTMENT", "CONFIRM_APPOINTMENT"
+        ]
+        
+        # Get subcategory value (handle enum or string)
+        subcategory_value = subcategory.value if hasattr(subcategory, 'value') else subcategory
+        
+        if subcategory_value in appointment_subcategories:
+            appointment_context = {
+                "scheduled": state.get("appointment_scheduled"),
+                "rescheduled": state.get("appointment_scheduled") and subcategory_value in ["REQUEST_APPOINTMENT_CHANGE", "CONFIRM_APPOINTMENT"] and state.get("change_event_code"),
+                "event_code": state.get("appointment_event_code"),
+                "proposed_slots": state.get("appointment_proposed_slots"),
+                "overlap": state.get("appointment_overlap"),
+                "change_event_code": state.get("change_event_code"),
+                "cancellation_event_code": state.get("cancellation_event_code"),
+                "cancelled": state.get("cancellation_event_code") and subcategory_value == "CANCEL_APPOINTMENT" and state.get("automation_executed"),
+            }
+            print(f"   📅 Appointment context built for subcategory: {subcategory_value}")
+        
         print(f"   🔢 Review iteration: {state['review_iteration']}")
-        print(f"   📄 Written email length: {len(written_email_body)}")
-        print(f"   🗓️ Edit history entries: {len(edit_history)}")
         
         # Call LLM to review the email
         review_response = llm_client.review_email(
@@ -1798,7 +1907,8 @@ def reviewer_node(state):
             extended_summary=extended_summary,
             mail_summary=mail_summary,
             edit_history=edit_history,
-            language=language
+            language=language,
+            appointment_context=appointment_context
         )
         
         # Update state with review results

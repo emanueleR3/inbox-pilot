@@ -17,6 +17,7 @@ class EmailWorkflowPayload(BaseModel):
     """Email workflow payload received from broker"""
     thread_id: str = Field(..., description="Thread UUID from database")
     message_id: str = Field(..., description="Email message ID")
+    microsoft_message_id: Optional[str] = Field(None, description="Microsoft Graph internal message ID for replies")
     reply_to_id: str = Field(default="no", description="ID of message being replied to")
     box_email: str = Field(..., description="Mailbox email receiving the message")
     from_: str = Field(..., alias="from", description="Sender email address")
@@ -63,6 +64,7 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
         email_data = {
             "thread_id": payload.thread_id,
             "message_id": payload.message_id,
+            "microsoft_message_id": payload.microsoft_message_id,
             "reply_to_id": payload.reply_to_id,
             "box_email": payload.box_email,
             "from": payload.from_,

@@ -504,7 +504,7 @@ class AdvancedEmailFilter:
             box_email = email_data.get("user_email")
             
             # Find the thread containing the referenced message
-            thread = self.thread_repo.find_thread_by_message_id(reply_to_id, box_email)
+            thread = self.thread_repo.find_thread_by_message_id(reply_to_id, box_email) # TODO errore manca find_thread_by_message_id
             
             if not thread:
                 print(f"⚠️ [FILTER] No thread found for forwarded message reference: {reply_to_id}")

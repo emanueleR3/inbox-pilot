@@ -5,7 +5,8 @@ from db_client import (
     update_thread,
     update_ai_generated_email_outcome,
     get_email_service_data,
-    insert_new_mail_in_history_thread
+    insert_new_mail_in_history_thread,
+    get_calendar_service_data
 )
 import os
 import requests
@@ -24,11 +25,171 @@ from .services.notification_client import (
     send_email_not_sent_notification,
     send_low_confidence_writer_notification
 )
+from .utils.utils import (
+    get_google_calendar_timezone,
+    get_microsoft_calendar_timezone
+)
 from models import ThreadStatus, EmailOutcome
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _get_ai_disclaimer() -> str:
+    """
+    Returns a professional, minimal AI-generated email disclaimer banner.
+    This should be prepended to the body of AI-generated emails.
+    """
+    return """<div style="border-left:3px solid #6366f1;background:linear-gradient(to right,#f8fafc,#ffffff);padding:12px 16px;margin:0 0 20px 0;border-radius:0 6px 6px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+    <p style="margin:0;font-size:12px;color:#64748b;line-height:1.5">
+        <span style="color:#6366f1;font-weight:600">⚡ AI Generated</span>
+        <span style="color:#94a3b8;margin:0 6px">•</span>
+        <span>Questa email è stata generata automaticamente da un sistema AI in base ai contenuti della conversazione.</span>
+    </p>
+</div>
+"""
+
+
+def _convert_plain_text_to_html(text: str) -> str:
+    """
+    Converts plain text email content to HTML format.
+    Preserves line breaks and basic formatting.
+    
+    Args:
+        text: Plain text content
+        
+    Returns:
+        HTML formatted content
+    """
+    import html
+    
+    # Escape HTML special characters to prevent injection
+    escaped_text = html.escape(text)
+    
+    # Convert line breaks to <br> tags
+    # Handle both \r\n (Windows) and \n (Unix) line endings
+    html_text = escaped_text.replace('\r\n', '<br>').replace('\n', '<br>')
+    
+    # Wrap in a styled div for consistent formatting
+    return f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;font-size:14px;line-height:1.6;color:#333333">{html_text}</div>'
+
+
+def _wrap_body_with_disclaimer(body: str) -> str:
+    """
+    Wraps an email body with the AI disclaimer at the top.
+    Converts plain text body to HTML format for proper rendering.
+    
+    Args:
+        body: The original email body content (plain text or HTML)
+        
+    Returns:
+        Full HTML email with disclaimer prepended
+    """
+    disclaimer = _get_ai_disclaimer()
+    
+    # Check if body is already HTML
+    stripped_body = body.strip()
+    is_html = (
+        stripped_body.startswith('<') and 
+        (stripped_body.startswith('<!DOCTYPE') or 
+         stripped_body.startswith('<html') or 
+         stripped_body.startswith('<div') or
+         stripped_body.startswith('<p'))
+    )
+    
+    if is_html:
+        # Body is already HTML, just prepend disclaimer
+        html_body = body
+    else:
+        # Convert plain text to HTML
+        html_body = _convert_plain_text_to_html(body)
+    
+    # Wrap everything in a complete HTML structure
+    full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:20px;background-color:#ffffff">
+{disclaimer}
+{html_body}
+</body>
+</html>"""
+    
+    return full_html
+
+
+def _get_user_timezone(box_email: str) -> str:
+    """
+    Get the user's timezone from their calendar provider settings.
+    
+    Args:
+        box_email: The user's email address
+        
+    Returns:
+        Timezone string (e.g., "Europe/Rome"). Defaults to "Europe/Rome" if not found.
+    """
+    try:
+        # Get service_id from email
+        service_id = get_subscription_service_id_by_email(box_email)
+        if not service_id:
+            print(f"⚠️ [TIMEZONE] No service_id found for {box_email}, using default Europe/Rome")
+            return "Europe/Rome"
+        
+        # Get calendar service data
+        calendar_data = get_calendar_service_data(service_id)
+        if not calendar_data:
+            print(f"⚠️ [TIMEZONE] No calendar data found for service_id {service_id}, using default Europe/Rome")
+            return "Europe/Rome"
+        
+        calendar_provider = calendar_data.get("calendar_provider")
+        access_token = calendar_data.get("access_token")
+        
+        if not access_token:
+            print(f"⚠️ [TIMEZONE] No access token found, using default Europe/Rome")
+            return "Europe/Rome"
+        
+        # Get timezone based on provider
+        if calendar_provider == "google":
+            user_timezone = get_google_calendar_timezone(access_token)
+        elif calendar_provider == "microsoft":
+            user_timezone = get_microsoft_calendar_timezone(access_token, box_email)
+        else:
+            print(f"⚠️ [TIMEZONE] Unknown calendar provider: {calendar_provider}, using default Europe/Rome")
+            return "Europe/Rome"
+        
+        print(f"🌍 [TIMEZONE] Retrieved timezone for {box_email}: {user_timezone}")
+        return user_timezone
+        
+    except Exception as e:
+        print(f"❌ [TIMEZONE] Error getting timezone for {box_email}: {e}")
+        return "Europe/Rome"
+
+
+def _get_timestamp_in_user_timezone(box_email: str) -> str:
+    """
+    Get the current timestamp converted to the user's timezone.
+    
+    Args:
+        box_email: The user's email address
+        
+    Returns:
+        ISO format timestamp in user's local timezone
+    """
+    try:
+        user_timezone = _get_user_timezone(box_email)
+        now_utc = datetime.now(timezone.utc)
+        target_tz = ZoneInfo(user_timezone)
+        now_local = now_utc.astimezone(target_tz)
+        return now_local.isoformat()
+    except Exception as e:
+        print(f"❌ [TIMESTAMP] Error converting timestamp for {box_email}: {e}")
+        # Fallback to UTC
+        return datetime.now(timezone.utc).isoformat()
+
 
 def process_automation_result(workflow_result: dict):
     """
@@ -53,7 +214,7 @@ def process_automation_result(workflow_result: dict):
     sender_email = extracted_info.get("from", "unknown")
     subject = extracted_info.get("subject", "No subject")
     thread_id = extracted_info.get("thread_id", None)
-    replay_to_id = extracted_info.get("reply_to_id", None)
+    reply_to_id = extracted_info.get("reply_to_id", None)
     summary = workflow_result.get("mail_summary", "")
     extended_summary = workflow_result.get("extended_summary", None)
     cc_emails = extracted_info.get("cc", "")
@@ -62,10 +223,14 @@ def process_automation_result(workflow_result: dict):
     response_body = workflow_result.get("written_email_body", "")
     category = workflow_result.get("category", "")
     subcategory = workflow_result.get("subcategory", "")
-    email_body = extracted_info.get("email_body", "")
+    email_body = workflow_result.get("email_body", "")
     summary_attachments = workflow_result.get("summary_attachments", None)
     now_tz = datetime.now(timezone.utc).isoformat()
     original_thread_id = workflow_result.get("original_thread_id", None)
+    microsoft_message_id = workflow_result.get("microsoft_message_id", None)  # Microsoft Graph internal ID for replies
+
+    # Get timestamp in user's timezone for notification formatting
+    notification_timestamp = _get_timestamp_in_user_timezone(box_email)
 
     # ======= SUMMARIZER ONLY CHECK ======= ✅
     if workflow_result.get("summarizer_only", False):   
@@ -155,7 +320,8 @@ def process_automation_result(workflow_result: dict):
             box_email=extracted_info.get("box_email", "unknown"),
             subject=extracted_info.get("subject", "No subject"),
             body=workflow_result.get("email_body", ""),
-            summary_attachment=workflow_result.get("summary_attachments")
+            summary_attachment=workflow_result.get("summary_attachments"),
+            timestamp=notification_timestamp
         )
         return
     
@@ -219,7 +385,8 @@ def process_automation_result(workflow_result: dict):
                 box_email=box_email,
                 subject=subject,
                 body=email_body,
-                summary_attachment=summary_attachments
+                summary_attachment=summary_attachments,
+                timestamp=notification_timestamp
             )
         except Exception as e:
             print(f"❌ [PRIORITY_CONTROLLER] Error sending high priority notification: {e}")
@@ -276,7 +443,8 @@ def process_automation_result(workflow_result: dict):
                     box_email=box_email,
                     subject=subject,
                     body=email_body,
-                    summary_attachment=summary_attachments
+                    summary_attachment=summary_attachments,
+                    timestamp=notification_timestamp
                 )
                 return
             
@@ -310,7 +478,8 @@ def process_automation_result(workflow_result: dict):
                     box_email=box_email,
                     subject=subject,
                     body=email_body,
-                    summary_attachment=summary_attachments
+                    summary_attachment=summary_attachments,
+                    timestamp=notification_timestamp
                 )
                 return
             
@@ -353,7 +522,8 @@ def process_automation_result(workflow_result: dict):
                     box_email=box_email,
                     subject=subject,
                     body=email_body,
-                    summary_attachment=summary_attachments
+                    summary_attachment=summary_attachments,
+                    timestamp=notification_timestamp
                 )
             
             # CASE - NO AVAILABLE SLOTS ✅
@@ -400,7 +570,8 @@ def process_automation_result(workflow_result: dict):
                     box_email=box_email,
                     subject=subject,
                     body=email_body,
-                    summary_attachment=summary_attachments
+                    summary_attachment=summary_attachments,
+                    timestamp=notification_timestamp
                 )
                 return
 
@@ -448,7 +619,8 @@ def process_automation_result(workflow_result: dict):
                         box_email=box_email,
                         subject=subject,
                         body=email_body,
-                        summary_attachment=summary_attachments
+                        summary_attachment=summary_attachments,
+                        timestamp=notification_timestamp
                     )
                 else:
                     send_appointment_not_rescheduled_notification(
@@ -456,7 +628,8 @@ def process_automation_result(workflow_result: dict):
                         box_email=box_email,
                         subject=subject,
                         body=email_body,
-                        summary_attachment=summary_attachments
+                        summary_attachment=summary_attachments,
+                        timestamp=notification_timestamp
                     )
 
                 return
@@ -498,7 +671,8 @@ def process_automation_result(workflow_result: dict):
                     box_email=box_email,
                     subject=subject,
                     body=email_body,
-                    summary_attachment=summary_attachments
+                    summary_attachment=summary_attachments,
+                    timestamp=notification_timestamp
                 )
                 return
             
@@ -539,7 +713,8 @@ def process_automation_result(workflow_result: dict):
                     box_email=box_email,
                     subject=subject,
                     body=email_body,
-                    summary_attachment=summary_attachments
+                    summary_attachment=summary_attachments,
+                    timestamp=notification_timestamp
                 )
                 return
             
@@ -580,7 +755,8 @@ def process_automation_result(workflow_result: dict):
                     box_email=box_email,
                     subject=subject,
                     body=email_body,
-                    summary_attachment=summary_attachments
+                    summary_attachment=summary_attachments,
+                    timestamp=notification_timestamp
                 )
                 return
             
@@ -588,6 +764,12 @@ def process_automation_result(workflow_result: dict):
             if status == "LOW_CONFIDENCE_WRITER":
                 print(f"⚠️ [WORKFLOW] LOW CONFIDENCE WRITER DETECTED!")
                 
+                service_id = None
+                try:
+                    service_id = get_subscription_service_id_by_email(box_email)
+                except Exception as e:
+                    print(f"❌ [WORKFLOW] Error getting service_id: {e}")
+
                 thread_data = {
                     "category": category,
                     "subcategory": subcategory,
@@ -638,7 +820,8 @@ def process_automation_result(workflow_result: dict):
                     box_email=box_email,
                     subject=subject,
                     body=email_body,
-                    summary_attachment=summary_attachments
+                    summary_attachment=summary_attachments,
+                    timestamp=notification_timestamp
                 )
                 return
             
@@ -704,11 +887,14 @@ def process_automation_result(workflow_result: dict):
                     if not provider:
                         raise Exception(f"No email provider configured for {box_email}")
 
+                    # Add AI disclaimer to the response body
+                    response_body_with_disclaimer = _wrap_body_with_disclaimer(response_body)
+
                     # Prepare payload TODO voglio rispondere all'email e non creare un nuovo thread
                     payload = {
                         "email": sender_email,
                         "subject": subject,
-                        "body": response_body,
+                        "body": response_body_with_disclaimer,
                     }
 
                     senders_url = os.getenv("SENDERS_URL")
@@ -722,14 +908,17 @@ def process_automation_result(workflow_result: dict):
                     elif provider == "microsoft":
                         endpoint = f"{senders_url}/send-email/send-microsoft"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
-                        payload["message_id"] = message_id
+                        # Use microsoft_message_id (internal Graph ID) for replies, not the RFC message_id
+                        payload["message_id"] = microsoft_message_id
                     elif provider == "imap":
+                        print("[DEBUG-AUTOMATION] imap")
+                        print("[DEBUG-AUTOMATION] email_service_data: ", email_service_data)
                         endpoint = f"{senders_url}/send-email/send-smtp"
                         payload["smtp_server"] = email_service_data.get("smtp_server")
                         payload["smtp_port"] = email_service_data.get("smtp_port")
                         payload["smtp_email"] = box_email
-                        payload["hashed_password"] = email_service_data.get("hashed_password")
-                        payload["reply_to_id"] = replay_to_id
+                        payload["password"] = email_service_data.get("hashed_password")
+                        payload["reply_to_id"] = reply_to_id
                         payload["message_id"] = message_id
                     else:
                         raise Exception(f"Unknown email provider: {provider}")
@@ -764,7 +953,8 @@ def process_automation_result(workflow_result: dict):
                             box_email=box_email,
                             subject=subject,
                             body=email_body,
-                            summary_attachment=summary_attachments
+                            summary_attachment=summary_attachments,
+                            timestamp=notification_timestamp
                         )
                     except Exception as notif_error:
                         print(f"❌ [WORKFLOW] Error sending EMAIL_NOT_SENT notification: {notif_error}")

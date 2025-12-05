@@ -32,7 +32,7 @@ class NotificationRequest(BaseModel):
     subject: str = Field(..., description="Email subject")
     body: str = Field(..., description="Email body content")
     summary_attachment: Optional[str] = Field(None, description="Summary of attachments if present")
-    timestamp: str = Field(..., description="Timestamp with timezone")
+    timestamp: str = Field(..., description="Timestamp with timezone (already in user's local timezone)")
     overlap: Optional[bool] = Field(None, description="Whether appointment has overlap (for APPOINTMENT_NOT_SCHEDULED)")
 
     class Config:
