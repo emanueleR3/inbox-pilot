@@ -74,12 +74,6 @@ class SendEmailService:
                 - content_type: str (e.g., "text/calendar")
         """
         try:
-            print("\n=== SEND EMAIL VIA GMAIL ===")
-            print(f"TO: {email}")
-            print(f"SUBJECT: {subject}")
-            print(f"thread_id: {thread_id}")
-            print(f"message_id (RFC): {message_id}")
-            print("============================")
 
             # Decrypt the access token
             access_token = decrypt(hashed_access_token, "token")

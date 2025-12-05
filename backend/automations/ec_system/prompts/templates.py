@@ -862,11 +862,19 @@ ESTRAI LE SEGUENTI INFORMAZIONI:
 2. **title_of_event**: Titolo dell'appuntamento nel formato "[AI] APPUNTAMENTO {sender_email}"
    Esempio: "[AI] APPUNTAMENTO mario.rossi@example.com"
 
-3. **date**: Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss
-   - Se menzionato "domani", calcola rispetto al timestamp attuale
-   - Se menzionato "prossimo lunedì", "tra tre giorni", ecc., calcola rispetto al timestamp attuale
-   - Se non viene specificata data e orario, imposta a None
-   - Se specificato solo un giorno senza orario, imposta a None
+3. **date**: Data e ora dell'appuntamento
+   - Se l'utente specifica ESATTAMENTE data E orario → formato YYYY-MM-DDThh:mm:ss
+   - Se l'utente indica solo una PREFERENZA di giorno (es. "lunedì", "domani", "prossima settimana") SENZA orario specifico → formato YYYY-MM-DDT--:--
+   - Se menzionato "domani", calcola la data rispetto al timestamp attuale
+   - Se menzionato "prossimo lunedì", "tra tre giorni", ecc., calcola la data rispetto al timestamp attuale
+   - Se non viene specificata NESSUNA data, imposta a None
+   
+   ESEMPI:
+   - "Vorrei un appuntamento lunedì alle 15:00" → "2025-12-08T15:00:00"
+   - "Vorrei un appuntamento lunedì" → "2025-12-08T--:--"
+   - "Vorrei un appuntamento" → None
+   - "Ci vediamo domani alle 10" → "2025-12-06T10:00:00"
+   - "Ci vediamo domani" → "2025-12-06T--:--"
 
 4. **duration**: Durata in minuti (default: 60 se non specificato)
 
@@ -914,11 +922,19 @@ EXTRACT THE FOLLOWING INFORMATION:
 2. **title_of_event**: Appointment title in format "[AI] APPOINTMENT {sender_email}"
    Example: "[AI] APPOINTMENT mario.rossi@example.com"
 
-3. **date**: Appointment date and time in format YYYY-MM-DDThh:mm:ss
-   - If mentioned "tomorrow", calculate relative to current timestamp
-   - If mentioned "next Monday", "in three days", etc., calculate relative to current timestamp
-   - If date AND time are NOT specified, set to None
-   - If only day is specified without time, set to None
+3. **date**: Appointment date and time
+   - If the user specifies EXACTLY date AND time → format YYYY-MM-DDThh:mm:ss
+   - If the user indicates only a day PREFERENCE (e.g., "Monday", "tomorrow", "next week") WITHOUT specific time → format YYYY-MM-DDT--:--
+   - If mentioned "tomorrow", calculate the date relative to current timestamp
+   - If mentioned "next Monday", "in three days", etc., calculate the date relative to current timestamp
+   - If NO date is specified, set to None
+   
+   EXAMPLES:
+   - "I'd like an appointment Monday at 3pm" → "2025-12-08T15:00:00"
+   - "I'd like an appointment Monday" → "2025-12-08T--:--"
+   - "I'd like an appointment" → None
+   - "See you tomorrow at 10" → "2025-12-06T10:00:00"
+   - "See you tomorrow" → "2025-12-06T--:--"
 
 4. **duration**: Duration in minutes (default: 60 if not specified)
 
@@ -1044,13 +1060,21 @@ ESTRAI LE SEGUENTI INFORMAZIONI:
 2. **title_of_event**: Titolo dell'appuntamento nel formato "[AI] APPUNTAMENTO {sender_email}"
    Esempio: "[AI] APPUNTAMENTO mario.rossi@example.com"
 
-3. **date**: Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss
+3. **date**: Data e ora dell'appuntamento
    - Analizza sia la mail corrente che il riassunto conversazione per trovare la data completa
    - Se l'utente sta confermando una data proposta in precedenza, recupera la data dal contesto
    - Se menzionato "domani", calcola rispetto al timestamp attuale
    - Se menzionato "prossimo lunedì", "tra tre giorni", ecc., calcola rispetto al timestamp attuale
-   - Se non viene specificata data E orario completi (entrambi necessari), imposta a None
-   - Se specificato solo un giorno senza orario, imposta a None
+   
+   FORMATI:
+   - Se data E orario sono specificati → formato YYYY-MM-DDThh:mm:ss
+   - Se solo la data/giorno è specificato SENZA orario → formato YYYY-MM-DDT--:--
+   - Se nessuna data è specificata → None
+   
+   ESEMPI:
+   - "Confermo lunedì alle 15:00" → "2025-12-08T15:00:00"
+   - "Confermo lunedì" (senza orario) → "2025-12-08T--:--"
+   - "Va bene per me" (nessuna data) → None
 
 4. **duration**: Durata in minuti (default: 60 se non specificato)
 
@@ -1128,13 +1152,21 @@ EXTRACT THE FOLLOWING INFORMATION:
 2. **title_of_event**: Appointment title in format "[AI] APPOINTMENT {sender_email}"
    Example: "[AI] APPOINTMENT mario.rossi@example.com"
 
-3. **date**: Appointment date and time in format YYYY-MM-DDThh:mm:ss
+3. **date**: Appointment date and time
    - Analyze both the current email and conversation summary to find the complete date
    - If the user is confirming a previously proposed date, retrieve the date from context
    - If mentioned "tomorrow", calculate relative to current timestamp
    - If mentioned "next Monday", "in three days", etc., calculate relative to current timestamp
-   - If date AND time are NOT both specified (both required), set to None
-   - If only day is specified without time, set to None
+   
+   FORMATS:
+   - If date AND time are specified → format YYYY-MM-DDThh:mm:ss
+   - If only date/day is specified WITHOUT time → format YYYY-MM-DDT--:--
+   - If no date is specified → None
+   
+   EXAMPLES:
+   - "I confirm Monday at 3pm" → "2025-12-08T15:00:00"
+   - "I confirm Monday" (no time) → "2025-12-08T--:--"
+   - "Works for me" (no date) → None
 
 4. **duration**: Duration in minutes (default: 60 if not specified)
 
@@ -1221,11 +1253,19 @@ ESTRAI LE SEGUENTI INFORMAZIONI:
 3. **new_title_of_event**: Nuovo titolo appuntamento in formato "[AI] APPUNTAMENTO {sender_email}"
    Esempio: "[AI] APPUNTAMENTO mario.rossi@example.com"
 
-4. **new_date**: Nuova data e ora appuntamento in formato YYYY-MM-DDThh:mm:ss
+4. **new_date**: Nuova data e ora appuntamento
    - Se menzionato "domani", calcola relativo al timestamp attuale
    - Se menzionato "prossimo lunedì", "tra tre giorni", ecc., calcola relativo al timestamp attuale
-   - Se NON sono specificati sia data CHE orario, imposta a None
-   - Se solo il giorno è specificato senza orario, imposta a None
+   
+   FORMATI:
+   - Se data E orario sono specificati → formato YYYY-MM-DDThh:mm:ss
+   - Se solo la data/giorno è specificato SENZA orario → formato YYYY-MM-DDT--:--
+   - Se nessuna data è specificata → None
+   
+   ESEMPI:
+   - "Spostiamo a lunedì alle 15:00" → "2025-12-08T15:00:00"
+   - "Spostiamo a lunedì" (senza orario) → "2025-12-08T--:--"
+   - "Devo spostare l'appuntamento" (nessuna data) → None
 
 5. **new_duration**: Nuova durata in minuti
    - Se NON specificata, imposta a None
@@ -1282,11 +1322,19 @@ EXTRACT THE FOLLOWING INFORMATION:
 3. **new_title_of_event**: New appointment title in format "[AI] APPOINTMENT {sender_email}"
    Example: "[AI] APPOINTMENT mario.rossi@example.com"
 
-4. **new_date**: New appointment date and time in format YYYY-MM-DDThh:mm:ss
+4. **new_date**: New appointment date and time
    - If mentioned "tomorrow", calculate relative to current timestamp
    - If mentioned "next Monday", "in three days", etc., calculate relative to current timestamp
-   - If date AND time are NOT both specified, set to None
-   - If only day is specified without time, set to None
+   
+   FORMATS:
+   - If date AND time are specified → format YYYY-MM-DDThh:mm:ss
+   - If only date/day is specified WITHOUT time → format YYYY-MM-DDT--:--
+   - If no date is specified → None
+   
+   EXAMPLES:
+   - "Move to Monday at 3pm" → "2025-12-08T15:00:00"
+   - "Move to Monday" (no time) → "2025-12-08T--:--"
+   - "I need to reschedule" (no date) → None
 
 5. **new_duration**: New duration in minutes
    - If NOT specified, set to None

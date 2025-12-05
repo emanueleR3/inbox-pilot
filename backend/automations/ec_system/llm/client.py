@@ -947,7 +947,8 @@ class LLMClient:
         event_type: str,
         created_by: str,
         thread_id: Optional[str] = None,
-        language: str = "ITA"
+        language: str = "ITA",
+        favorite_day: Optional[str] = None
     ) -> SchedulerResponse:
         """
         Schedule an appointment or propose new slots using LLM with tool functions.
@@ -963,6 +964,7 @@ class LLMClient:
             created_by: Email of the creator
             thread_id: Optional thread ID
             language: Language for prompts (ITA or ENG)
+            favorite_day: Optional preferred day in YYYY-MM-DD format (pre-extracted by reader)
             
         Returns:
             SchedulerResponse with scheduling results
@@ -1073,9 +1075,13 @@ class LLMClient:
                     if tool_call['name'] == 'propose_new_slots':
                         # Call the propose_new_slots tool function
                         args = tool_call['args']
+                        # Use pre-extracted favorite_day if available, otherwise use LLM's extraction
+                        # This avoids LLM miscalculating relative dates like "lunedì"
+                        effective_favorite_day = favorite_day if favorite_day else args.get('favorite_day')
+                        print(f"📅 [LLM] propose_new_slots: pre-extracted={favorite_day}, llm_extracted={args.get('favorite_day')}, using={effective_favorite_day}")
                         slots_result = self._propose_new_slots_tool(
                             service_id=service_id,
-                            favorite_day=args.get('favorite_day'),
+                            favorite_day=effective_favorite_day,
                             not_available_dates=args.get('not_available_dates', [])
                         )
                         proposed_slots = slots_result.get('slots', [])
@@ -1321,7 +1327,8 @@ class LLMClient:
         appointment_info: dict,
         service_id: str,
         thread_id: Optional[str] = None,
-        language: str = "ITA"
+        language: str = "ITA",
+        favorite_day: Optional[str] = None
     ) -> SchedulerResponse:
         """
         Reschedule an appointment or propose new slots using LLM with tool functions.
@@ -1336,6 +1343,7 @@ class LLMClient:
             service_id: Service ID from subscription_services
             thread_id: Optional thread ID
             language: Language for prompts (ITA or ENG)
+            favorite_day: Optional preferred day in YYYY-MM-DD format (pre-extracted by reader)
             
         Returns:
             SchedulerResponse with rescheduling results
@@ -1450,9 +1458,13 @@ class LLMClient:
                     if tool_call['name'] == 'propose_new_slots':
                         # Call the propose_new_slots tool function
                         args = tool_call['args']
+                        # Use pre-extracted favorite_day if available, otherwise use LLM's extraction
+                        # This avoids LLM miscalculating relative dates like "lunedì"
+                        effective_favorite_day = favorite_day if favorite_day else args.get('favorite_day')
+                        print(f"📅 [LLM] propose_new_slots (reschedule): pre-extracted={favorite_day}, llm_extracted={args.get('favorite_day')}, using={effective_favorite_day}")
                         slots_result = self._propose_new_slots_tool(
                             service_id=service_id,
-                            favorite_day=args.get('favorite_day'),
+                            favorite_day=effective_favorite_day,
                             not_available_dates=args.get('not_available_dates', [])
                         )
                         # Extract slots and favorite_day_unavailable from dict return
