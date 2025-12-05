@@ -101,8 +101,14 @@ class SendEmailService:
 
             service = build('gmail', 'v1', credentials=creds)
 
-            # Create email
-            message = MIMEMultipart('alternative')
+            # Create email - use 'mixed' for attachments, 'alternative' for body variants
+            if attachments:
+                # When we have attachments, use mixed as the outer container
+                message = MIMEMultipart('mixed')
+            else:
+                # No attachments, use alternative for body
+                message = MIMEMultipart('alternative')
+                
             message['To'] = email
             message['Subject'] = subject
 
@@ -112,13 +118,19 @@ class SendEmailService:
                 message['In-Reply-To'] = rfc_message_id
                 message['References'] = rfc_message_id
 
-            # Detect body type
+            # Detect body type and create body part
             if body.strip().startswith("<") and body.strip().endswith(">"):
-                part = MIMEText(body, 'html', 'utf-8')
+                body_part = MIMEText(body, 'html', 'utf-8')
             else:
-                part = MIMEText(body, 'plain', 'utf-8')
+                body_part = MIMEText(body, 'plain', 'utf-8')
 
-            message.attach(part)
+            if attachments:
+                # For mixed messages, wrap body in alternative container
+                body_container = MIMEMultipart('alternative')
+                body_container.attach(body_part)
+                message.attach(body_container)
+            else:
+                message.attach(body_part)
 
             # Handle attachments
             if attachments:
@@ -131,12 +143,20 @@ class SendEmailService:
                         # Decode base64 content
                         content_bytes = base64.b64decode(content_b64)
                         
+                        # For ICS files, use application/ics for better Gmail compatibility
+                        if filename.endswith('.ics') and content_type == 'text/calendar':
+                            content_type = 'application/ics'
+                        
                         # Create attachment part
                         maintype, subtype = content_type.split('/', 1) if '/' in content_type else ('application', 'octet-stream')
                         att_part = MIMEBase(maintype, subtype)
                         att_part.set_payload(content_bytes)
                         encoders.encode_base64(att_part)
+                        
+                        # Add headers to ensure attachment is visible
                         att_part.add_header('Content-Disposition', 'attachment', filename=filename)
+                        att_part.add_header('Content-Transfer-Encoding', 'base64')
+                        
                         message.attach(att_part)
                         print(f"   📎 Attached: {filename} ({content_type})")
                     except Exception as att_err:

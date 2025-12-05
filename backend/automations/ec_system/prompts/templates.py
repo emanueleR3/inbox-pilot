@@ -1527,6 +1527,7 @@ ISTRUZIONI CRITICHE:
 4. NON includere informazioni non rilevanti alla richiesta
 5. Se nessuna informazione aziendale è pertinente, restituisci un dizionario vuoto
 6. Organizza le informazioni estratte in un dizionario strutturato per argomento
+7. Includi SEMPRE le informazioni di contatto dell'azienda se presenti nelle informazioni aziendali
 
 FORMATO OUTPUT:
 Restituisci un dizionario dove:
@@ -1557,6 +1558,7 @@ CRITICAL INSTRUCTIONS:
 4. DO NOT include information not relevant to the request
 5. If no company information is pertinent, return an empty dictionary
 6. Organize extracted information in a structured dictionary by topic
+7. ALWAYS include company contact information if present in company information
 
 OUTPUT FORMAT:
 Return a dictionary where:
@@ -1600,10 +1602,17 @@ ISTRUZIONI CRITICHE:
    - Devi raggruppare gli slot per giorno (gg/mm) e scrivere in seguito l'elenco degli orari (hh:mm)
    - Chiedi al cliente di indicare la preferenza
 4. SE ci sono altre richieste nell'email oltre all'appuntamento, rispondi anche a quelle
-5. Usa un tono professionale ma cordiale
-6. Non inventare informazioni non presenti nel contesto
+5. Non inventare informazioni non presenti nel contesto
 
-Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
+REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
+- Tono professionale ma cordiale e accessibile, non troppo formale o pesante
+- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
+- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
+- Usa un formato pulito e leggibile senza formattazione speciale
+
+Scrivi SOLO il corpo della risposta email, senza oggetto.
 """
 
 WRITER_REQUEST_APPOINTMENT_PROMPT_ENG = """
@@ -1635,10 +1644,17 @@ CRITICAL INSTRUCTIONS:
    - You must group the slots by day (dd/mm) and then list the times (hh:mm)
    - Ask the client to indicate their preference
 4. IF there are other requests in the email besides the appointment, respond to those as well
-5. Use a professional but friendly tone
-6. Do not invent information not present in the context
+5. Do not invent information not present in the context
 
-Write ONLY the email response body, without subject or signature.
+FORMATTING RULES (MANDATORY):
+- Professional but friendly and accessible tone, not too formal or heavy
+- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- The response must be READY TO SEND, without parts to complete
+- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
+- Use a clean and readable format without special formatting
+
+Write ONLY the email response body, without subject.
 """
 
 # WRITER PROMPT - REQUEST_APPOINTMENT_CHANGE SUBCATEGORY
@@ -1678,9 +1694,16 @@ ISTRUZIONI CRITICHE:
    - Proponi le alternative disponibili nei prossimi 7 giorni
 5. SE ci sono altre richieste nell'email, rispondi anche a quelle
 6. Basa la risposta sulle informazioni aziendali fornite
-7. Usa un tono professionale ma cordiale
 
-Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
+REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
+- Tono professionale ma cordiale e accessibile, non troppo formale o pesante
+- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
+- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
+- Usa un formato pulito e leggibile senza formattazione speciale
+
+Scrivi SOLO il corpo della risposta email, senza oggetto.
 """
 
 WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ENG = """
@@ -1719,9 +1742,16 @@ CRITICAL INSTRUCTIONS:
    - Propose the available alternatives in the next 7 days
 5. IF there are other requests in the email, respond to those as well
 6. Base the response on the provided company information
-7. Use a professional but friendly tone
 
-Write ONLY the email response body, without subject or signature.
+FORMATTING RULES (MANDATORY):
+- Professional but friendly and accessible tone, not too formal or heavy
+- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- The response must be READY TO SEND, without parts to complete
+- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
+- Use a clean and readable format without special formatting
+
+Write ONLY the email response body, without subject.
 """
 
 # WRITER PROMPT - CANCEL_APPOINTMENT SUBCATEGORY
@@ -1750,9 +1780,16 @@ ISTRUZIONI CRITICHE:
    - Esprimi disponibilità per future prenotazioni
 3. SE ci sono altre richieste nell'email, rispondi anche a quelle
 4. Basa la risposta sulle informazioni aziendali fornite
-5. Usa un tono professionale e comprensivo
 
-Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
+REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
+- Tono professionale ma comprensivo e accessibile, non troppo formale o pesante
+- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
+- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
+- Usa un formato pulito e leggibile senza formattazione speciale
+
+Scrivi SOLO il corpo della risposta email, senza oggetto.
 """
 
 WRITER_CANCEL_APPOINTMENT_PROMPT_ENG = """
@@ -1780,9 +1817,16 @@ CRITICAL INSTRUCTIONS:
    - Express availability for future bookings
 3. IF there are other requests in the email, respond to those as well
 4. Base the response on the provided company information
-5. Use a professional and understanding tone
 
-Write ONLY the email response body, without subject or signature.
+FORMATTING RULES (MANDATORY):
+- Professional but understanding and accessible tone, not too formal or heavy
+- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- The response must be READY TO SEND, without parts to complete
+- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
+- Use a clean and readable format without special formatting
+
+Write ONLY the email response body, without subject.
 """
 
 # WRITER PROMPT - CONFIRM_APPOINTMENT SUBCATEGORY (when already_scheduled=False, i.e., after scheduling)
@@ -1818,10 +1862,17 @@ ISTRUZIONI CRITICHE:
    - Menziona che il giorno richiesto non aveva disponibilità
    - Proponi le alternative disponibili nei prossimi 7 giorni
 5. SE ci sono altre richieste o domande nell'email oltre alla conferma, rispondi anche a quelle
-6. Usa un tono professionale ma cordiale
-7. Non inventare informazioni non presenti nel contesto
+6. Non inventare informazioni non presenti nel contesto
 
-Scrivi SOLO il corpo della risposta email, senza oggetto o firma.
+REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
+- Tono professionale ma cordiale e accessibile, non troppo formale o pesante
+- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
+- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
+- Usa un formato pulito e leggibile senza formattazione speciale
+
+Scrivi SOLO il corpo della risposta email, senza oggetto.
 """
 
 WRITER_CONFIRM_APPOINTMENT_PROMPT_ENG = """
@@ -1856,10 +1907,17 @@ CRITICAL INSTRUCTIONS:
    - Mention that the requested day had no availability
    - Propose the available alternatives in the next 7 days
 5. IF there are other requests or questions in the email besides the confirmation, respond to those as well
-6. Use a professional but friendly tone
-7. Do not invent information not present in the context
+6. Do not invent information not present in the context
 
-Write ONLY the email response body, without subject or signature.
+FORMATTING RULES (MANDATORY):
+- Professional but friendly and accessible tone, not too formal or heavy
+- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- The response must be READY TO SEND, without parts to complete
+- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
+- Use a clean and readable format without special formatting
+
+Write ONLY the email response body, without subject.
 """
 
 # WRITER PROMPT - GENERIC SUBCATEGORY (for all other cases)
@@ -1879,11 +1937,18 @@ ISTRUZIONI CRITICHE:
 2. Rispondi a tutte le richieste presenti nell'email in modo completo
 3. Usa SOLO le informazioni presenti nel contesto - non inventare nulla
 4. Se non hai informazioni sufficienti per rispondere a una richiesta specifica, indica gentilmente che la richiesta sarà gestita dal team appropriato
-5. Mantieni un tono professionale ma cordiale e accessibile
-6. Struttura la risposta in modo chiaro e leggibile
+5. Struttura la risposta in modo chiaro e leggibile
+
+REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
+- Tono professionale ma cordiale e accessibile, non troppo formale o pesante
+- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
+- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
+- Usa un formato pulito e leggibile senza formattazione speciale
 
 OUTPUT RICHIESTO:
-1. **written_email_body**: Il corpo della risposta email (senza oggetto o firma)
+1. **written_email_body**: Il corpo della risposta email (senza oggetto)
 2. **modifications_summary**: Se hai applicato delle linee guida di correzione, descrivi brevemente in forma testuale le modifiche che hai apportato. Se non ci sono linee guida da seguire, lascia questo campo vuoto o null. Esempio: "Modificato il saluto da 'Gentile Cliente' a 'Gentile Sig. Rossi'. Specificato l'orario dell'appuntamento (14:00). Corretto il prezzo da 50 euro a 49,99 euro IVA inclusa."
 """
 
@@ -1903,11 +1968,18 @@ CRITICAL INSTRUCTIONS:
 2. Respond to all requests in the email completely
 3. Use ONLY the information present in the context - do not invent anything
 4. If you don't have enough information to answer a specific request, kindly indicate that the request will be handled by the appropriate team
-5. Maintain a professional but friendly and accessible tone
-6. Structure the response clearly and readably
+5. Structure the response clearly and readably
+
+FORMATTING RULES (MANDATORY):
+- Professional but friendly and accessible tone, not too formal or heavy
+- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- The response must be READY TO SEND, without parts to complete
+- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
+- Use a clean and readable format without special formatting
 
 REQUIRED OUTPUT:
-1. **written_email_body**: The email response body (without subject or signature)
+1. **written_email_body**: The email response body (without subject)
 2. **modifications_summary**: If you applied correction guidelines, briefly describe in text form the changes you made. If there are no guidelines to follow, leave this field empty or null. Example: "Changed greeting from 'Dear Customer' to 'Dear Mr. Smith'. Specified appointment time (2:00 PM). Corrected price from $50 to $49.99 including VAT."
 """
 
@@ -1965,23 +2037,30 @@ ISTRUZIONI PER LA REVISIONE:
    - Valuta se il livello di dettaglio è appropriato
 
 3. VALUTAZIONE TONO E STILE:
-   - Verifica che il tono sia professionale e appropriato
+   - Verifica che il tono sia professionale ma cordiale e accessibile (non troppo formale o pesante)
    - Controlla che lo stile sia coerente con la comunicazione aziendale
    - Valuta la chiarezza e leggibilità del testo
 
-4. CONSIDERAZIONE STORICO EDITS:
+4. VALUTAZIONE FORMATTAZIONE (CRITICO):
+   - Verifica che NON ci siano emoji, asterischi (*), cancelletti (#), o simboli di formattazione markdown
+   - Verifica che NON ci siano placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc.
+   - L'email deve essere PRONTA PER L'INVIO, senza parti da completare
+   - Verifica che alla fine dell'email siano presenti le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email)
+   - Se sono presenti violazioni di formattazione, segnala come errore CRITICO da correggere
+
+5. CONSIDERAZIONE STORICO EDITS:
    - Se presente uno storico di modifiche precedenti, verifica che le correzioni siano state applicate correttamente
    - Non ripetere le stesse correzioni già fatte nelle iterazioni precedenti
    - Identifica nuovi problemi non evidenziati prima
 
-5. IMPORTANTE - GESTIONE SLOT APPUNTAMENTO:
+6. IMPORTANTE - GESTIONE SLOT APPUNTAMENTO:
    - Se nel "CONTESTO APPUNTAMENTO" sono presenti degli slot proposti, questi sono stati calcolati dal sistema di scheduling in base alla disponibilità reale del calendario
    - NON segnalare come errore se gli slot proposti nell'email differiscono dagli orari di apertura generali nelle informazioni aziendali
    - Gli slot proposti sono disponibilità specifiche e corrette, NON devono essere modificati per allinearli agli orari di apertura generali
    - Verifica solo che gli slot scritti nell'email corrispondano a quelli nel "CONTESTO APPUNTAMENTO"
    - Segnala errore SOLO se l'utente ha chiesto esplicitamente gli orari di apertura E l'email non li fornisce
 
-6. CRITICO - AUTOMAZIONI GIÀ ESEGUITE:
+7. CRITICO - AUTOMAZIONI GIÀ ESEGUITE:
    - Se nel "CONTESTO APPUNTAMENTO" è indicato che un'azione è stata eseguita con SUCCESSO (es. "APPUNTAMENTO RIPROGRAMMATO CON SUCCESSO", "APPUNTAMENTO PRENOTATO CON SUCCESSO", "APPUNTAMENTO CANCELLATO CON SUCCESSO"), l'automazione È GIÀ STATA COMPLETATA
    - In questi casi, l'email che CONFERMA l'azione eseguita è CORRETTA
    - NON segnalare come errore frasi come "è stato riprogrammato", "è stato prenotato", "è stato cancellato" - queste sono CONFERME di azioni già avvenute
@@ -2049,23 +2128,30 @@ REVIEW INSTRUCTIONS:
    - Assess if the level of detail is appropriate
 
 3. TONE AND STYLE EVALUATION:
-   - Verify that the tone is professional and appropriate
+   - Verify that the tone is professional but friendly and accessible (not too formal or heavy)
    - Check that the style is consistent with business communication
    - Assess text clarity and readability
 
-4. EDIT HISTORY CONSIDERATION:
+4. FORMATTING EVALUATION (CRITICAL):
+   - Verify that there are NO emojis, asterisks (*), hashtags (#), or markdown formatting symbols
+   - Verify that there are NO placeholders like [Recipient Name], [Customer Name], [Name], etc.
+   - The email must be READY TO SEND, without parts to complete
+   - Verify that at the end of the email there is company contact information (company name, phone, address, email)
+   - If there are formatting violations, flag as CRITICAL error to correct
+
+5. EDIT HISTORY CONSIDERATION:
    - If previous edit history exists, verify that corrections were applied correctly
    - Do not repeat the same corrections already made in previous iterations
    - Identify new problems not highlighted before
 
-5. IMPORTANT - APPOINTMENT SLOTS HANDLING:
+6. IMPORTANT - APPOINTMENT SLOTS HANDLING:
    - If "APPOINTMENT CONTEXT" contains proposed slots, these were calculated by the scheduling system based on actual calendar availability
    - DO NOT flag as error if proposed slots in the email differ from general opening hours in company information
    - Proposed slots are specific and correct availabilities, they MUST NOT be modified to align with general opening hours
    - Only verify that slots written in the email match those in "APPOINTMENT CONTEXT"
    - Flag as error ONLY if the user explicitly asked for opening hours AND the email doesn't provide them
 
-6. CRITICAL - ALREADY EXECUTED AUTOMATIONS:
+7. CRITICAL - ALREADY EXECUTED AUTOMATIONS:
    - If "APPOINTMENT CONTEXT" indicates that an action was executed SUCCESSFULLY (e.g., "APPOINTMENT RESCHEDULED SUCCESSFULLY", "APPOINTMENT BOOKED SUCCESSFULLY", "APPOINTMENT CANCELLED SUCCESSFULLY"), the automation HAS ALREADY BEEN COMPLETED
    - In these cases, the email that CONFIRMS the executed action is CORRECT
    - DO NOT flag as error phrases like "has been rescheduled", "has been booked", "has been cancelled" - these are CONFIRMATIONS of actions that already happened
