@@ -102,6 +102,40 @@ from db_client import get_supabase_client
 T = TypeVar('T')
 
 
+def _generate_weekday_map(language: str = "ITA") -> str:
+    """
+    Generate a map of weekday names to actual dates for the next 7 days.
+    This helps LLM correctly calculate dates when users say "lunedì", "martedì", etc.
+    
+    Args:
+        language: "ITA" or "ENG" for weekday names
+        
+    Returns:
+        Formatted string with weekday-to-date mapping
+    """
+    today = datetime.now()
+    
+    weekday_names_ita = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+    weekday_names_eng = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    
+    weekday_names = weekday_names_ita if language == "ITA" else weekday_names_eng
+    
+    lines = []
+    for i in range(8):  # Next 7 days + today
+        day = today + timedelta(days=i)
+        weekday_name = weekday_names[day.weekday()]
+        date_str = day.strftime("%Y-%m-%d")
+        if i == 0:
+            prefix = "(OGGI) " if language == "ITA" else "(TODAY) "
+        elif i == 1:
+            prefix = "(DOMANI) " if language == "ITA" else "(TOMORROW) "
+        else:
+            prefix = ""
+        lines.append(f"   - {prefix}{weekday_name}: {date_str}")
+    
+    return "\n".join(lines)
+
+
 class LLMClient:
     """Client for interacting with OpenAI LLMs via Langchain."""
     
@@ -805,6 +839,9 @@ class LLMClient:
             else:
                 used_extended_summary = extended_summary
 
+            # Generate weekday map to help LLM calculate dates correctly
+            weekday_map = _generate_weekday_map(language)
+
             # Format prompt
             prompt_text = prompt_template.format(
                 current_timestamp=current_timestamp,
@@ -813,8 +850,11 @@ class LLMClient:
                 sender_email=sender_email
             )
             
+            # Add weekday map before format instructions
+            weekday_section = f"\n\nMAPPA GIORNI SETTIMANA (USA QUESTE DATE):\n{weekday_map}\n" if language == "ITA" else f"\n\nWEEKDAY MAP (USE THESE DATES):\n{weekday_map}\n"
+            
             # Add format instructions
-            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            prompt_with_format = f"{prompt_text}{weekday_section}\n{parser.get_format_instructions()}"
             
             # Create message
             message = HumanMessage(content=prompt_with_format)
@@ -887,6 +927,9 @@ class LLMClient:
             else:
                 used_extended_summary = extended_summary
 
+            # Generate weekday map to help LLM calculate dates correctly
+            weekday_map = _generate_weekday_map(language)
+
             # Format prompt
             prompt_text = prompt_template.format(
                 current_timestamp=current_timestamp,
@@ -895,8 +938,11 @@ class LLMClient:
                 sender_email=sender_email
             )
             
+            # Add weekday map before format instructions
+            weekday_section = f"\n\nMAPPA GIORNI SETTIMANA (USA QUESTE DATE):\n{weekday_map}\n" if language == "ITA" else f"\n\nWEEKDAY MAP (USE THESE DATES):\n{weekday_map}\n"
+            
             # Add format instructions
-            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            prompt_with_format = f"{prompt_text}{weekday_section}\n{parser.get_format_instructions()}"
             
             # Create message
             message = HumanMessage(content=prompt_with_format)
@@ -1178,6 +1224,9 @@ class LLMClient:
                 else:
                     used_mail_summary = mail_summary
                 
+                # Generate weekday map to help LLM calculate dates correctly
+                weekday_map = _generate_weekday_map(language)
+                
                 # Format prompt
                 prompt_text = prompt_text.format(
                     current_timestamp=current_timestamp,
@@ -1187,8 +1236,11 @@ class LLMClient:
                     sender_email=sender_email
                 )
                 
+                # Add weekday map before format instructions
+                weekday_section = f"\n\nMAPPA GIORNI SETTIMANA (USA QUESTE DATE):\n{weekday_map}\n" if language == "ITA" else f"\n\nWEEKDAY MAP (USE THESE DATES):\n{weekday_map}\n"
+                
                 # Add format instructions
-                prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+                prompt_with_format = f"{prompt_text}{weekday_section}\n{parser.get_format_instructions()}"
                 
                 # Create message
                 message = HumanMessage(content=prompt_with_format)
