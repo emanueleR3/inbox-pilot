@@ -2407,6 +2407,17 @@ class LLMClient:
         """Format appointment context for Italian reviewer prompt."""
         lines = []
         
+        # Handle EVENT_CODE_INVALID or EVENT_CODE_NOT_FOUND status
+        operation_status = ctx.get("operation_status")
+        if operation_status in ["EVENT_CODE_INVALID", "EVENT_CODE_NOT_FOUND"]:
+            lines.append(f"- ⚠️ STATO OPERAZIONE: {operation_status}")
+            lines.append(f"  CRITICO: Il codice evento fornito dal cliente NON È VALIDO o NON È STATO TROVATO.")
+            lines.append(f"  L'email DEVE richiedere gentilmente al cliente di verificare e reinviare un codice evento valido.")
+            lines.append(f"  L'email NON DEVE parlare di cancellazione/modifica dell'appuntamento come se fosse avvenuta.")
+            lines.append(f"  L'email NON DEVE inventare date o dettagli di appuntamenti.")
+            lines.append(f"  È CORRETTO che l'email chieda il codice evento - questo è il comportamento atteso.")
+            return "\n".join(lines)
+        
         # Handle rescheduled appointments
         if ctx.get("rescheduled"):
             lines.append(f"- ⚠️ APPUNTAMENTO RIPROGRAMMATO CON SUCCESSO: Sì")
@@ -2451,6 +2462,19 @@ class LLMClient:
     def _format_appointment_context_eng(self, ctx: dict) -> str:
         """Format appointment context for English reviewer prompt."""
         lines = []
+        
+        # Handle EVENT_CODE_INVALID or EVENT_CODE_NOT_FOUND status
+        operation_status = ctx.get("operation_status")
+        if operation_status in ["EVENT_CODE_INVALID", "EVENT_CODE_NOT_FOUND"]:
+            lines.append(f"- ⚠️ OPERATION STATUS: {operation_status}")
+            lines.append(f"  CRITICAL: The event code provided by the customer IS NOT VALID or WAS NOT FOUND.")
+            lines.append(f"  The email MUST kindly ask the customer to verify and resend a valid event code.")
+            lines.append(f"  The email MUST NOT talk about cancellation/modification of the appointment as if it happened.")
+            lines.append(f"  The email MUST NOT invent dates or appointment details.")
+            lines.append(f"  It is CORRECT that the email asks for the event code - this is the expected behavior.")
+            return "\n".join(lines)
+        
+        # Handle rescheduled appointments
         
         # Handle rescheduled appointments
         if ctx.get("rescheduled"):

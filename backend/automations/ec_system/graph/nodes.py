@@ -1916,6 +1916,7 @@ def reviewer_node(state):
                 "change_event_code": state.get("change_event_code"),
                 "cancellation_event_code": state.get("cancellation_event_code"),
                 "cancelled": state.get("cancellation_event_code") and subcategory_value == "CANCEL_APPOINTMENT" and state.get("automation_executed"),
+                "operation_status": state.get("status"),  # Include operation status (EVENT_CODE_INVALID, EVENT_DELETED, EVENT_RESCHEDULED, etc.)
             }
             print(f"   📅 Appointment context built for subcategory: {subcategory_value}")
         

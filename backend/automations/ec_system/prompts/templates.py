@@ -2067,6 +2067,14 @@ ISTRUZIONI PER LA REVISIONE:
    - NON suggerire di cambiare "è stato riprogrammato" con "sarà elaborato" o simili - l'azione È GIÀ STATA ESEGUITA
    - Se l'automazione è riuscita, l'email deve comunicare CERTEZZA, non dubbi o attese
 
+8. CRITICO - CODICE EVENTO NON VALIDO O ASSENTE:
+   - Se nel "CONTESTO APPUNTAMENTO" è indicato che lo STATO OPERAZIONE è "EVENT_CODE_INVALID" o "EVENT_CODE_NOT_FOUND", significa che il codice evento fornito dal cliente NON ERA VALIDO
+   - In questo caso, l'email CHE CHIEDE AL CLIENTE DI FORNIRE UN CODICE EVENTO VALIDO è CORRETTA
+   - NON segnalare come errore se l'email chiede di verificare e reinviare il codice evento
+   - NON suggerire di parlare di cancellazione/modifica dell'appuntamento come se fosse avvenuta - l'operazione NON È STATA ESEGUITA
+   - NON inventare date di appuntamenti o dettagli che non sono nel contesto
+   - L'email deve essere neutra e chiedere cortesemente il codice corretto, SENZA assumere nulla sull'appuntamento del cliente
+
 OUTPUT RICHIESTO:
 
 1. **needs_review** (bool):
@@ -2157,6 +2165,14 @@ REVIEW INSTRUCTIONS:
    - DO NOT flag as error phrases like "has been rescheduled", "has been booked", "has been cancelled" - these are CONFIRMATIONS of actions that already happened
    - DO NOT suggest changing "has been rescheduled" to "will be processed" or similar - the action HAS ALREADY BEEN EXECUTED
    - If the automation succeeded, the email must communicate CERTAINTY, not doubts or expectations
+
+8. CRITICAL - INVALID OR MISSING EVENT CODE:
+   - If "APPOINTMENT CONTEXT" indicates that the OPERATION STATUS is "EVENT_CODE_INVALID" or "EVENT_CODE_NOT_FOUND", it means the event code provided by the customer WAS NOT VALID
+   - In this case, the email THAT ASKS THE CUSTOMER TO PROVIDE A VALID EVENT CODE is CORRECT
+   - DO NOT flag as error if the email asks to verify and resend the event code
+   - DO NOT suggest talking about cancellation/modification of the appointment as if it happened - the operation WAS NOT EXECUTED
+   - DO NOT invent appointment dates or details that are not in the context
+   - The email must be neutral and kindly ask for the correct code, WITHOUT assuming anything about the customer's appointment
 
 REQUIRED OUTPUT:
 
