@@ -2,7 +2,7 @@ from fastapi import Request, HTTPException, status
 from fastapi.responses import RedirectResponse, JSONResponse
 from src.core.logger import setup_logger
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
-from src.modules.auth.src.utils.custom_provider import test_imap_connection, test_imap_login
+from src.modules.auth.src.utils.custom_provider import test_imap_connection, test_imap_login, test_smtp_connection, test_smtp_login
 
 class CustomProviderController:
 
@@ -52,6 +52,10 @@ class CustomProviderController:
         test_imap_connection(server_imap, imap_port)
 
         test_imap_login(server_imap, imap_port, email, password)
+
+        test_smtp_connection(server_smtp, smtp_port)
+
+        test_smtp_login(server_smtp, smtp_port, email, password)
 
         try:
             res = SubscriptionServiceDAO().save_custom_provider_credentials(
