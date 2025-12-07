@@ -135,7 +135,7 @@ class UserDAO:
     def create_user_with_sub(self, email: str, password: str, subscription_data: dict) -> UserReadSubs:
         user = self.create_user(email, password)
 
-        self.supabase_auth.rpc(
+        response = self.supabase_auth.rpc(
             "create_subscription_for_user",
             {
                 "p_user_id": user.id,
@@ -143,9 +143,11 @@ class UserDAO:
             }
         ).execute()
 
-        response = self.login_with_password(email, password)
 
-        return response
+        if response:
+            return True
+        else:
+            return False
    
     def add_new_user(self, email: str, password: str, subscription_id: str) -> bool:
         user = self.create_user(email, password)
