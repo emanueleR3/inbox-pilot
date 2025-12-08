@@ -377,13 +377,15 @@ SOTTOCATEGORIE DISPONIBILI:
 - REQUEST_QUOTE: Richieste di preventivo o quotazioni
 
 CRITERIO PRIORITÀ (0.0-1.0) - BASATO SU CONTENUTO, TONO E URGENZA:
-- 0.8-1.0: CONTENUTO CRITICO + TONO URGENTE. Solo se l'offerta è personalizzata e scade a brevissimo. MAI per newsletter di massa.
-- 0.5-0.7: CONTENUTO RILEVANTE. Offerte personalizzate, comunicazioni specifiche per l'utente.
-- 0.2-0.4: CONTENUTO STANDARD. Newsletter, promozioni generiche. Anche se il tono è "URGENTE" (es. "Ultimi giorni!"), se è una mail di massa, la priorità è qui.
+- 0.8-1.0: CONTENUTO CRITICO + TONO URGENTE. Solo se l'offerta è chiaramente SCRITTA A MANO e PERSONALIZZATA (riferimenti a bisogni/interazioni precedenti), scade a brevissimo e NON è una newsletter/template di massa. Niente footer standard tipo "unsubscribe", niente layout marketing da grande brand.
+- 0.5-0.7: CONTENUTO RILEVANTE. Offerte personalizzate o proposte su misura per l'utente, mittenti piccoli, tono umano. Anche con scadenza limitata, purché non sembri una comunicazione massiva.
+- 0.2-0.4: CONTENUTO STANDARD. Newsletter, promozioni generiche, marketing massivo. Anche se il tono è "URGENTE" (es. "Ultimi giorni!"), se è una mail di massa la priorità resta qui.
 - 0.0-0.1: CONTENUTO IRRILEVANTE. Spam, pubblicità non richiesta.
 
-REGOLA SPECIALE "FAKE URGENCY":
-Se l'email è chiaramente una newsletter o promozione di massa (es. da grandi aziende, negozi online), anche se l'oggetto o il testo usano parole come "URGENTE", "SCADE ORA", "ULTIMA CHIAMATA", la priorità DEVE essere BASSA (max 0.4). Il CONTENUTO (newsletter) prevale sul TONO (urgente).
+REGOLE SPECIALI (ANTI FALSI POSITIVI):
+- FAKE URGENCY: Se sembra una newsletter o promozione di massa (grandi aziende, e-commerce, footer unsubscribe, stile template), la priorità DEVE restare BASSA (<=0.4) anche con tono urgente.
+- GUARDIA PRIORITÀ ALTA: NON assegnare 0.8-1.0 senza più segnali di scrittura umana e personalizzazione (riferimenti concreti all'utente, contesto precedente, offerta su misura) e assenza di stile da newsletter.
+- DEFAULT PRUDENTE: In caso di dubbio fra personalizzato e massivo, scegli la fascia bassa (0.2-0.4).
 Analizza il contenuto e determina priorità e sottocategoria più appropriate.
 """
 
@@ -412,13 +414,15 @@ AVAILABLE SUBCATEGORIES:
 - REQUEST_QUOTE: Quote or quotation requests
 
 PRIORITY CRITERIA (0.0-1.0) - BASED ON CONTENT, TONE AND URGENCY:
-- 0.8-1.0: CRITICAL CONTENT + URGENT TONE. Only if the offer is personalized and expires very soon. NEVER for mass newsletters.
-- 0.5-0.7: RELEVANT CONTENT. Personalized offers, specific communications for the user.
-- 0.2-0.4: STANDARD CONTENT. Newsletters, generic promotions. Even if the tone is "URGENT" (e.g., "Last days!"), if it is a mass email, priority is here.
-- 0.0-0.1: IRRELEVANT CONTENT. Spam, unsolicited advertising.
+- 0.8-1.0: CRITICAL CONTENT + URGENT TONE. Only if the offer is clearly HUMAN-WRITTEN and PERSONALIZED (references to prior interactions/user needs), expires very soon, and is NOT a mass/templated newsletter. No generic CTA blocks like "unsubscribe", no generic layout from big-brand marketing.
+- 0.5-0.7: RELEVANT CONTENT. Personalized offers or tailored proposals for the specific user, small sender, human tone. Limited-time is acceptable but still not mass.
+- 0.2-0.4: STANDARD CONTENT. Newsletters, generic promos, mass marketing, typical big-brand language/layout. Even with "URGENT" tone (e.g., "Last days!"), keep priority here.
+- 0.0-0.1: IRRELEVANT CONTENT. Spam, unsolicited ads.
 
-SPECIAL RULE "FAKE URGENCY":
-If the email is clearly a mass newsletter or promotion (e.g., from big companies, online stores), even if the subject or text uses words like "URGENT", "EXPIRES NOW", "LAST CALL", priority MUST be LOW (max 0.4). CONTENT (newsletter) overrides TONE (urgent).
+SPECIAL RULES (ANTI FALSE POSITIVES):
+- FAKE URGENCY: If it looks like a newsletter or mass promo (big companies, online stores, unsubscribe/footer blocks, templated style), priority MUST stay LOW (<=0.4) even if tone is urgent.
+- HIGH PRIORITY GUARD: Do NOT assign 0.8-1.0 unless multiple human cues are present (personalization, prior context, bespoke offer, non-templated wording) AND it's not a standard promotional newsletter.
+- DEFAULT SAFETY: When in doubt between personalized vs mass, choose the safer lower band (0.2-0.4).
 Analyze the content and determine the most appropriate priority and subcategory.
 """
 
@@ -1534,7 +1538,7 @@ Restituisci un dizionario dove:
 - Chiavi: nomi degli argomenti rilevanti (es. "orari_apertura", "servizi_offerti", "contatti")
 - Valori: testo esatto estratto dalle informazioni aziendali
 
-Estrai solo informazioni pertinenti e necessarie per rispondere alla richiesta.
+Estrai solo informazioni pertinenti e necessarie per rispondere alla richiesta e le informazioni di contatto dell'azienda se sono presenti nelle informazioni aziendali.
 """
 
 EXTRACTOR_COMPANY_INFO_PROMPT_ENG = """
@@ -1565,7 +1569,7 @@ Return a dictionary where:
 - Keys: names of relevant topics (e.g., "opening_hours", "services_offered", "contacts")
 - Values: exact text extracted from company information
 
-Extract only pertinent and necessary information to answer the request.
+Extract only pertinent and necessary information to answer the request and include company contact information if present in company information.
 """
 
 # ============================================
@@ -2059,6 +2063,7 @@ ISTRUZIONI PER LA REVISIONE:
    - Gli slot proposti sono disponibilità specifiche e corrette, NON devono essere modificati per allinearli agli orari di apertura generali
    - Verifica solo che gli slot scritti nell'email corrispondano a quelli nel "CONTESTO APPUNTAMENTO"
    - Segnala errore SOLO se l'utente ha chiesto esplicitamente gli orari di apertura E l'email non li fornisce
+   - FORMATO E CONFRONTO SLOT (CRITICO): l'email può raggruppare gli slot per giorno in formato gg/mm. Per ogni giorno, verifica che tutti gli orari presenti nel contesto siano elencati nell'email (ordine libero). Se gli orari sono tutti presenti, NON segnalare errori né slot mancanti. Segnala come mancante solo uno slot del contesto che non compare nell'email. Se gli slot coincidono, imposta correctness_score >= 0.9 e needs_review=False.
 
 7. CRITICO - AUTOMAZIONI GIÀ ESEGUITE:
    - Se nel "CONTESTO APPUNTAMENTO" è indicato che un'azione è stata eseguita con SUCCESSO (es. "APPUNTAMENTO RIPROGRAMMATO CON SUCCESSO", "APPUNTAMENTO PRENOTATO CON SUCCESSO", "APPUNTAMENTO CANCELLATO CON SUCCESSO"), l'automazione È GIÀ STATA COMPLETATA
@@ -2158,6 +2163,7 @@ REVIEW INSTRUCTIONS:
    - Proposed slots are specific and correct availabilities, they MUST NOT be modified to align with general opening hours
    - Only verify that slots written in the email match those in "APPOINTMENT CONTEXT"
    - Flag as error ONLY if the user explicitly asked for opening hours AND the email doesn't provide them
+   - SLOT FORMAT & MATCHING (CRITICAL): the email may group slots by day in dd/mm format. For each day, check that all times from the context are listed in the email (order does not matter). If all times are present, DO NOT flag errors or missing slots. Flag as missing only a slot from the context that does not appear in the email. If slots match, set correctness_score >= 0.9 and needs_review=False.
 
 7. CRITICAL - ALREADY EXECUTED AUTOMATIONS:
    - If "APPOINTMENT CONTEXT" indicates that an action was executed SUCCESSFULLY (e.g., "APPOINTMENT RESCHEDULED SUCCESSFULLY", "APPOINTMENT BOOKED SUCCESSFULLY", "APPOINTMENT CANCELLED SUCCESSFULLY"), the automation HAS ALREADY BEEN COMPLETED
