@@ -75,16 +75,28 @@ else
     log_success "Secret GHCR già presente"
 fi
 
-# 3. Applica secrets (dall'env)
-log_info "Applicazione secrets..."
+# 3. Crea secrets dal file .env
+log_info "Creazione secrets dal file .env..."
 if [ -f "$SCRIPT_DIR/../.env" ]; then
-    # Esporta variabili dal .env per sostituirle nel secrets.yaml
-    export $(grep -v '^#' "$SCRIPT_DIR/../.env" | xargs)
-    envsubst < "$SCRIPT_DIR/secrets.yaml" | kubectl apply -f -
-    log_success "Secrets applicati"
+    # Rimuovi secret esistente se presente
+    kubectl delete secret corretto-secrets -n $NAMESPACE --ignore-not-found
+    
+    # Crea nuovo secret dal file .env
+    kubectl create secret generic corretto-secrets \
+        --from-env-file="/home/deploy/corretto" \
+        -n $NAMESPACE
+    
+    log_success "Secrets creati dal file .env"
 else
-    log_warning "File .env non trovato, applico secrets.yaml con placeholder"
-    kubectl apply -f "$SCRIPT_DIR/secrets.yaml"
+    log_warning "File .env non trovato in /home/deploy/corretto"
+    log_info "Puoi creare i secrets manualmente con:"
+    echo "  kubectl create secret generic corretto-secrets --from-env-file=.env -n $NAMESPACE"
+    
+    # Applica il template secrets.yaml se esiste
+    if [ -f "$SCRIPT_DIR/secrets.yaml" ]; then
+        log_info "Applico template secrets.yaml..."
+        kubectl apply -f "$SCRIPT_DIR/secrets.yaml"
+    fi
 fi
 
 # 4. Crea secret per Google Service Account (se esiste il file)

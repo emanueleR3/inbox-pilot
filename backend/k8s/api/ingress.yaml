@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  namespace: corretto
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: corretto
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # Per Let's Encrypt automatico (se cert-manager è installato)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  rules:
+    - host: api.corretto.pro
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+  # TLS - decommentare dopo aver configurato cert-manager
+  # tls:
+  #   - hosts:
+  #       - api.corretto.pro
+  #     secretName: api-corretto-pro-tls
