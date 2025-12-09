@@ -40,6 +40,138 @@ URL_BLOCKLIST = [
     "/il-mio-account", "/il-mio-profilo", "/registrazione-utente", "/registrazione"
 ]
 
+GENERIC_EXCLUDED_SUBSTRINGS = [
+    "privacy", "cookie", "cookies", "gdpr",
+    "termini-di-utilizzo", "termini-di-uso",
+    "terms-of-use", "terms-and-conditions", "termsconditions",
+    "login", "sign-in", "signup"
+]
+
+# ------------------------------------------------------
+#  PULIZIA GENERICA DEL TESTO (VALIDA PER QUALSIASI SITO)
+# ------------------------------------------------------
+
+# Keyword che identificano blocchi di testo rumore (cookie, nav, ecc.)
+COOKIE_KEYWORDS = [
+    "consenso cookies",
+    "gestisci preferenze",
+    "gestisci servizi",
+    "cookie per",
+    "informativa cookie",
+    "vendor_count",
+    "salva preferenze",
+    "cookie",
+    "cookies",
+    "archiviazione tecnica",
+    "scopi di marketing simili",
+    "cookie banner",
+    "usiamo i cookie",
+    "questa pagina utilizza i cookie",
+    "privacy e cookie",
+    "cookie di terze parti",
+    "i cookie per",
+    "consenso cookies",
+    "informativa cookie",
+    "informazioni sui cookie",
+    "cookie policy",
+    "privacy policy",
+    "vendor_count",
+    "scopi di marketing simili",
+    "salva preferenze",
+    "gestisci preferenze"
+]
+
+NAV_KEYWORDS = [
+    "vai al contenuto",
+    "torna in alto",
+    "menu principale",
+    "menu di navigazione",
+    "chiudi menu",
+    "chiudi menù",
+    "leggi tutto..."
+]
+
+# ------------------------------------------------------
+#  PULIZIA TESTO E RIMOZIONE RUMORE
+# ------------------------------------------------------
+def is_noise_block(text: str) -> bool:
+    """
+    Ritorna True se il blocco è probabilmente rumore
+    (cookie banner, nav, bottoni, micro-frasi).
+    """
+    t = text.lower().strip()
+    length = len(t)
+
+    # cookie / privacy / consenso
+    # filtra cookie banner e elementi di navigazione
+    if any(k in t for k in COOKIE_KEYWORDS + NAV_KEYWORDS):
+        return True
+
+    # blocchi molto corti: spesso bottoni o label
+    if length < 40 and len(t.split()) < 6:
+        return True
+
+    # blocchi quasi privi di lettere/digit (icone, simboli)
+    letters = sum(c.isalpha() for c in t)
+    digits = sum(c.isdigit() for c in t)
+    if letters + digits < 5:
+        return True
+
+    return False
+
+# ------------------------------------------------------
+#  NORMALIZZAZIONE TESTO
+# ------------------------------------------------------
+def normalize_text(text: str) -> str:
+    """
+    Rimuove caratteri strani, normalizza spazi e righe vuote.
+    """
+    # rimuove simboli non alfanumerici / punteggiatura principale (es. )
+    text = re.sub(r"[^\wÀ-ÿ.,;:!?%€@/\-\(\)\n ]+", " ", text)
+
+    # collassa spazi multipli in uno
+    text = re.sub(r"[ \t]+", " ", text)
+
+    # pulizia righe
+    lines = [ln.strip() for ln in text.splitlines()]
+
+    cleaned_lines = []
+    empty_streak = 0
+    for ln in lines:
+        if ln == "":
+            empty_streak += 1
+            if empty_streak > 1:
+                continue
+        else:
+            empty_streak = 0
+        cleaned_lines.append(ln)
+
+    return "\n".join(cleaned_lines).strip()
+
+# ------------------------------------------------------
+#  PULIZIA TESTO DA PAGINA
+# ------------------------------------------------------
+def clean_page_text(raw_text: str) -> str:
+    """
+    Prende il testo già estratto/filtro-deduplicato e:
+    - rimuove i blocchi rumorosi
+    - normalizza il formato
+    """
+    if not raw_text:
+        return ""
+
+    # spezza in blocchi/paragrafi usando il doppio newline
+    blocks = [b.strip() for b in raw_text.split("\n\n") if b.strip()]
+
+    # filtra i blocchi rumorosi
+    kept_blocks = [b for b in blocks if not is_noise_block(b)]
+
+    if not kept_blocks:
+        return ""
+
+    joined = "\n\n".join(kept_blocks)
+    return normalize_text(joined)
+
 # ------------------------------------------------------
 #  LOGICA DI DEDUPLICAZIONE GLOBALE
 # ------------------------------------------------------
@@ -83,8 +215,47 @@ def filter_redundant_content(text, seen_hashes):
         # I blocchi lunghi nuovi li teniamo
         unique_blocks.append(block)
 
-    return " ".join(unique_blocks)
+    return "\n\n".join(unique_blocks)
 
+# ------------------------------------------------------
+#  FILTRI URL PER CRAWLING
+# ------------------------------------------------------
+def should_index_url(url: str) -> bool:
+    """
+    Ritorna False se l'URL non va né visitato né salvato.
+    Usa sia la URL_BLOCKLIST che i pattern generici.
+    """
+    lower_url = url.lower()
+
+    # 1) blocklist specifica che hai già definito
+    if any(pattern in lower_url for pattern in URL_BLOCKLIST):
+        return False
+
+    # 2) pattern generici (privacy, cookie, termini, ecc.)
+    if any(sub in lower_url for sub in GENERIC_EXCLUDED_SUBSTRINGS):
+        return False
+
+    # 3) risorse che NON sono pagine HTML interessanti
+    if any(ext in lower_url for ext in [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp"]):
+        return False
+    if lower_url.startswith("mailto:") or lower_url.startswith("tel:") or lower_url.startswith("javascript:"):
+        return False
+
+    return True
+
+# ------------------------------------------------------
+#  RILEVAMENTO BLOCCHI DI RUMORE
+# ------------------------------------------------------
+def is_noise_block(text: str) -> bool:
+    t = text.lower()
+    if any(k in t for k in COOKIE_KEYWORDS):
+        return True
+    if any(k in t for k in NAV_KEYWORDS):
+        return True
+    # blocchi quasi solo link / pulsanti
+    if len(t) < 50 and len(t.split()) < 10:
+        return True
+    return False
 
 # ------------------------------------------------------
 #  RILEVAMENTO PAGINE PRODOTTO
@@ -188,9 +359,11 @@ def crawl(start_url, visited, seen_content_hashes):
     """
     start_url = normalize_url(start_url)
 
+    start_url = normalize_url(start_url)
+
     if start_url in visited:
         return
-    if any(pattern in start_url for pattern in URL_BLOCKLIST):
+    if not should_index_url(start_url):
         return
 
     visited.add(start_url)
@@ -224,16 +397,18 @@ def crawl(start_url, visited, seen_content_hashes):
     # ---------------------------
     #  ESTRAZIONE E DEDUPLICAZIONE
     # ---------------------------
-    # 1. Pulisci l'HTML
+    # 1. Pulisci l'HTML (estrazione testo grezzo)
     raw_text = clean_html(response.text)
-    
-    # 2. Applica il filtro di unicità globale
-    # Questo rimuove i blocchi > 100 char già visti in precedenza
-    final_text = filter_redundant_content(raw_text, seen_content_hashes)
-    
+
+    # 2. Deduplica blocchi lunghi già visti su altre pagine
+    deduped_text = filter_redundant_content(raw_text, seen_content_hashes)
+
+    # 3. Pulizia generica del testo (cookie, nav, rumore, normalizzazione)
+    final_text = clean_page_text(deduped_text)
+
     page_title = soup.title.string.strip() if soup.title else "No Title"
 
-    # Scriviamo solo se è rimasto qualcosa dopo la deduplicazione
+    # Scriviamo solo se è rimasto qualcosa dopo tutto
     if final_text.strip():
         with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
             f.write(f"--- START PAGE ---\n")
@@ -247,13 +422,12 @@ def crawl(start_url, visited, seen_content_hashes):
         url = urljoin(start_url, link["href"])
         url = normalize_url(url)
 
-        if any(x in url.lower() for x in [".pdf", ".jpg", ".png", "mailto:", "tel:", "javascript:"]):
-            continue
-
+        # stesso dominio
         if urlparse(url).netloc != urlparse(start_url).netloc:
             continue
-            
-        if any(pattern in url for pattern in URL_BLOCKLIST):
+
+        # passa dal filtro unico
+        if not should_index_url(url):
             continue
 
         crawl(url, visited, seen_content_hashes)
@@ -264,7 +438,7 @@ def crawl(start_url, visited, seen_content_hashes):
 if __name__ == "__main__":
     open(OUTPUT_FILE, "w").close()
 
-    sito = "[website-url]"
+    sito = "[inserire_il_sito_da_crawling]"
     visited_pages = set()
     
     # Set globale per tracciare gli hash dei blocchi di testo già salvati
