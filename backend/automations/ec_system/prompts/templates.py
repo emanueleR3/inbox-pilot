@@ -2105,7 +2105,7 @@ ISTRUZIONI PER LA REVISIONE:
    - Se l'automazione è riuscita, l'email deve comunicare CERTEZZA, non dubbi o attese
 
 8. CRITICO - CODICE EVENTO NON VALIDO O ASSENTE:
-   - Se nel "CONTESTO APPUNTAMENTO" è indicato che lo STATO OPERAZIONE è "EVENT_CODE_INVALID" o "EVENT_CODE_NOT_FOUND", significa che il codice evento fornito dal cliente NON ERA VALIDO
+   - Se nel "CONTESTO APPUNTAMENTO" è indicato che lo STATO OPERAZIONE è "EVENT_CODE_INVALID" o "EVENT_CODE_MISSING", significa che il cliente HA FORNITO un codice evento non valido o NON HA FORNITO alcun codice evento.
    - In questo caso, l'email CHE CHIEDE AL CLIENTE DI FORNIRE UN CODICE EVENTO VALIDO è CORRETTA
    - NON segnalare come errore se l'email chiede di verificare e reinviare il codice evento
    - NON suggerire di parlare di cancellazione/modifica dell'appuntamento come se fosse avvenuta - l'operazione NON È STATA ESEGUITA
@@ -2205,7 +2205,7 @@ REVIEW INSTRUCTIONS:
    - If the automation succeeded, the email must communicate CERTAINTY, not doubts or expectations
 
 8. CRITICAL - INVALID OR MISSING EVENT CODE:
-   - If "APPOINTMENT CONTEXT" indicates that the OPERATION STATUS is "EVENT_CODE_INVALID" or "EVENT_CODE_NOT_FOUND", it means the event code provided by the customer WAS NOT VALID
+   - If "APPOINTMENT CONTEXT" indicates that the OPERATION STATUS is "EVENT_CODE_INVALID" or "EVENT_CODE_MISSING", it means the event code provided by the customer WAS NOT VALID or WAS NOT PROVIDED
    - In this case, the email THAT ASKS THE CUSTOMER TO PROVIDE A VALID EVENT CODE is CORRECT
    - DO NOT flag as error if the email asks to verify and resend the event code
    - DO NOT suggest talking about cancellation/modification of the appointment as if it happened - the operation WAS NOT EXECUTED

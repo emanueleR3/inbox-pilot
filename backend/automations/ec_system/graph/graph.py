@@ -553,7 +553,7 @@ def create_email_classification_graph():
         if state.get("automation_executed"):
             return END    
 
-        if state.get("status") == "EVENT_CODE_INVALID":
+        if state.get("status") in ["EVENT_CODE_INVALID", "EVENT_CODE_NOT_FOUND", "EVENT_CODE_MISSING"]:
             return NodeNames.EXTRACTOR_COMPANY_INFO
 
         # Case 1: propose_new_slots was called (proposed_slots is not None)
