@@ -1,8 +1,11 @@
 from fastapi import HTTPException, status
+from fastapi import HTTPException, status
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 
 
 class SubscriptionServiceController:
+    def __init__(self):
+        self.subscription_service_dao = SubscriptionServiceDAO()
     def __init__(self):
         self.subscription_service_dao = SubscriptionServiceDAO()
 

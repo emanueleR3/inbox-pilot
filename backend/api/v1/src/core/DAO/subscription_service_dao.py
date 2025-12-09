@@ -76,7 +76,8 @@ class SubscriptionServiceDAO:
         smtp_port: int,
         email: str,
         password: str,
-        subscription_id: str
+        subscription_id: str,
+        calendar_provider: str
     ) -> SubscriptionServiceRead:
         try:
             encrypted_password = self._encrypt(password, "pass")
@@ -91,6 +92,7 @@ class SubscriptionServiceDAO:
                 "hashed_access_token": None,
                 "hashed_refresh_token": None,
                 "expiry_token": None,
+                "calendar_provider": calendar_provider
             }
 
             if self.email_exists(email):
@@ -117,6 +119,7 @@ class SubscriptionServiceDAO:
                     smtp_port=smtp_port,
                     hashed_password=encrypted_password,
                     subscription_id=subscription_id,
+                    calendar_provider=calendar_provider
                 )
 
                 if not response or not isinstance(response, dict):
@@ -138,6 +141,7 @@ class SubscriptionServiceDAO:
                 priority_threshold=record.get("priority_threshold"),
                 confidence_classification_threshold = record.get("confidence_classification_threshold"),
                 urgent_meeting_threshold = record.get("urgent_meeting_threshold"),
+                calendar_provider = record.get("calendar_provider")
             )
 
         except Exception as e:

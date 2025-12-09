@@ -141,7 +141,7 @@ class ReaderAppointmentResponse(BaseModel):
     )
     date: Optional[str] = Field(
         None,
-        description="Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss, None se non specificato"
+        description="Data e ora appuntamento: YYYY-MM-DDThh:mm:ss se specificati entrambi, YYYY-MM-DDT--:-- se solo giorno preferito, None se non specificato"
     )
     duration: int = Field(
         60,
@@ -158,6 +158,50 @@ class ReaderAppointmentResponse(BaseModel):
     additional_notes: Optional[str] = Field(
         None,
         description="Note aggiuntive sull'evento"
+    )
+
+
+class ReaderConfirmAppointmentResponse(BaseModel):
+    """Response model for Reader node analysis of CONFIRM_APPOINTMENT subcategory."""
+    key_entities: dict = Field(
+        ...,
+        description="Entità chiave estratte dalla mail e allegati (date, informazioni, richieste, luoghi, ecc.)"
+    )
+    title_of_event: str = Field(
+        ...,
+        description="Titolo dell'appuntamento nella forma '[AI] APPUNTAMENTO + sender email'"
+    )
+    date: Optional[str] = Field(
+        None,
+        description="Data e ora appuntamento: YYYY-MM-DDThh:mm:ss se specificati entrambi, YYYY-MM-DDT--:-- se solo giorno preferito, None se non specificato"
+    )
+    event_code: Optional[str] = Field(
+        None,
+        description="Codice evento a 6 cifre se presente nella conversazione (usato per reschedulare). None se non trovato."
+    )
+    duration: int = Field(
+        60,
+        description="Durata dell'appuntamento in minuti, default 60 se non specificato"
+    )
+    attendees: Optional[list] = Field(
+        None,
+        description="Lista di email degli invitati, None se non specificati"
+    )
+    place: Optional[str] = Field(
+        None,
+        description="Luogo dell'evento, None se non specificato"
+    )
+    additional_notes: Optional[str] = Field(
+        None,
+        description="Note aggiuntive sull'evento"
+    )
+    already_scheduled: bool = Field(
+        False,
+        description="True se dall'extended summary si evince che l'appuntamento è già stato schedulato (conferma finale senza intervento), False se deve ancora essere schedulato"
+    )
+    needs_response: bool = Field(
+        ...,
+        description="True se l'email richiede una risposta, False altrimenti"
     )
 
 
@@ -179,6 +223,14 @@ class SchedulerResponse(BaseModel):
         None,
         description="Array di date proposte in formato YYYY-MM-DD, None se non proposte"
     )
+    favorite_day_unavailable: bool = Field(
+        False,
+        description="True se il giorno preferito non aveva slot disponibili e sono stati proposti gli slot settimanali"
+    )
+    event_details: Optional[dict] = Field(
+        None,
+        description="Dettagli dell'evento creato per generare file ICS (title, start_time, end_time, location, description, attendees, event_code, timezone)"
+    )
 
 
 class ReaderAppointmentChangeResponse(BaseModel):
@@ -197,7 +249,7 @@ class ReaderAppointmentChangeResponse(BaseModel):
     )
     new_date: Optional[str] = Field(
         None,
-        description="Nuova data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss, None se non specificato"
+        description="Nuova data e ora appuntamento: YYYY-MM-DDThh:mm:ss se specificati entrambi, YYYY-MM-DDT--:-- se solo giorno preferito, None se non specificato"
     )
     new_duration: Optional[int] = Field(
         None,

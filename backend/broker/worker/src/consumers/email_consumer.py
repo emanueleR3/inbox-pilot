@@ -29,6 +29,8 @@ async def process_email(email_data):
             print(f"📧 Is Sent: {email_data.get('is_sent', False)}")
             print(f"📧 Reply To ID: {email_data.get('reply_to_id', 'N/A')}")
             print(f"📧 Message ID: {email_data.get('message_id', 'N/A')}")
+            print(f"📧 Thread ID: {email_data.get('original_thread_id', 'N/A')}")
+            print(f"📧 Email type: {email_data.get('email_type', 'unknown')}")
             
             # Process through the new architecture
             result = await email_processor.process_message(email_data)
@@ -50,8 +52,8 @@ async def process_email(email_data):
                 print("\n📄 CORPO DEL MESSAGGIO:")
                 print("-" * 40)
                 # Mostra massimo 500 caratteri per non intasare i log
-                if len(body) > 500:
-                    print(f"{body[:500]}...")
+                if len(body) > 100:
+                    print(f"{body[:100]}...")
                     print(f"[... troncato - lunghezza totale: {len(body)} caratteri]")
                 else:
                     print(body)

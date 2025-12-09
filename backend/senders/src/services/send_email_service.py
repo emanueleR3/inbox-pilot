@@ -9,8 +9,10 @@ import base64
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from email.utils import make_msgid
-from typing import Optional
+from typing import Optional, List, Dict
 from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -22,6 +24,20 @@ from ..utils.utils import decrypt
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_message_id(message_id: str) -> str:
+    """
+    Remove angle brackets from message ID if present.
+    Example: "<abc123@mail.gmail.com>" -> "abc123@mail.gmail.com"
+    """
+    if not message_id:
+        return message_id
+    
+    if message_id.startswith('<') and message_id.endswith('>'):
+        return message_id[1:-1]
+    
+    return message_id
 
 
 class SendEmailService:
@@ -37,27 +53,42 @@ class SendEmailService:
         email: str, 
         subject: str, 
         body: str, 
-        hashed_access_token: str
+        hashed_access_token: str,
+        thread_id: Optional[str] = None,
+        message_id: Optional[str] = None,
+        attachments: Optional[List[Dict]] = None
     ) -> dict:
         """
-        Send an email using Gmail API and return RFC Message-ID.
+        Send email via Gmail API.
+        
+        Args:
+            email: Recipient email
+            subject: Email subject
+            body: Email body (HTML or plain text)
+            hashed_access_token: Encrypted access token
+            thread_id: Optional Gmail thread ID for replies
+            message_id: Optional RFC message ID for In-Reply-To header
+            attachments: Optional list of attachments, each dict with:
+                - filename: str (e.g., "invite.ics")
+                - content: str (base64 encoded content)
+                - content_type: str (e.g., "text/calendar")
         """
         try:
-            logger.info(f"📤 Sending email via Gmail to {email}")
-        
+
             # Decrypt the access token
             access_token = decrypt(hashed_access_token, "token")
+
             if not access_token:
                 raise ValueError("Failed to decrypt access token")
 
-            # Create credentials
             scopes_env = os.getenv("GOOGLE_SCOPES", "")
+
             if scopes_env:
                 scopes = [scope.strip() for scope in scopes_env.split() if scope.strip()]
             else:
                 scopes = [
                     "https://www.googleapis.com/auth/gmail.send",
-                    "https://www.googleapis.com/auth/gmail.modify",  # sufficiente per leggere il messaggio
+                    "https://www.googleapis.com/auth/gmail.modify",
                 ]
 
             creds = Credentials(
@@ -68,79 +99,150 @@ class SendEmailService:
                 scopes=scopes
             )
 
-            # Build Gmail service
             service = build('gmail', 'v1', credentials=creds)
-        
-            # Create the email message
-            message = MIMEMultipart('alternative')
+
+            # Create email - use 'mixed' for attachments, 'alternative' for body variants
+            if attachments:
+                # When we have attachments, use mixed as the outer container
+                message = MIMEMultipart('mixed')
+            else:
+                # No attachments, use alternative for body
+                message = MIMEMultipart('alternative')
+                
             message['To'] = email
             message['Subject'] = subject
-        
-            # Determine if body is HTML or plain text
-            if body.strip().startswith('<') and body.strip().endswith('>'):
-                html_part = MIMEText(body, 'html', 'utf-8')
-                message.attach(html_part)
+
+            if message_id:
+                # Ensure message_id has angle brackets for RFC compliance
+                rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
+                message['In-Reply-To'] = rfc_message_id
+                message['References'] = rfc_message_id
+
+            # Detect body type and create body part
+            if body.strip().startswith("<") and body.strip().endswith(">"):
+                body_part = MIMEText(body, 'html', 'utf-8')
             else:
-                text_part = MIMEText(body, 'plain', 'utf-8')
-                message.attach(text_part)
-        
-            # Encode the message
+                body_part = MIMEText(body, 'plain', 'utf-8')
+
+            if attachments:
+                # For mixed messages, wrap body in alternative container
+                body_container = MIMEMultipart('alternative')
+                body_container.attach(body_part)
+                message.attach(body_container)
+            else:
+                message.attach(body_part)
+
+            # Handle attachments
+            if attachments:
+                for attachment in attachments:
+                    filename = attachment.get('filename', 'attachment')
+                    content_b64 = attachment.get('content', '')
+                    content_type = attachment.get('content_type', 'application/octet-stream')
+                    
+                    try:
+                        # Decode base64 content
+                        content_bytes = base64.b64decode(content_b64)
+                        
+                        # For ICS files, use application/ics for better Gmail compatibility
+                        if filename.endswith('.ics') and content_type == 'text/calendar':
+                            content_type = 'application/ics'
+                        
+                        # Create attachment part
+                        maintype, subtype = content_type.split('/', 1) if '/' in content_type else ('application', 'octet-stream')
+                        att_part = MIMEBase(maintype, subtype)
+                        att_part.set_payload(content_bytes)
+                        encoders.encode_base64(att_part)
+                        
+                        # Add headers to ensure attachment is visible
+                        att_part.add_header('Content-Disposition', 'attachment', filename=filename)
+                        att_part.add_header('Content-Transfer-Encoding', 'base64')
+                        
+                        message.attach(att_part)
+                        print(f"   📎 Attached: {filename} ({content_type})")
+                    except Exception as att_err:
+                        print(f"   ⚠️ Failed to attach {filename}: {att_err}")
+
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
-        
-            # Send the email
+
+            message_body = {"raw": raw_message}
+
+            if thread_id:
+                message_body["threadId"] = thread_id
+
             send_result = service.users().messages().send(
                 userId='me',
-                body={'raw': raw_message}
+                body=message_body
             ).execute()
-        
-            gmail_internal_id = send_result.get('id')
-            logger.info(f"✅ Email sent successfully via Gmail. Gmail ID: {gmail_internal_id}")
-        
-            # 🔍 Recupero dell'RFC Message-ID dagli header
+
+            gmail_internal_id = send_result.get("id")
+
+            # Retrieve RFC Message-ID
             rfc_message_id = None
+
             try:
                 msg = service.users().messages().get(
-                    userId='me',
+                    userId="me",
                     id=gmail_internal_id,
-                    format='metadata',
-                    metadataHeaders=['Message-ID', 'Message-Id']
+                    format="metadata",
+                    metadataHeaders=["Message-ID", "Message-Id"]
                 ).execute()
-            
-                headers = msg.get('payload', {}).get('headers', [])
-                for h in headers:
-                    if h.get('name', '').lower() == 'message-id':
-                        rfc_message_id = h.get('value')
-                        break
-            
-                logger.info(f"📎 Gmail RFC Message-ID: {rfc_message_id}")
-            except Exception as meta_err:
-                logger.warning(f"⚠️ Could not retrieve RFC Message-ID from Gmail: {meta_err}", exc_info=True)
-        
+
+                for h in msg.get("payload", {}).get("headers", []):
+                    print(f"   - {h.get('name')}: {h.get('value')}")
+                    if h.get("name", "").lower() == "message-id":
+                        rfc_message_id = h.get("value")
+
+            except Exception as err:
+                print(f"[DEBUG] Could not fetch RFC Message-ID: {err}")
+
+            print("=== EMAIL SENT SUCCESSFULLY ===\n")
+
+            # Clean message_id by removing angle brackets
+            cleaned_message_id = _clean_message_id(rfc_message_id)
+
             return {
                 "success": True,
-                "message": f"Email sent successfully via Gmail to {email}",
-                "notification_id": gmail_internal_id,  # id interno Gmail
-                "message_id": rfc_message_id          # RFC Message-ID, es. "<abc@domain>"
+                "message": f"Email sent to {email}",
+                "notification_id": gmail_internal_id,
+                "message_id": cleaned_message_id
             }
-        
+
         except Exception as e:
-            logger.error(f"❌ Failed to send email via Gmail: {str(e)}", exc_info=True)
+            print("\n❌ ERROR SENDING EMAIL ❌")
+            print(str(e))
+            print("==============================\n")
+
             return {
                 "success": False,
-                "message": f"Failed to send email via Gmail: {str(e)}",
+                "message": f"Failed to send email: {str(e)}",
                 "notification_id": None,
                 "message_id": None
             }
+
+
     
     def send_email_microsoft(
         self, 
         email: str, 
         subject: str, 
         body: str, 
-        hashed_access_token: str
+        hashed_access_token: str,
+        message_id: Optional[str] = None,
+        attachments: Optional[List[Dict]] = None
     ) -> dict:
         """
         Send an email using Microsoft Graph API and return RFC Message-ID (internetMessageId).
+        
+        Args:
+            email: Recipient email
+            subject: Email subject
+            body: Email body (HTML or plain text)
+            hashed_access_token: Encrypted access token
+            message_id: Optional message ID for reply
+            attachments: Optional list of attachments, each dict with:
+                - filename: str (e.g., "invite.ics")
+                - content: str (base64 encoded content)
+                - content_type: str (e.g., "text/calendar")
         """
         try:
             logger.info(f"📤 Sending email via Microsoft Graph to {email}")
@@ -159,24 +261,34 @@ class SendEmailService:
             }
         
             # 1️⃣ CREA IL MESSAGGIO (DRAFT)
-            create_url = "https://graph.microsoft.com/v1.0/me/messages"
-            email_message = {
-                "subject": subject,
-                "body": {
-                    "contentType": content_type,
-                    "content": body
-                },
-                "toRecipients": [
-                    {
-                        "emailAddress": {
-                            "address": email
+            if message_id:
+                # Caso REPLY: usiamo createReply per generare una bozza di risposta
+                create_url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/createReply"
+                # Per createReply, il corpo va in "comment" se vogliamo aggiungere testo
+                # Nota: createReply imposta automaticamente Subject (Re: ...) e To/Cc
+                reply_payload = {
+                    "comment": body
+                }
+                create_resp = requests.post(create_url, json=reply_payload, headers=headers)
+            else:
+                # Caso NUOVA EMAIL
+                create_url = "https://graph.microsoft.com/v1.0/me/messages"
+                email_message = {
+                    "subject": subject,
+                    "body": {
+                        "contentType": content_type,
+                        "content": body
+                    },
+                    "toRecipients": [
+                        {
+                            "emailAddress": {
+                                "address": email
+                            }
                         }
-                    }
-                ],
-                # opzionale: "saveToSentItems" non serve qui, il messaggio andrà automaticamente in Sent dopo il send
-            }
-        
-            create_resp = requests.post(create_url, json=email_message, headers=headers)
+                    ],
+                }
+                create_resp = requests.post(create_url, json=email_message, headers=headers)
+
             if create_resp.status_code not in (200, 201):
                 error_msg = f"Microsoft Graph create draft error: {create_resp.status_code} - {create_resp.text}"
                 logger.error(f"❌ {error_msg}")
@@ -191,7 +303,31 @@ class SendEmailService:
             msg_id = created_msg.get("id")
             logger.info(f"📝 Draft created in Microsoft Graph. ID: {msg_id}")
         
-            # 2️⃣ INVIA IL MESSAGGIO
+            # 2️⃣ ADD ATTACHMENTS (if any)
+            if attachments and msg_id:
+                for attachment in attachments:
+                    try:
+                        filename = attachment.get('filename', 'attachment')
+                        content_b64 = attachment.get('content', '')
+                        content_type = attachment.get('content_type', 'application/octet-stream')
+                        
+                        attach_url = f"https://graph.microsoft.com/v1.0/me/messages/{msg_id}/attachments"
+                        attach_payload = {
+                            "@odata.type": "#microsoft.graph.fileAttachment",
+                            "name": filename,
+                            "contentType": content_type,
+                            "contentBytes": content_b64
+                        }
+                        attach_resp = requests.post(attach_url, json=attach_payload, headers=headers)
+                        
+                        if attach_resp.status_code in (200, 201):
+                            logger.info(f"📎 Attached: {filename} ({content_type})")
+                        else:
+                            logger.warning(f"⚠️ Failed to attach {filename}: {attach_resp.status_code} - {attach_resp.text}")
+                    except Exception as att_err:
+                        logger.warning(f"⚠️ Error attaching {filename}: {att_err}")
+        
+            # 3️⃣ INVIA IL MESSAGGIO
             send_url = f"https://graph.microsoft.com/v1.0/me/messages/{msg_id}/send"
             send_resp = requests.post(send_url, headers=headers)
         
@@ -207,7 +343,7 @@ class SendEmailService:
         
             logger.info(f"✅ Email sent successfully via Microsoft Graph to {email}")
         
-            # 3️⃣ RECUPERA l'RFC Message-ID (internetMessageId)
+            # 4️⃣ RECUPERA l'RFC Message-ID (internetMessageId)
             rfc_message_id = None
             try:
                 get_url = f"https://graph.microsoft.com/v1.0/me/messages/{msg_id}"
@@ -229,11 +365,14 @@ class SendEmailService:
             except Exception as meta_err:
                 logger.warning(f"⚠️ Error retrieving internetMessageId: {meta_err}", exc_info=True)
         
+            # Clean message_id by removing angle brackets
+            cleaned_message_id = _clean_message_id(rfc_message_id)
+
             return {
                 "success": True,
                 "message": f"Email sent successfully via Microsoft to {email}",
                 "notification_id": msg_id,       # id interno Graph del messaggio
-                "message_id": rfc_message_id     # RFC Message-ID (internetMessageId)
+                "message_id": cleaned_message_id     # RFC Message-ID (cleaned)
             }
         
         except Exception as e:
@@ -253,81 +392,177 @@ class SendEmailService:
         smtp_port: int,
         smtp_server: str,
         smtp_email: str,
-        smtp_password: str
+        password: str,
+        reply_to_id: Optional[str] = None,
+        message_id: Optional[str] = None,
+        attachments: Optional[List[Dict]] = None
     ) -> dict:
+        """
+        Send email via SMTP.
+        
+        Args:
+            email: Recipient email
+            subject: Email subject
+            body: Email body (HTML or plain text)
+            smtp_port: SMTP port (465, 587, or 25)
+            smtp_server: SMTP server hostname
+            smtp_email: Sender email
+            password: SMTP password
+            reply_to_id: Optional message ID for In-Reply-To header
+            message_id: Optional message ID for References header
+            attachments: Optional list of attachments, each dict with:
+                - filename: str (e.g., "invite.ics")
+                - content: str (base64 encoded content)
+                - content_type: str (e.g., "text/calendar")
+        """
         try:
+            print("🔵 [SERVICE] ---- START send_email_smtp ----")
+
+            print(f"🔵 [SERVICE] email={email}")
+            print(f"🔵 [SERVICE] subject={subject}")
+            print(f"🔵 [SERVICE] body_length={len(body) if body else 0}")
+            print(f"🔵 [SERVICE] smtp_port={smtp_port}")
+            print(f"🔵 [SERVICE] smtp_server={smtp_server}")
+            print(f"🔵 [SERVICE] smtp_email={smtp_email}")
+            print(f"🔵 [SERVICE] reply_to_id={reply_to_id}")
+            print(f"🔵 [SERVICE] message_id={message_id}")
+            print("🔵 [SERVICE] password received (not printed)")
+
             sender_email = smtp_email
 
+            # Create message
             message = MIMEMultipart("alternative")
             message["From"] = sender_email
             message["To"] = email
             message["Subject"] = subject
-        
-            # 🆕 Genero Message-ID RFC e lo aggiungo all'header
+
+            # RFC Message-ID
             msg_id = make_msgid()
             message["Message-ID"] = msg_id
+            print(f"🔵 [SERVICE] Generated RFC Message-ID={msg_id}")
 
-            # HTML o testo
+            # Reply headers
+            if reply_to_id:
+                rfc_reply_to_id = reply_to_id if reply_to_id.startswith('<') else f"<{reply_to_id}>"
+                message["In-Reply-To"] = rfc_reply_to_id
+                print(f"🔵 [SERVICE] In-Reply-To={rfc_reply_to_id}")
+
+            if message_id:
+                rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
+                message["References"] = rfc_message_id
+                print(f"🔵 [SERVICE] References={rfc_message_id}")
+
+            # Body type
             if body.strip().startswith("<"):
+                print("🔵 [SERVICE] Body detected as HTML")
                 message.attach(MIMEText(body, "html", "utf-8"))
             else:
+                print("🔵 [SERVICE] Body detected as TEXT")
                 message.attach(MIMEText(body, "plain", "utf-8"))
 
-            # SSL/STARTTLS
+            # Handle attachments
+            if attachments:
+                for attachment in attachments:
+                    filename = attachment.get('filename', 'attachment')
+                    content_b64 = attachment.get('content', '')
+                    content_type = attachment.get('content_type', 'application/octet-stream')
+                    
+                    try:
+                        # Decode base64 content
+                        content_bytes = base64.b64decode(content_b64)
+                        
+                        # Create attachment part
+                        maintype, subtype = content_type.split('/', 1) if '/' in content_type else ('application', 'octet-stream')
+                        att_part = MIMEBase(maintype, subtype)
+                        att_part.set_payload(content_bytes)
+                        encoders.encode_base64(att_part)
+                        att_part.add_header('Content-Disposition', 'attachment', filename=filename)
+                        message.attach(att_part)
+                        print(f"🔵 [SERVICE] Attached: {filename} ({content_type})")
+                    except Exception as att_err:
+                        print(f"🟡 [SERVICE] Failed to attach {filename}: {att_err}")
+
             context = ssl.create_default_context()
+            print(f"🔵 [SERVICE] Selecting SMTP flow for port {smtp_port}...")
 
-            password = decrypt(smtp_password, "pass")
-            if not password:
-                raise ValueError("Failed to decrypt hashed password")
-
+            # SMTP 465 SSL
             if smtp_port == 465:
+                print("🟣 [SERVICE] Connecting with SMTP_SSL...")
                 with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
                     server.ehlo()
+                    print("🟣 [SERVICE] Logging in...")
                     server.login(sender_email, password)
+                    print("🟣 [SERVICE] Login OK")
                     server.send_message(message)
+                    print("🟣 [SERVICE] Message sent via SSL")
 
+            # SMTP 587 STARTTLS
             elif smtp_port == 587:
+                print("🟠 [SERVICE] Connecting with STARTTLS...")
                 with smtplib.SMTP(smtp_server, smtp_port) as server:
                     server.ehlo()
+                    print("🟠 [SERVICE] Starting TLS...")
                     server.starttls(context=context)
                     server.ehlo()
+                    print("🟠 [SERVICE] Logging in...")
                     server.login(sender_email, password)
+                    print("🟠 [SERVICE] Login OK")
                     server.send_message(message)
+                    print("🟠 [SERVICE] Message sent via STARTTLS")
 
+            # SMTP 25 (optional TLS/login)
             elif smtp_port == 25:
+                print("🟢 [SERVICE] Connecting on port 25...")
                 with smtplib.SMTP(smtp_server, smtp_port) as server:
                     server.ehlo()
+
                     try:
+                        print("🟢 [SERVICE] Trying STARTTLS...")
                         server.starttls(context=context)
                         server.ehlo()
-                    except:
-                        pass
+                        print("🟢 [SERVICE] STARTTLS OK")
+                    except Exception as e_tls:
+                        print(f"🟡 [SERVICE] STARTTLS not available: {e_tls}")
 
                     try:
+                        print("🟢 [SERVICE] Logging in...")
                         server.login(sender_email, password)
-                    except:
-                        pass
+                        print("🟢 [SERVICE] Login OK")
+                    except Exception as e_login:
+                        print(f"🟡 [SERVICE] Login failed/not required: {e_login}")
 
+                    print("🟢 [SERVICE] Sending message...")
                     server.send_message(message)
+                    print("🟢 [SERVICE] Message sent via port 25")
 
             else:
+                print(f"🔴 [SERVICE] Unsupported port: {smtp_port}")
                 return {
                     "success": False,
                     "message": f"Unsupported SMTP port {smtp_port}. Use 465 / 587 / 25.",
                     "message_id": None
                 }
 
+            cleaned_message_id = _clean_message_id(msg_id)
+            print(f"🟩 [SERVICE] Email sent successfully. Cleaned Message-ID={cleaned_message_id}")
+
             return {
                 "success": True,
                 "message": "Email sent",
-                "message_id": msg_id,     # 🆕 RFC Message-ID
-                "notification_id": msg_id  # Per uniformità con gli altri metodi
+                "message_id": cleaned_message_id,
+                "notification_id": cleaned_message_id
             }
 
         except Exception as e:
+            print("🔴 [SERVICE] ERROR sending email!")
+            print(f"🔴 [SERVICE] Exception type: {type(e).__name__}")
+            print(f"🔴 [SERVICE] Exception message: {str(e)}")
+            print(f"🔴 [SERVICE] Exception repr: {repr(e)}")
+
             return {
                 "success": False,
-                "message": str(e),
+                "message": str(e) or repr(e),
                 "message_id": None,
                 "notification_id": None
             }
+

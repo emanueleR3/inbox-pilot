@@ -127,8 +127,12 @@ def test_propose_new_slots(service_id: str):
             not_available_dates=not_available_dates
         )
         
-        print(f"\n✅ Result: {len(result)} slots proposed")
-        for i, slot in enumerate(result, 1):
+        slots = result.get('slots', [])
+        favorite_day_unavailable = result.get('favorite_day_unavailable', False)
+        
+        print(f"\n✅ Result: {len(slots)} slots proposed")
+        print(f"   Favorite day unavailable: {favorite_day_unavailable}")
+        for i, slot in enumerate(slots, 1):
             print(f"   {i}. {slot}")
         
         return result

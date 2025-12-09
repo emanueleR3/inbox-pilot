@@ -1,8 +1,3 @@
-import asyncio
-import json
-import os
-import re
-import html
 from src.gmail_fetcher import fetch_messages_for_user
 from src.broker_client import RabbitMQPublisher 
 from src.utils.logger import log_info 
@@ -51,39 +46,7 @@ async def process_pubsub_message(data: dict):
     
     for msg in messages:
         payload = _serialize_gmail_message(email, msg, history_id)
-        sender_email = _extract_email_from_header(payload.get('from', ''))
         labels = payload.get('labels', [])
-        
-        # Se il mittente è la stessa email dell'account o ha label SENT, salta questo messaggio
-        '''
-        if (sender_email and sender_email.lower() == email.lower()) or 'SENT' in labels:
-            print(f"🚫 Messaggio saltato - inviato dalla stessa email o label SENT: {payload.get('subject', 'N/A')}")
-            continue
-        '''
-
-        # TODO CONTROLLARE ID
-        '''
-        -> Esiste il campo In-Reply-To ?
-        TRUE { vedere in history a quale thread fa riferimento
-          -> il message_id è in history ?
-           - TRUE {
-            -- scarta
-           }
-           - FALSE {
-             -> Il sender della mail è uguale alla mail admin ?
-               - TRUE { 
-                 -- set human_response a true e notifica
-                 -- aggiorna summary e category (IA) e i vari campi
-               }
-               - FALSE {
-                 -- aggiorna campi e lancia l'automazione
-               }	 
-           }
-        }
-        FALSE { 
-           -- salvo thread_id, started_at, history, subject, sender_email, cc_emails, [SUMMARY DOPO AUTO], last_message_id, last_message_at, attachment_emails_id, [CATEGORY DOPO AUTO], human_response, last_sender_email
-        }
-        '''
 
         # Salta i messaggi con label DRAFT (bozze)
         if 'DRAFT' in labels:
@@ -123,9 +86,12 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
     message_id = headers_lower.get("message-id")
     if message_id:
         message_id = _clean_message_id(message_id)
+
+    thread_id = message.get("threadId")
     
     # Cerca in-reply-to in modo case-insensitive e rimuovi < >
     reply_to_id = headers_lower.get("in-reply-to")
+    
     if reply_to_id:
         reply_to_id = _clean_message_id(reply_to_id)
     else:
@@ -174,6 +140,7 @@ def _serialize_gmail_message(user_email: str, message: dict, history_id: str) ->
         "attachments": attachments_metadata,
         "no_reply": is_no_reply,
         "is_sent": is_sent,
+        "original_thread_id": thread_id
     }
     return payload
 

@@ -43,6 +43,7 @@ class AdvancedEmailFilter:
             if sender_email.lower() == email_data.get("user_email").lower():
                 email_data["action"] = "send_to_summarizer"
                 email_data["summarizer_only"] = True
+                email_data["needs_ai"] = email_data.get("reply_to_id").lower() != "no"
                 return email_data
             
             # Check for duplicate message_id first
@@ -179,7 +180,8 @@ class AdvancedEmailFilter:
                     message_timestamp=message_datetime,
                     subject=subject,
                     sender_email=sender_email,
-                    cc_emails=cc_emails
+                    cc_emails=cc_emails,
+                    status="TO_PROCESS" # TODO gestire i vari casi
                 )
                 
                 if not thread_result:
@@ -336,7 +338,7 @@ class AdvancedEmailFilter:
                 human_response=False,  # External user initiated, no human response yet
                 last_sender_email=sender_email,
                 box_email=email_data.get("user_email"),  # Email of the monitored mailbox
-                status="TO_PROCESS"  # TODO gestire i vari casi
+                status="TO_PROCESS"
             )
             
             return thread_data
@@ -379,10 +381,10 @@ class AdvancedEmailFilter:
                 has_attachments=has_attachments,  # Boolean flag for attachments
                 category="STARTED_BY_HUMAN",  # Category for user-initiated conversations
                 subcategory=None,  # Default null for human-initiated threads
-                human_response=True,  # User initiated, so it's a human response
+                human_response=True,  # User initiated, so it's a human response TODO agganciare un sistema di configurazione per cui è l'utente che decide se l'ai può rispondere o meno
                 last_sender_email=self._extract_email_address(email_data.get("user_email")),
                 box_email=email_data.get("user_email"),  # Email of the monitored mailbox
-                status="TO_PROCESS"  # TODO gestire i vari casi
+                status="HUMAN_TO_PROCESS"  # TODO agganciare un sistema di configurazione per cui è l'utente che decide se l'ai può rispondere o meno
             )
             
             return thread_data
@@ -503,7 +505,7 @@ class AdvancedEmailFilter:
             box_email = email_data.get("user_email")
             
             # Find the thread containing the referenced message
-            thread = self.thread_repo.find_thread_by_message_id(reply_to_id, box_email)
+            thread = self.thread_repo.find_thread_by_message_id(reply_to_id, box_email) # TODO errore manca find_thread_by_message_id
             
             if not thread:
                 print(f"⚠️ [FILTER] No thread found for forwarded message reference: {reply_to_id}")

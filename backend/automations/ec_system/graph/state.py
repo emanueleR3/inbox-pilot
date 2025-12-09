@@ -17,6 +17,11 @@ class EmailState(TypedDict):
     user_config: Optional[Dict]  # User configuration with thresholds
     status: Optional[str] # State of the execution flow
     dangerous_email: Optional[bool]  # Flag indicating if email is dangerous
+    summarizer_only: Optional[bool]  # Flag to run only summarizer workflow
+    human_response: Optional[bool]  # Flag indicating if human response is needed
+    original_thread_id: Optional[str]  # Original thread ID from email provider (e.g., Gmail thread ID)
+    microsoft_message_id: Optional[str]  # Microsoft Graph internal message ID for replies
+    high_priority_email: Optional[bool]  # Flag indicating if email is high priority
     # NEW: Separated workflow fields
     mail_summary: Optional[str]  # Summary of current email
     extended_summary: Optional[str]  # Extended conversation summary
@@ -41,6 +46,12 @@ class EmailState(TypedDict):
     appointment_overlap: Optional[bool]  # True if there's overlap with other events
     appointment_event_code: Optional[str]  # Event code if booked
     appointment_proposed_slots: Optional[List[str]]  # Proposed dates if booking not possible
+    appointment_favorite_day_unavailable: Optional[bool]  # True if favorite day had no slots and weekly slots were returned instead
+    # Event details for ICS generation (populated when event is scheduled/rescheduled)
+    scheduled_event_details: Optional[Dict]  # Contains: title, start_time, end_time, location, description, attendees, event_code
+    # Confirm appointment-specific fields (for CONFIRM_APPOINTMENT subcategory)
+    already_scheduled: Optional[bool]  # True if appointment was already scheduled (final confirmation), False if needs scheduling
+    confirm_event_code: Optional[str]  # Event code (6 digits) found in conversation for rescheduling
     # Appointment change fields (for REQUEST_APPOINTMENT_CHANGE subcategory)
     change_event_code: Optional[str]  # Code of event to modify
     change_new_title: Optional[str]  # New title for appointment
@@ -73,6 +84,10 @@ def create_initial_state() -> EmailState:
         "extracted_info": None,
         "notification": None,
         "user_config": None,
+        "summarizer_only": False,
+        "human_response": False,
+        "original_thread_id": None,
+        "microsoft_message_id": None,
         "mail_summary": None,
         "extended_summary": None,
         "confidence_score": None,
@@ -95,6 +110,10 @@ def create_initial_state() -> EmailState:
         "appointment_overlap": None,
         "appointment_event_code": None,
         "appointment_proposed_slots": None,
+        "appointment_favorite_day_unavailable": None,
+        "scheduled_event_details": None,
+        "already_scheduled": None,
+        "confirm_event_code": None,
         "change_event_code": None,
         "change_new_title": None,
         "change_new_date": None,

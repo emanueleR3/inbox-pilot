@@ -23,4 +23,5 @@ async def send_microsoft_email(req: dict):
 
 @router.post("/send-smtp")
 async def send_smtp_email(req: dict):
+    print("[DEBUG-SENDER] send_smtp_email")
     return controller.send_email_smtp(req)

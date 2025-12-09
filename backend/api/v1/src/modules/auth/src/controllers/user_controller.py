@@ -1,5 +1,7 @@
 from fastapi import HTTPException, status
 from supabase_auth.errors import AuthApiError
+from fastapi import HTTPException, status
+from supabase_auth.errors import AuthApiError
 from src.core.DAO.user_dao import UserDAO
 from src.core.DAO.subscription_dao import SubscriptionDAO
 
@@ -137,12 +139,63 @@ class UserController:
                     detail="Errore interno nel servizio di autenticazione"
                 )
 
+
+        if not email or not password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email e password sono richiesti"
+            )
+
+        try:
+            return self.user_dao.login_with_password(email, password)
+
+        except AuthApiError as e:
+            msg = str(e)
+            if "Invalid login credentials" in msg:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Credenziali non valide"
+                )
+            elif "Email not confirmed" in msg:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email non verificata. Controlla la tua casella email"
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Errore interno nel servizio di autenticazione"
+                )
+
     
     def get_user_by_email(self, email: str):
         return self.user_dao.get_user_by_email(email)
 
     def send_magic_link(self, payload: dict):
         email = payload.get("email")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email richiesta per l'invio del magic link"
+            )
+            
+        try:
+            return self.user_dao.login_with_magic_link(email)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        except AuthApiError as e:
+            if "User not found" in str(e):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Utente non trovato"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Errore durante l'invio del magic link"
+            )
         if not email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -186,6 +239,24 @@ class UserController:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Errore durante l'eliminazione dell'account"
             )
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="ID utente richiesto"
+            )
+            
+        try:
+            return self.user_dao.delete_user(user_id)
+        except AuthApiError as e:
+            if "User not found" in str(e):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Utente non trovato"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Errore durante l'eliminazione dell'account"
+            )
 
     def reset_password(self, payload: dict):
         email = payload.get("email")
@@ -194,7 +265,24 @@ class UserController:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email richiesta per il reset della password"
             )
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email richiesta per il reset della password"
+            )
 
+        try:
+            return self.user_dao.send_password_reset(email)
+        except AuthApiError as e:
+            if "User not found" in str(e):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Utente non trovato"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Errore durante l'invio dell'email di reset"
+            )
         try:
             return self.user_dao.send_password_reset(email)
         except AuthApiError as e:
@@ -215,7 +303,29 @@ class UserController:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="La password deve essere di almeno 6 caratteri"
             )
+        if not new_password or len(new_password) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La password deve essere di almeno 6 caratteri"
+            )
 
+        try:
+            return self.user_dao.update_password(new_password)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        except AuthApiError as e:
+            if "Auth session missing" in str(e):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Sessione di autenticazione mancante"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Errore durante l'aggiornamento della password"
+            )
         try:
             return self.user_dao.update_password(new_password)
         except ValueError as e:
