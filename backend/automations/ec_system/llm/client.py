@@ -2142,6 +2142,7 @@ class LLMClient:
         # Request appointment change specific params
         change_event_code: str = None,
         status: str = None,
+        event_code_status: str = None,
         # Cancel appointment specific params
         cancellation_event_code: str = None
     ) -> WriteResponse:
@@ -2162,6 +2163,7 @@ class LLMClient:
             favorite_day_unavailable: True if the requested favorite day had no slots available
             change_event_code: Event code from change request
             status: Status of the operation
+            event_code_status: One of ["provided", "not_valid", "not_provided"] describing the event code handling
             cancellation_event_code: Event code from cancellation request
             
         Returns:
@@ -2220,6 +2222,7 @@ class LLMClient:
                     attachment_summary=attachment_text,
                     change_event_code=change_event_code or "N/A",
                     status=status or "UNKNOWN",
+                    event_code_status=event_code_status or "not_provided",
                     scheduled=scheduled,
                     event_code=event_code or "N/A",
                     proposed_slots=proposed_slots or [],
@@ -2240,6 +2243,7 @@ class LLMClient:
                     attachment_summary=attachment_text,
                     cancellation_event_code=cancellation_event_code or "N/A",
                     status=status or "UNKNOWN",
+                    event_code_status=event_code_status or "not_provided",
                     guidelines_section=guidelines_section
                 )
             
@@ -2261,6 +2265,7 @@ class LLMClient:
                         event_code=event_code or "N/A",
                         proposed_slots=proposed_slots or [],
                         favorite_day_unavailable=favorite_day_unavailable,
+                        event_code_status=event_code_status or "not_provided",
                         guidelines_section=guidelines_section
                     )
                 else:

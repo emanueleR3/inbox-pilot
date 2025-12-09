@@ -1245,9 +1245,9 @@ ESTRAI LE SEGUENTI INFORMAZIONI:
    - "documents": Documenti menzionati
    - "other_info": Altre informazioni rilevanti
 
-2. **event_code**: Codice alfanumerico a 6 cifre dell'evento da modificare
+2. **event_code**: Codice numerico a 6 cifre dell'evento da modificare
    - Cerca nel riassunto conversazione o nella mail corrente
-   - Formato: 6 caratteri alfanumerici (es. "A1B2C3", "123456")
+   - Formato: 6 caratteri numerici (es. "123456")
    - Se NON trovato, imposta a None
 
 3. **new_title_of_event**: Nuovo titolo appuntamento in formato "[AI] APPUNTAMENTO {sender_email}"
@@ -1313,9 +1313,9 @@ EXTRACT THE FOLLOWING INFORMATION:
    - "documents": Documents mentioned
    - "other_info": Other relevant information
 
-2. **event_code**: 6-character alphanumeric code of the event to modify
+2. **event_code**: 6-character numeric code of the event to modify
    - Search in conversation summary or current mail
-   - Format: 6 alphanumeric characters (e.g., "A1B2C3", "123456")
+   - Format: 6 numeric characters (e.g., "123456")
    - If NOT found, set to None
 
 3. **new_title_of_event**: New appointment title in format "[AI] APPOINTMENT {sender_email}"
@@ -1462,9 +1462,9 @@ ESTRAI LE SEGUENTI INFORMAZIONI:
    - "documents": Documenti menzionati
    - "other_info": Altre informazioni rilevanti
 
-2. **event_code**: Codice alfanumerico a 6 cifre dell'evento da cancellare
+2. **event_code**: Codice numerico a 6 cifre dell'evento da cancellare
    - Cerca nel riassunto conversazione o nella mail corrente
-   - Formato: 6 caratteri alfanumerici (es. "A1B2C3", "123456")
+   - Formato: 6 caratteri numerici (es. "123456")
    - Se NON trovato, imposta a None
 
 EMAIL MITTENTE: {sender_email}
@@ -1499,9 +1499,9 @@ EXTRACT THE FOLLOWING INFORMATION:
    - "documents": Documents mentioned
    - "other_info": Other relevant information
 
-2. **event_code**: 6-character alphanumeric code of the event to cancel
+2. **event_code**: 6-character numeric code of the event to cancel
    - Search in conversation summary or current mail
-   - Format: 6 alphanumeric characters (e.g., "A1B2C3", "123456")
+   - Format: 6 numeric characters (e.g., "123456")
    - If NOT found, set to None
 
 EMAIL SENDER: {sender_email}
@@ -1674,6 +1674,7 @@ CONTESTO EMAIL:
 STATO MODIFICA APPUNTAMENTO:
 - CODICE EVENTO RICHIESTA: {change_event_code}
 - STATO OPERAZIONE: {status}
+- STATO CODICE EVENTO: {event_code_status}
 - APPUNTAMENTO RISCHEDULATO: {scheduled}
 - NUOVO CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
@@ -1682,22 +1683,25 @@ STATO MODIFICA APPUNTAMENTO:
 {guidelines_section}
 
 ISTRUZIONI CRITICHE:
-1. SE lo stato è "EVENT_CODE_INVALID":
+1. SE STATO CODICE EVENTO = "not_valid":
    - Spiega cortesemente che il codice evento fornito non è valido
    - Fornisci un esempio di codice evento valido (6 cifre numeriche, es. "123456")
    - Chiedi di verificare e reinviare il codice corretto
-2. SE lo stato è "EVENT_RESCHEDULED" (scheduled=True):
+2. SE STATO CODICE EVENTO = "not_provided":
+   - Spiega che per modificare l'appuntamento serve il codice evento fornito in fase di prenotazione
+   - Chiedi di inviare il codice evento (6 cifre numeriche, es. "123456") per procedere
+3. SE lo stato è "EVENT_RESCHEDULED" (scheduled=True):
    - Conferma che l'appuntamento è stato riprogrammato con successo
    - Includi il nuovo codice evento se diverso
    - Fornisci i dettagli del nuovo appuntamento
-3. SE l'appuntamento NON è stato rischedulato ma ci sono slot proposti:
+4. SE l'appuntamento NON è stato rischedulato ma ci sono slot proposti:
    - Proponi cortesemente le nuove date disponibili
    - Chiedi al cliente di indicare la preferenza
-4. SE il giorno preferito non era disponibile (favorite_day_unavailable=True):
+5. SE il giorno preferito non era disponibile (favorite_day_unavailable=True):
    - Menziona che il giorno richiesto non aveva disponibilità
    - Proponi le alternative disponibili nei prossimi 7 giorni
-5. SE ci sono altre richieste nell'email, rispondi anche a quelle
-6. Basa la risposta sulle informazioni aziendali fornite
+6. SE ci sono altre richieste nell'email, rispondi anche a quelle
+7. Basa la risposta sulle informazioni aziendali fornite
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
 - Tono professionale ma cordiale e accessibile, non troppo formale o pesante
@@ -1722,6 +1726,7 @@ EMAIL CONTEXT:
 APPOINTMENT CHANGE STATUS:
 - REQUESTED EVENT CODE: {change_event_code}
 - OPERATION STATUS: {status}
+- EVENT CODE STATUS: {event_code_status}
 - APPOINTMENT RESCHEDULED: {scheduled}
 - NEW EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
@@ -1730,22 +1735,25 @@ APPOINTMENT CHANGE STATUS:
 {guidelines_section}
 
 CRITICAL INSTRUCTIONS:
-1. IF status is "EVENT_CODE_INVALID":
+1. IF EVENT CODE STATUS = "not_valid":
    - Politely explain that the provided event code is not valid
    - Provide an example of a valid event code (6 numeric digits, e.g., "123456")
    - Ask to verify and resend the correct code
-2. IF status is "EVENT_RESCHEDULED" (scheduled=True):
+2. IF EVENT CODE STATUS = "not_provided":
+   - Explain that to modify the appointment the event code used at booking is required
+   - Ask to send the 6-digit event code (e.g., "123456") to proceed
+3. IF status is "EVENT_RESCHEDULED" (scheduled=True):
    - Confirm that the appointment has been successfully rescheduled
    - Include the new event code if different
    - Provide the details of the new appointment
-3. IF the appointment was NOT rescheduled but there are proposed slots:
+4. IF the appointment was NOT rescheduled but there are proposed slots:
    - Kindly propose the new available dates
    - Ask the client to indicate their preference
-4. IF the favorite day was unavailable (favorite_day_unavailable=True):
+5. IF the favorite day was unavailable (favorite_day_unavailable=True):
    - Mention that the requested day had no availability
    - Propose the available alternatives in the next 7 days
-5. IF there are other requests in the email, respond to those as well
-6. Base the response on the provided company information
+6. IF there are other requests in the email, respond to those as well
+7. Base the response on the provided company information
 
 FORMATTING RULES (MANDATORY):
 - Professional but friendly and accessible tone, not too formal or heavy
@@ -1771,19 +1779,23 @@ CONTESTO EMAIL:
 STATO CANCELLAZIONE APPUNTAMENTO:
 - CODICE EVENTO RICHIESTA: {cancellation_event_code}
 - STATO OPERAZIONE: {status}
+- STATO CODICE EVENTO: {event_code_status}
 
 {guidelines_section}
 
 ISTRUZIONI CRITICHE:
-1. SE lo stato è "EVENT_CODE_INVALID":
+1. SE STATO CODICE EVENTO = "not_valid":
    - Spiega cortesemente che il codice evento fornito non è valido
    - Fornisci un esempio di codice evento valido (6 cifre numeriche, es. "123456")
    - Chiedi di verificare e reinviare il codice corretto
-2. SE lo stato è "EVENT_DELETED":
+2. SE STATO CODICE EVENTO = "not_provided":
+   - Spiega che per cancellare l'appuntamento serve il codice evento ricevuto alla prenotazione
+   - Chiedi di inviare il codice evento (6 cifre numeriche, es. "123456") per procedere con la cancellazione
+3. SE lo stato è "EVENT_DELETED":
    - Conferma che l'appuntamento è stato cancellato con successo
    - Esprimi disponibilità per future prenotazioni
-3. SE ci sono altre richieste nell'email, rispondi anche a quelle
-4. Basa la risposta sulle informazioni aziendali fornite
+4. SE ci sono altre richieste nell'email, rispondi anche a quelle
+5. Basa la risposta sulle informazioni aziendali fornite
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
 - Tono professionale ma comprensivo e accessibile, non troppo formale o pesante
@@ -1808,19 +1820,23 @@ EMAIL CONTEXT:
 APPOINTMENT CANCELLATION STATUS:
 - REQUESTED EVENT CODE: {cancellation_event_code}
 - OPERATION STATUS: {status}
+- EVENT CODE STATUS: {event_code_status}
 
 {guidelines_section}
 
 CRITICAL INSTRUCTIONS:
-1. IF status is "EVENT_CODE_INVALID":
+1. IF EVENT CODE STATUS = "not_valid":
    - Politely explain that the provided event code is not valid
    - Provide an example of a valid event code (6 numeric digits, e.g., "123456")
    - Ask to verify and resend the correct code
-2. IF status is "EVENT_DELETED":
+2. IF EVENT CODE STATUS = "not_provided":
+   - Explain that to cancel the appointment the event code received at booking is required
+   - Ask to send the 6-digit event code (e.g., "123456") to proceed with the cancellation
+3. IF status is "EVENT_DELETED":
    - Confirm that the appointment has been successfully cancelled
    - Express availability for future bookings
-3. IF there are other requests in the email, respond to those as well
-4. Base the response on the provided company information
+4. IF there are other requests in the email, respond to those as well
+5. Base the response on the provided company information
 
 FORMATTING RULES (MANDATORY):
 - Professional but understanding and accessible tone, not too formal or heavy
@@ -1848,25 +1864,33 @@ STATO CONFERMA APPUNTAMENTO:
 - CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
 - GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
+- STATO CODICE EVENTO: {event_code_status}
 
 {guidelines_section}
 
 ISTRUZIONI CRITICHE:
 1. L'utente ha confermato una data o uno slot precedentemente proposto
-2. SE l'appuntamento è stato schedulato con successo (scheduled=True):
+2. SE STATO CODICE EVENTO = "not_valid":
+   - Spiega cortesemente che il codice evento fornito non è valido
+   - Fornisci un esempio di codice evento valido (6 cifre numeriche, es. "123456")
+   - Chiedi di verificare e reinviare il codice corretto
+3. SE STATO CODICE EVENTO = "not_provided":
+   - Spiega che per confermare definitivamente serve il codice evento ricevuto alla prenotazione
+   - Chiedi di inviare il codice evento (6 cifre numeriche, es. "123456") per procedere
+4. SE l'appuntamento è stato schedulato con successo (scheduled=True):
    - Conferma l'appuntamento con entusiasmo e professionalità
    - Includi SEMPRE il codice evento per riferimento futuro
    - Specifica che per modifiche o cancellazioni è necessario fornire il codice evento
    - Se presenti nel contesto, conferma i dettagli (data, ora, luogo)
-3. SE l'appuntamento NON è stato schedulato (scheduled=False) ma ci sono slot proposti:
+5. SE l'appuntamento NON è stato schedulato (scheduled=False) ma ci sono slot proposti:
    - Spiega cortesemente che gli slot inizialmente proposti non sono più disponibili
    - Proponi le nuove date disponibili
    - Chiedi al cliente di indicare la preferenza
-4. SE il giorno preferito non era disponibile (favorite_day_unavailable=True):
+6. SE il giorno preferito non era disponibile (favorite_day_unavailable=True):
    - Menziona che il giorno richiesto non aveva disponibilità
    - Proponi le alternative disponibili nei prossimi 7 giorni
-5. SE ci sono altre richieste o domande nell'email oltre alla conferma, rispondi anche a quelle
-6. Non inventare informazioni non presenti nel contesto
+7. SE ci sono altre richieste o domande nell'email oltre alla conferma, rispondi anche a quelle
+8. Non inventare informazioni non presenti nel contesto
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
 - Tono professionale ma cordiale e accessibile, non troppo formale o pesante
@@ -1893,25 +1917,33 @@ APPOINTMENT CONFIRMATION STATUS:
 - EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
 - FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
+- EVENT CODE STATUS: {event_code_status}
 
 {guidelines_section}
 
 CRITICAL INSTRUCTIONS:
 1. The user has confirmed a previously proposed date or slot
-2. IF the appointment was successfully scheduled (scheduled=True):
+2. IF EVENT CODE STATUS = "not_valid":
+   - Politely explain that the provided event code is not valid
+   - Provide an example of a valid event code (6 numeric digits, e.g., "123456")
+   - Ask to verify and resend the correct code
+3. IF EVENT CODE STATUS = "not_provided":
+   - Explain that to finalize the confirmation the event code received at booking is required
+   - Ask to send the 6-digit event code (e.g., "123456") to proceed
+4. IF the appointment was successfully scheduled (scheduled=True):
    - Confirm the appointment with enthusiasm and professionalism
    - ALWAYS include the event code for future reference
    - Specify that for changes or cancellations the event code is required
    - If present in context, confirm the details (date, time, location)
-3. IF the appointment was NOT scheduled (scheduled=False) but there are proposed slots:
+5. IF the appointment was NOT scheduled (scheduled=False) but there are proposed slots:
    - Politely explain that the initially proposed slots are no longer available
    - Propose the new available dates
    - Ask the client to indicate their preference
-4. IF the favorite day was unavailable (favorite_day_unavailable=True):
+6. IF the favorite day was unavailable (favorite_day_unavailable=True):
    - Mention that the requested day had no availability
    - Propose the available alternatives in the next 7 days
-5. IF there are other requests or questions in the email besides the confirmation, respond to those as well
-6. Do not invent information not present in the context
+7. IF there are other requests or questions in the email besides the confirmation, respond to those as well
+8. Do not invent information not present in the context
 
 FORMATTING RULES (MANDATORY):
 - Professional but friendly and accessible tone, not too formal or heavy
