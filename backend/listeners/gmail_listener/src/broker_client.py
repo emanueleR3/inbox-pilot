@@ -2,6 +2,9 @@ import json
 import aio_pika
 import os
 from src.utils.logger import log_info, log_error
+from dotenv import load_dotenv
+
+load_dotenv()
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 QUEUE_NAME = os.getenv("QUEUE_NAME", "emails_queue")
