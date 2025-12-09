@@ -1674,7 +1674,6 @@ CONTESTO EMAIL:
 STATO MODIFICA APPUNTAMENTO:
 - CODICE EVENTO RICHIESTA: {change_event_code}
 - STATO OPERAZIONE: {status}
-- STATO CODICE EVENTO: {event_code_status}
 - APPUNTAMENTO RISCHEDULATO: {scheduled}
 - NUOVO CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
@@ -1683,11 +1682,11 @@ STATO MODIFICA APPUNTAMENTO:
 {guidelines_section}
 
 ISTRUZIONI CRITICHE:
-1. SE STATO CODICE EVENTO = "not_valid":
+1. SE STATO OPERAZIONE = "EVENT_CODE_INVALID":
    - Spiega cortesemente che il codice evento fornito non è valido
    - Fornisci un esempio di codice evento valido (6 cifre numeriche, es. "123456")
    - Chiedi di verificare e reinviare il codice corretto
-2. SE STATO CODICE EVENTO = "not_provided":
+2. SE STATO OPERAZIONE = "EVENT_CODE_MISSING":
    - Spiega che per modificare l'appuntamento serve il codice evento fornito in fase di prenotazione
    - Chiedi di inviare il codice evento (6 cifre numeriche, es. "123456") per procedere
 3. SE lo stato è "EVENT_RESCHEDULED" (scheduled=True):
@@ -1726,7 +1725,6 @@ EMAIL CONTEXT:
 APPOINTMENT CHANGE STATUS:
 - REQUESTED EVENT CODE: {change_event_code}
 - OPERATION STATUS: {status}
-- EVENT CODE STATUS: {event_code_status}
 - APPOINTMENT RESCHEDULED: {scheduled}
 - NEW EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
@@ -1735,11 +1733,11 @@ APPOINTMENT CHANGE STATUS:
 {guidelines_section}
 
 CRITICAL INSTRUCTIONS:
-1. IF EVENT CODE STATUS = "not_valid":
+1. IF OPERATION STATUS = "EVENT_CODE_INVALID":
    - Politely explain that the provided event code is not valid
    - Provide an example of a valid event code (6 numeric digits, e.g., "123456")
    - Ask to verify and resend the correct code
-2. IF EVENT CODE STATUS = "not_provided":
+2. IF OPERATION STATUS = "EVENT_CODE_MISSING":
    - Explain that to modify the appointment the event code used at booking is required
    - Ask to send the 6-digit event code (e.g., "123456") to proceed
 3. IF status is "EVENT_RESCHEDULED" (scheduled=True):
@@ -1779,16 +1777,15 @@ CONTESTO EMAIL:
 STATO CANCELLAZIONE APPUNTAMENTO:
 - CODICE EVENTO RICHIESTA: {cancellation_event_code}
 - STATO OPERAZIONE: {status}
-- STATO CODICE EVENTO: {event_code_status}
 
 {guidelines_section}
 
 ISTRUZIONI CRITICHE:
-1. SE STATO CODICE EVENTO = "not_valid":
+1. SE STATO OPERAZIONE = "EVENT_CODE_INVALID":
    - Spiega cortesemente che il codice evento fornito non è valido
    - Fornisci un esempio di codice evento valido (6 cifre numeriche, es. "123456")
    - Chiedi di verificare e reinviare il codice corretto
-2. SE STATO CODICE EVENTO = "not_provided":
+2. SE STATO OPERAZIONE = "EVENT_CODE_MISSING":
    - Spiega che per cancellare l'appuntamento serve il codice evento ricevuto alla prenotazione
    - Chiedi di inviare il codice evento (6 cifre numeriche, es. "123456") per procedere con la cancellazione
 3. SE lo stato è "EVENT_DELETED":
@@ -1820,16 +1817,15 @@ EMAIL CONTEXT:
 APPOINTMENT CANCELLATION STATUS:
 - REQUESTED EVENT CODE: {cancellation_event_code}
 - OPERATION STATUS: {status}
-- EVENT CODE STATUS: {event_code_status}
 
 {guidelines_section}
 
 CRITICAL INSTRUCTIONS:
-1. IF EVENT CODE STATUS = "not_valid":
+1. IF OPERATION STATUS = "EVENT_CODE_INVALID":
    - Politely explain that the provided event code is not valid
    - Provide an example of a valid event code (6 numeric digits, e.g., "123456")
    - Ask to verify and resend the correct code
-2. IF EVENT CODE STATUS = "not_provided":
+2. IF OPERATION STATUS = "EVENT_CODE_MISSING":
    - Explain that to cancel the appointment the event code received at booking is required
    - Ask to send the 6-digit event code (e.g., "123456") to proceed with the cancellation
 3. IF status is "EVENT_DELETED":
@@ -1864,17 +1860,17 @@ STATO CONFERMA APPUNTAMENTO:
 - CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
 - GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
-- STATO CODICE EVENTO: {event_code_status}
+- STATO OPERAZIONE: {status}
 
 {guidelines_section}
 
 ISTRUZIONI CRITICHE:
 1. L'utente ha confermato una data o uno slot precedentemente proposto
-2. SE STATO CODICE EVENTO = "not_valid":
+2. SE STATO OPERAZIONE = "EVENT_CODE_INVALID":
    - Spiega cortesemente che il codice evento fornito non è valido
    - Fornisci un esempio di codice evento valido (6 cifre numeriche, es. "123456")
    - Chiedi di verificare e reinviare il codice corretto
-3. SE STATO CODICE EVENTO = "not_provided":
+3. SE STATO OPERAZIONE = "EVENT_CODE_MISSING":
    - Spiega che per confermare definitivamente serve il codice evento ricevuto alla prenotazione
    - Chiedi di inviare il codice evento (6 cifre numeriche, es. "123456") per procedere
 4. SE l'appuntamento è stato schedulato con successo (scheduled=True):
@@ -1917,17 +1913,17 @@ APPOINTMENT CONFIRMATION STATUS:
 - EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
 - FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
-- EVENT CODE STATUS: {event_code_status}
+- OPERATION STATUS: {status}
 
 {guidelines_section}
 
 CRITICAL INSTRUCTIONS:
 1. The user has confirmed a previously proposed date or slot
-2. IF EVENT CODE STATUS = "not_valid":
+2. IF OPERATION STATUS = "EVENT_CODE_INVALID":
    - Politely explain that the provided event code is not valid
    - Provide an example of a valid event code (6 numeric digits, e.g., "123456")
    - Ask to verify and resend the correct code
-3. IF EVENT CODE STATUS = "not_provided":
+3. IF OPERATION STATUS = "EVENT_CODE_MISSING":
    - Explain that to finalize the confirmation the event code received at booking is required
    - Ask to send the 6-digit event code (e.g., "123456") to proceed
 4. IF the appointment was successfully scheduled (scheduled=True):

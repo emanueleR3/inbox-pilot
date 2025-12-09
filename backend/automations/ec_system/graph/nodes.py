@@ -1750,7 +1750,8 @@ def writer_node(state):
                 scheduled=scheduled,
                 event_code=event_code,
                 proposed_slots=proposed_slots,
-                favorite_day_unavailable=favorite_day_unavailable
+                favorite_day_unavailable=favorite_day_unavailable,
+                status=status
             )
             
         elif subcategory == "REQUEST_APPOINTMENT_CHANGE":
@@ -1761,14 +1762,6 @@ def writer_node(state):
             event_code = state.get("appointment_event_code")
             proposed_slots = state.get("appointment_proposed_slots")
             favorite_day_unavailable = state.get("appointment_favorite_day_unavailable", False)
-
-            # Derive event_code_status for writer (provided | not_valid | not_provided)
-            if change_event_code and len(str(change_event_code)) == 6:
-                event_code_status = "provided"
-            elif status == "EVENT_CODE_INVALID":
-                event_code_status = "not_valid"
-            else:
-                event_code_status = "not_provided"
             
             print(f"   🔑 Change event code: {change_event_code}")
             print(f"   📊 Status: {status}")
@@ -1788,7 +1781,6 @@ def writer_node(state):
                 language=language,
                 change_event_code=change_event_code,
                 status=status,
-                event_code_status=event_code_status,
                 scheduled=scheduled,
                 event_code=event_code,
                 proposed_slots=proposed_slots,
@@ -1799,14 +1791,6 @@ def writer_node(state):
             # Get cancellation-specific parameters
             cancellation_event_code = state.get("cancellation_event_code")
             status = state.get("status", "")
-
-            # Derive event_code_status for writer (provided | not_valid | not_provided)
-            if cancellation_event_code and len(str(cancellation_event_code)) == 6:
-                event_code_status = "provided"
-            elif status == "EVENT_CODE_INVALID":
-                event_code_status = "not_valid"
-            else:
-                event_code_status = "not_provided"
             
             print(f"   🔑 Cancellation event code: {cancellation_event_code}")
             print(f"   📊 Status: {status}")
@@ -1821,8 +1805,7 @@ def writer_node(state):
                 guidelines=guidelines,
                 language=language,
                 cancellation_event_code=cancellation_event_code,
-                status=status,
-                event_code_status=event_code_status
+                status=status
             )
         
         elif subcategory == "CONFIRM_APPOINTMENT":
@@ -1832,14 +1815,6 @@ def writer_node(state):
             event_code = state.get("appointment_event_code")
             proposed_slots = state.get("appointment_proposed_slots")
             favorite_day_unavailable = state.get("appointment_favorite_day_unavailable", False)
-
-            # Derive event_code_status for writer (provided | not_valid | not_provided)
-            if event_code and len(str(event_code)) == 6:
-                event_code_status = "provided"
-            elif status == "EVENT_CODE_INVALID":
-                event_code_status = "not_valid"
-            else:
-                event_code_status = "not_provided"
             
             print(f"   📅 Scheduled: {scheduled}")
             print(f"   🔢 Event code: {event_code}")
@@ -1859,8 +1834,7 @@ def writer_node(state):
                 scheduled=scheduled,
                 event_code=event_code,
                 proposed_slots=proposed_slots,
-                favorite_day_unavailable=favorite_day_unavailable,
-                event_code_status=event_code_status
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         else:
