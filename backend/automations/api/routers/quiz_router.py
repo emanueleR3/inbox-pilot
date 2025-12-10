@@ -30,9 +30,10 @@ async def start_quiz(req: dict):
 @router.post("/answer")
 async def submit_answer(req: dict):
     session_id = req.get("session_id")
+    email = req.get("email")
     value = req.get("value")
 
-    return controller.submit_answer(session_id, value)
+    return controller.submit_answer(session_id, email, value)
 
 
 @router.get("/{session_id}/state")
@@ -42,9 +43,10 @@ async def get_state(session_id: str):
 
 @router.post("/finish")
 async def finish_quiz(req: dict):
+    email = req.get("email")
     session_id = req.get("session_id")
 
-    return controller.finish_quiz(session_id)
+    return controller.finish_quiz(session_id, email)
 
 
 @router.get("/sessions")

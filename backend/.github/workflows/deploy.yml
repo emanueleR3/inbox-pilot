@@ -1,8 +1,8 @@
-name: CI/CD Deploy to VPS
+name: CI/CD Deploy to k3s
 
 on:
   push:
-    branches: [ main, test-workflow ]
+    branches: [ main, test-workflow, k8s ]
 
 permissions:
   contents: read
@@ -30,44 +30,18 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED_FILES"
           
-          if echo "$CHANGED_FILES" | grep -q "^api/"; then
-            echo "api_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "api_changed=false" >> $GITHUB_OUTPUT
-          fi
-          
-          if echo "$CHANGED_FILES" | grep -q "^broker/"; then
-            echo "broker_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "broker_changed=false" >> $GITHUB_OUTPUT
-          fi
-          
-          if echo "$CHANGED_FILES" | grep -q "^listeners/"; then
-            echo "listeners_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "listeners_changed=false" >> $GITHUB_OUTPUT
-          fi
-          
-          if echo "$CHANGED_FILES" | grep -q "^refreshers/"; then
-            echo "refreshers_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "refreshers_changed=false" >> $GITHUB_OUTPUT
-          fi
-          
-          if echo "$CHANGED_FILES" | grep -q "^automations/"; then
-            echo "automations_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "automations_changed=false" >> $GITHUB_OUTPUT
-          fi
-          
-          if echo "$CHANGED_FILES" | grep -q "^senders/"; then
-            echo "senders_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "senders_changed=false" >> $GITHUB_OUTPUT
-          fi
+          for module in api broker listeners refreshers automations senders; do
+            if echo "$CHANGED_FILES" | grep -q "^${module}/"; then
+              echo "${module}_changed=true" >> $GITHUB_OUTPUT
+            else
+              echo "${module}_changed=false" >> $GITHUB_OUTPUT
+            fi
+          done
 
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      # --- BUILD & PUSH IMMAGINI ---
 
       - name: Build and push Docker image (API)
         if: steps.changes.outputs.api_changed == 'true'
@@ -135,45 +109,73 @@ jobs:
           docker push ${SENDERS_IMAGE}:latest
           docker push ${SENDERS_IMAGE}:${SHA_TAG}
 
-      - name: Ensure remote directory exists
-        uses: appleboy/ssh-action@v1.1.0
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          port: ${{ secrets.SERVER_SSH_PORT }}
-          username: deploy
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            mkdir -p /home/deploy/corretto
+      # --- NIENTE PIÙ SSH + DOCKER COMPOSE ---
 
-      - name: Upload docker-compose file to VPS
-        uses: appleboy/scp-action@v1
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
         with:
-          host: ${{ secrets.SERVER_IP }}
-          port: ${{ secrets.SERVER_SSH_PORT }}
-          username: deploy
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.yml"
-          target: "/home/deploy/corretto/"
+          version: 'v1.30.0'
 
-      - name: Deploy on VPS via SSH
-        uses: appleboy/ssh-action@v1.1.0
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          port: ${{ secrets.SERVER_SSH_PORT }}
-          username: deploy
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
-            REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-            
-            # Only pull images that were built in this workflow run
-            ${{ steps.changes.outputs.api_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/api:latest' || 'echo "Skipping API pull - no changes"' }}
-            ${{ steps.changes.outputs.broker_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/broker:latest' || 'echo "Skipping broker pull - no changes"' }}
-            ${{ steps.changes.outputs.listeners_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/listeners:latest' || 'echo "Skipping listeners pull - no changes"' }}
-            ${{ steps.changes.outputs.refreshers_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/refreshers:latest' || 'echo "Skipping refreshers pull - no changes"' }}
-            ${{ steps.changes.outputs.automations_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/automations:latest' || 'echo "Skipping automations pull - no changes"' }}
-            ${{ steps.changes.outputs.senders_changed == 'true' && 'docker pull ghcr.io/${REPO_LOWER}/senders:latest' || 'echo "Skipping senders pull - no changes"' }}
-            
-            docker image prune -a -f --filter "until=24h" || true
-            docker compose -f /home/deploy/corretto/docker-compose.yml down || true
-            docker compose -f /home/deploy/corretto/docker-compose.yml up -d
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+
+      - name: Deploy to Kubernetes
+        run: |
+          set -e
+
+          NAMESPACE=corretto
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          SHA_TAG=${{ github.sha }}
+
+          # API
+          if [ "${{ steps.changes.outputs.api_changed }}" = "true" ]; then
+            echo "Updating API..."
+            kubectl -n $NAMESPACE set image deployment/api api=ghcr.io/${REPO_LOWER}/api:${SHA_TAG}
+          else
+            echo "API unchanged, skipping"
+          fi
+
+          # broker worker
+          if [ "${{ steps.changes.outputs.broker_changed }}" = "true" ]; then
+            echo "Updating broker-worker..."
+            kubectl -n $NAMESPACE set image deployment/broker-worker broker-worker=ghcr.io/${REPO_LOWER}/broker:${SHA_TAG}
+          else
+            echo "Broker unchanged, skipping"
+          fi
+
+          # listeners
+          if [ "${{ steps.changes.outputs.listeners_changed }}" = "true" ]; then
+            echo "Updating listeners..."
+            kubectl -n $NAMESPACE set image deployment/listeners listeners=ghcr.io/${REPO_LOWER}/listeners:${SHA_TAG}
+          else
+            echo "Listeners unchanged, skipping"
+          fi
+
+          # refreshers
+          if [ "${{ steps.changes.outputs.refreshers_changed }}" = "true" ]; then
+            echo "Updating refreshers..."
+            kubectl -n $NAMESPACE set image deployment/refreshers refreshers=ghcr.io/${REPO_LOWER}/refreshers:${SHA_TAG}
+          else
+            echo "Refreshers unchanged, skipping"
+          fi
+
+          # automations
+          if [ "${{ steps.changes.outputs.automations_changed }}" = "true" ]; then
+            echo "Updating automations..."
+            kubectl -n $NAMESPACE set image deployment/automations automations=ghcr.io/${REPO_LOWER}/automations:${SHA_TAG}
+          else
+            echo "Automations unchanged, skipping"
+          fi
+
+          # senders
+          if [ "${{ steps.changes.outputs.senders_changed }}" = "true" ]; then
+            echo "Updating senders..."
+            kubectl -n $NAMESPACE set image deployment/senders senders=ghcr.io/${REPO_LOWER}/senders:${SHA_TAG}
+          else
+            echo "Senders unchanged, skipping"
+          fi
+
+          echo "Current rollouts:"
+          kubectl -n $NAMESPACE get deploy

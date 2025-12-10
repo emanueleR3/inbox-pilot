@@ -1395,7 +1395,11 @@ def rescheduler_node(state):
         event_code = state.get("change_event_code")
         
         # Validate event_code
-        if event_code is None or (isinstance(event_code, str) and len(event_code) != 6):
+        if event_code is None:
+            print(f"⚠️ [RESCHEDULER] Missing event_code")
+            state["status"] = "EVENT_CODE_MISSING"
+            return state
+        elif isinstance(event_code, str) and len(event_code) != 6:
             print(f"⚠️ [RESCHEDULER] Invalid event_code: {event_code}")
             state["status"] = "EVENT_CODE_INVALID"
             return state
@@ -1536,7 +1540,12 @@ def cancellation_node(state):
     # Extract event_code from response
     event_code = state.get("cancellation_event_code")
 
-    if event_code is None or (isinstance(event_code, str) and len(event_code) != 6):
+    # Validate event_code
+    if event_code is None:
+        print(f"⚠️ [CANCELLATION] Missing event_code")
+        state["status"] = "EVENT_CODE_MISSING"
+        return state
+    elif isinstance(event_code, str) and len(event_code) != 6:
         print(f"⚠️ [CANCELLATION] Invalid event_code: {event_code}")
         state["status"] = "EVENT_CODE_INVALID"
         return state
@@ -1741,7 +1750,8 @@ def writer_node(state):
                 scheduled=scheduled,
                 event_code=event_code,
                 proposed_slots=proposed_slots,
-                favorite_day_unavailable=favorite_day_unavailable
+                favorite_day_unavailable=favorite_day_unavailable,
+                status=status
             )
             
         elif subcategory == "REQUEST_APPOINTMENT_CHANGE":
@@ -1800,6 +1810,7 @@ def writer_node(state):
         
         elif subcategory == "CONFIRM_APPOINTMENT":
             # Get confirm appointment-specific parameters
+            status = state.get("status", "")
             scheduled = state.get("appointment_scheduled")
             event_code = state.get("appointment_event_code")
             proposed_slots = state.get("appointment_proposed_slots")
@@ -1916,6 +1927,7 @@ def reviewer_node(state):
                 "change_event_code": state.get("change_event_code"),
                 "cancellation_event_code": state.get("cancellation_event_code"),
                 "cancelled": state.get("cancellation_event_code") and subcategory_value == "CANCEL_APPOINTMENT" and state.get("automation_executed"),
+                "operation_status": state.get("status"),  # Include operation status (EVENT_CODE_INVALID, EVENT_CODE_MISSING, EVENT_DELETED, EVENT_RESCHEDULED, etc.)
             }
             print(f"   📅 Appointment context built for subcategory: {subcategory_value}")
         
