@@ -180,7 +180,8 @@ class AdvancedEmailFilter:
                     message_timestamp=message_datetime,
                     subject=subject,
                     sender_email=sender_email,
-                    cc_emails=cc_emails
+                    cc_emails=cc_emails,
+                    status="TO_PROCESS" # TODO gestire i vari casi
                 )
                 
                 if not thread_result:
@@ -337,7 +338,7 @@ class AdvancedEmailFilter:
                 human_response=False,  # External user initiated, no human response yet
                 last_sender_email=sender_email,
                 box_email=email_data.get("user_email"),  # Email of the monitored mailbox
-                status="TO_PROCESS"  # TODO gestire i vari casi
+                status="TO_PROCESS"
             )
             
             return thread_data
@@ -380,10 +381,10 @@ class AdvancedEmailFilter:
                 has_attachments=has_attachments,  # Boolean flag for attachments
                 category="STARTED_BY_HUMAN",  # Category for user-initiated conversations
                 subcategory=None,  # Default null for human-initiated threads
-                human_response=True,  # User initiated, so it's a human response
+                human_response=True,  # User initiated, so it's a human response TODO agganciare un sistema di configurazione per cui è l'utente che decide se l'ai può rispondere o meno
                 last_sender_email=self._extract_email_address(email_data.get("user_email")),
                 box_email=email_data.get("user_email"),  # Email of the monitored mailbox
-                status="TO_PROCESS"  # TODO gestire i vari casi
+                status="HUMAN_TO_PROCESS"  # TODO agganciare un sistema di configurazione per cui è l'utente che decide se l'ai può rispondere o meno
             )
             
             return thread_data

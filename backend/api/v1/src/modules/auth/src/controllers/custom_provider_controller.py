@@ -2,6 +2,7 @@ from fastapi import Request, HTTPException, status
 from fastapi.responses import RedirectResponse, JSONResponse
 from src.core.logger import setup_logger
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
+from src.modules.auth.src.utils.custom_provider import test_imap_connection, test_imap_login, test_smtp_connection, test_smtp_login
 
 class CustomProviderController:
 
@@ -13,6 +14,7 @@ class CustomProviderController:
         email = payload.get("email")
         password = payload.get("password")
         subscription_id = payload.get("subscription_id")
+        calendar_provider = payload.get("calendar_provider")
 
         missing_fields = []
         if not server_imap:
@@ -23,7 +25,7 @@ class CustomProviderController:
             missing_fields.append("email")
         if not password:
             missing_fields.append("password")
-            
+
         if missing_fields:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -41,24 +43,33 @@ class CustomProviderController:
                 detail="La porta SMTP deve essere un numero intero"
             )
 
-        if not "@" in email:
+        if "@" not in email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Formato email non valido"
             )
 
+        test_imap_connection(server_imap, imap_port)
+
+        test_imap_login(server_imap, imap_port, email, password)
+
+        test_smtp_connection(server_smtp, smtp_port)
+
+        test_smtp_login(server_smtp, smtp_port, email, password)
+
         try:
             res = SubscriptionServiceDAO().save_custom_provider_credentials(
-                server_imap, server_smtp, imap_port, smtp_port, email, password, subscription_id
+                server_imap, server_smtp, imap_port, smtp_port, email, password,
+                subscription_id, calendar_provider
             )
-
             return res
-            
+
         except HTTPException:
             raise
-        except Exception as e:
+        except Exception:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Errore interno durante il salvataggio delle credenziali"
             )
+
 
