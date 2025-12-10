@@ -25,7 +25,7 @@ langgraph-sdk==0.2.9
 langsmith==0.4.38
 openai==1.109.1
 orjson==3.11.2
-ormsgpack==1.10.0
+ormsgpack==1.12.0
 packaging==25.0
 pydantic==2.11.7
 pydantic_core==2.33.2
