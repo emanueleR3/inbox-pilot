@@ -126,12 +126,22 @@ kubectl wait --for=condition=ready pod -l app=rabbitmq -n $NAMESPACE --timeout=1
     log_warning "RabbitMQ non pronto entro il timeout, continuo comunque..."
 }
 
-# 7. Deploy servizi base
+# 7. Deploy Qdrant
+log_info "Deploy Qdrant..."
+kubectl apply -f "$SCRIPT_DIR/qdrant/"
+log_success "Qdrant deployato"
+
+log_info "Attesa avvio Qdrant..."
+kubectl wait --for=condition=ready pod -l app=qdrant -n $NAMESPACE --timeout=180s || {
+    log_warning "Qdrant non pronto entro il timeout, continuo comunque..."
+}
+
+# 8. Deploy servizi base
 log_info "Deploy Senders..."
 kubectl apply -f "$SCRIPT_DIR/senders/"
 log_success "Senders deployato"
 
-# 8. Deploy altri servizi
+# 9. Deploy altri servizi
 log_info "Deploy API..."
 kubectl apply -f "$SCRIPT_DIR/api/"
 log_success "API deployato"
