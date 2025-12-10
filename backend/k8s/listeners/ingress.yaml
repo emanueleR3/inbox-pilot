@@ -9,8 +9,7 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
-    # Per Let's Encrypt automatico (se cert-manager è installato)
-    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   rules:
     - host: listeners.corretto.pro
@@ -23,8 +22,7 @@ spec:
                 name: listeners
                 port:
                   number: 8001
-  # TLS - decommentare dopo aver configurato cert-manager
-  # tls:
-  #   - hosts:
-  #       - listeners.corretto.pro
-  #     secretName: listeners-corretto-pro-tls
+  tls:
+    - hosts:
+      - listeners.corretto.pro
+      secretName: listeners-corretto-pro-tls

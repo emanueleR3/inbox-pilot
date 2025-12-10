@@ -83,7 +83,7 @@ if [ -f "$SCRIPT_DIR/../.env" ]; then
     
     # Crea nuovo secret dal file .env
     kubectl create secret generic corretto-secrets \
-        --from-env-file="/home/deploy/corretto" \
+        --from-env-file="/home/deploy/corretto/.env" \
         -n $NAMESPACE
     
     log_success "Secrets creati dal file .env"
@@ -100,10 +100,10 @@ else
 fi
 
 # 4. Crea secret per Google Service Account (se esiste il file)
-if [ -f "$SCRIPT_DIR/../listeners/service-account-key.json" ]; then
+if [ -f "/home/deploy/corretto/listeners/service-account-key.json" ]; then
     log_info "Creazione secret Google Service Account..."
     kubectl create secret generic google-service-account \
-        --from-file=service-account-key.json="$SCRIPT_DIR/../listeners/service-account-key.json" \
+        --from-file=service-account-key.json="/home/deploy/corretto/listeners/service-account-key.json" \
         -n $NAMESPACE \
         --dry-run=client -o yaml | kubectl apply -f -
     log_success "Secret Google creato"
