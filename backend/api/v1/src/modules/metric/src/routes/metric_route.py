@@ -1,7 +1,7 @@
 # app/routes/metrics_routes.py
 from fastapi import APIRouter, Query
 from typing import Optional
-from controllers.metric_controller import MetricsController
+from src.modules.metric.src.controllers.metric_controller import MetricsController
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 controller = MetricsController()
