@@ -10,7 +10,7 @@ from src.core.logger import setup_logger
 from src.modules.auth.src.routes import router as auth_router
 from src.modules.subscription_service.src.routes import router as subscription_service_router
 from src.modules.jerry.src.routes import router as jerry_router
-from src.modules.scraper.src.routes import router as scraper_router
+from src.modules.metric.src.routes import router as metric_router
 # from src.services.mail.src.routes.gmail_routes import router as gmail_router
 
 logger = setup_logger()
@@ -28,7 +28,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/auth")
 app.include_router(subscription_service_router, prefix="/subscriptionServiceRouter")
 app.include_router(jerry_router, prefix="/jerry")
-app.include_router(scraper_router, prefix="/scraper")
+app.include_router(metric_router, prefix="/metric")
 
 @app.get("/health")
 async def health_check():
