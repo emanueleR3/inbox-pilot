@@ -1,7 +1,7 @@
 # app/controllers/metrics_controller.py
 from fastapi import HTTPException, status
 from typing import Optional
-from src.core.DAO.metric_DAO import MetricDAO
+from src.core.DAO.metric_dao import MetricDAO
 
 
 class MetricsController:
