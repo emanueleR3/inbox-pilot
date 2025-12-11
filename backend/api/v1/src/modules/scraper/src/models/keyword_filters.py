@@ -1,22 +1,25 @@
+"""Keyword filters and blocklists for web scraping."""
+
 # ------------------------------------------------------
-#  CONFIGURAZIONE FILTRI URL (BLOCKLIST)
+#  URL BLOCKLIST CONFIGURATION
 # ------------------------------------------------------
 URL_BLOCKLIST = [
-    # 1. I tuoi filtri personalizzati
+    # Custom filters
     "/tag/", "/author/", "/category/", "/terms-conditions", 
     "/privacy-policy", "/legal-notice", "/blog", "/newsletter", "/cookie-policy",
     
-    # 2. Pattern Tecnici WordPress
+    # WordPress technical patterns
     "/feed/", "/rss/", "/comments/", "#comment", 
     "wp-json", "wp-admin", "wp-login", "?share=", "?replytocom=",
     
-    # 3. Pattern E-Commerce (Shop, Prodotti, Carrello)
+    # E-Commerce patterns
     "/shop/", "/negozio/", "/store/", "/prodotto/", "/product/", "/item/",
     "/cart/", "/carrello/", "/basket/", "/checkout/", "/cassa/", "/pagamento/", "/catalogo/", "/catalog/",
     "?add-to-cart=", "?orderby=", "?price-min=", "/wishlist", "/catalogo-completo/",
 
-    # 4. Pattern Utenti (Registrazione, Login)
-    "/register", "/login", "/account", "/my-account", "/mio-account", "/user", "/users", "/profile", "/profilo", "/dashboard", "/dashboard",
+    # User patterns
+    "/register", "/login", "/account", "/my-account", "/mio-account", "/user", "/users", 
+    "/profile", "/profilo", "/dashboard",
     "/il-mio-account", "/il-mio-profilo", "/registrazione-utente", "/registrazione"
 ]
 
@@ -28,56 +31,39 @@ GENERIC_EXCLUDED_SUBSTRINGS = [
 ]
 
 # ------------------------------------------------------
-#  CONFIGURAZIONE FILTRI TESTO (KEYWORDS)
+#  NOISE KEYWORDS FOR TEXT FILTERING
 # ------------------------------------------------------
 COOKIE_KEYWORDS = [
-    "consenso cookies",
-    "gestisci preferenze",
-    "gestisci servizi",
-    "cookie per",
-    "informativa cookie",
-    "vendor_count",
-    "salva preferenze"
+    "consenso cookies", "gestisci preferenze", "gestisci servizi",
+    "cookie per", "informativa cookie", "vendor_count", "salva preferenze",
+    "cookie", "cookies", "archiviazione tecnica", "scopi di marketing simili",
+    "cookie banner", "usiamo i cookie", "questa pagina utilizza i cookie",
+    "privacy e cookie", "cookie di terze parti", "i cookie per",
+    "informazioni sui cookie", "cookie policy", "privacy policy"
 ]
 
 NAV_KEYWORDS = [
-    "vai al contenuto",
-    "torna in alto",
+    "vai al contenuto", "torna in alto", "menu principale",
+    "menu di navigazione", "chiudi menu", "chiudi menù", "leggi tutto...",
     "scorri in alto"
 ]
 
-# ------------------------------------------------------
-#  PULIZIA GENERICA DEL TESTO (VALIDA PER QUALSIASI SITO)
-# ------------------------------------------------------
-# Keyword che identificano blocchi di testo rumore (cookie, nav, ecc.)
-COOKIE_KEYWORDS = [
-    "cookie",
-    "cookies",
-    "archiviazione tecnica",
-    "scopi di marketing simili",
-    "cookie banner",
-    "usiamo i cookie",
-    "questa pagina utilizza i cookie",
-    "privacy e cookie",
-    "cookie di terze parti",
-    "i cookie per",
-    "consenso cookies",
-    "informativa cookie",
-    "informazioni sui cookie",
-    "cookie policy",
-    "privacy policy",
-    "vendor_count",
-    "scopi di marketing simili",
-    "salva preferenze",
-    "gestisci preferenze"
+# Stop phrases for HTML cleaning
+STOP_PHRASES = [
+    "torna ai servizi", "scopri di più", "leggi tutto...", "contattaci", 
+    "tutti i nostri servizi rsa", "menu", "seguici su", "chiudi", "accetta",
+    "aggiungi al carrello", "visualizza carrello"
 ]
 
-NAV_KEYWORDS = [
-    "vai al contenuto",
-    "torna in alto",
-    "menu principale",
-    "menu di navigazione",
-    "chiudi menu",
-    "chiudi menù",
-    "leggi tutto..."
+# HTML blacklist selectors for scraping
+HTML_BLACKLIST_SELECTORS = [
+    "script", "style", "nav", "footer", "header", "aside", "form", "noscript", "iframe",
+    ".elementor-hidden-desktop", ".elementor-hidden-tablet", ".elementor-hidden-mobile",
+    ".cookie-notice", "#cookie-law-info-bar", ".cookie-banner", 
+    "[role='navigation']", "[role='banner']",
+    ".widget_shopping_cart", ".widget_products", ".related.products", 
+    ".upsells.products", ".cross-sells", ".mini-cart"
 ]
+
+# Block tags for text extraction
+BLOCK_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'div', 'article', 'section', 'blockquote']
