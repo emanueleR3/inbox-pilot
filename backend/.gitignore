@@ -22,4 +22,3 @@ chunks.jsonl
 qdrant_batches.jsonl
 output.txt
 chunks_clean.jsonl
-test.http
