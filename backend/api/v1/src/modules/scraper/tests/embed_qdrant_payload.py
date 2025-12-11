@@ -8,7 +8,7 @@ from langchain_openai import OpenAIEmbeddings
 # -----------------------------
 # CONFIG
 # -----------------------------
-CHUNKS_FILE = "chunks.jsonl"
+CHUNKS_FILE = "chunks_clean.jsonl"
 OUTPUT_FILE = "qdrant_batches.jsonl"   # <--- RISULTATO QUI
 BATCH_SIZE = 64                        # numero di punti per batch Qdrant
 EMBEDDING_MODEL = "text-embedding-3-small"  # o "text-embedding-3-small"
