@@ -35,7 +35,7 @@ async def log_requests(request: Request, call_next):
             print(f"⚠️ [REQUEST] Could not read body: {e}")
     
     response = await call_next(request)
-    print(f"✅ [RESPONSE] Status: {response.status_code}")
+    print(f"[RESPONSE] Status: {response.status_code}")
     return response
 
 app.include_router(chatbot_router, prefix="/jerry")

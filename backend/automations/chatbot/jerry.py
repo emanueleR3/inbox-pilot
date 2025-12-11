@@ -32,7 +32,7 @@ dotenv.load_dotenv()
 os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "true")
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
-os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "default")
+os.environ["LANGCHAIN_PROJECT_JERRY"] = os.getenv("LANGCHAIN_PROJECT_JERRY", "default")
 
 supabase_project_id = os.getenv("SUPABASE_PROJECT_ID")
 supabase_password = os.getenv("SUPABASE_PASSWORD")

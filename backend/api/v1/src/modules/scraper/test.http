@@ -1,0 +1,129 @@
+### Scraper Module API Tests
+### Base URL: http://localhost:8000/scraper
+
+@baseUrl = http://localhost:8000/scraper
+@serviceId = 29cd9df9-7607-4728-a1b0-db7678f9e3da
+
+### ==============================================
+### Start Scraping Job
+### ==============================================
+
+### Start scraping - Basic request
+POST {{baseUrl}}/start
+Content-Type: application/json
+
+{
+    "service_id": "{{serviceId}}",
+    "website_url": "https://www.example.com"
+}
+
+### Start scraping - With max_pages limit
+POST {{baseUrl}}/start
+Content-Type: application/json
+
+{
+    "service_id": "{{serviceId}}",
+    "website_url": "https://example.com",
+    "max_pages": 50
+}
+
+### Start scraping - Real website example
+POST {{baseUrl}}/start
+Content-Type: application/json
+
+{
+    "service_id": "{{serviceId}}",
+    "website_url": "https://www.example.com",
+    "max_pages": 100
+}
+
+### ==============================================
+### Get Scraping Status
+### ==============================================
+
+### Check scraping job status
+GET {{baseUrl}}/status/{{serviceId}}
+
+### Check status with different service_id
+GET {{baseUrl}}/status/987fcdeb-51a2-3e4d-b567-890123456789
+
+### ==============================================
+### Get Collection Info
+### ==============================================
+
+### Get collection information
+GET {{baseUrl}}/collection/{{serviceId}}
+
+### Get collection info for non-existent service
+GET {{baseUrl}}/collection/00000000-0000-0000-0000-000000000000
+
+### ==============================================
+### Delete Collection
+### ==============================================
+
+### Delete the collection for a service
+DELETE {{baseUrl}}/collection/{{serviceId}}
+
+### ==============================================
+### Error Cases
+### ==============================================
+
+### Start scraping - Missing service_id
+POST {{baseUrl}}/start
+Content-Type: application/json
+
+{
+    "website_url": "https://example.com"
+}
+
+### Start scraping - Missing website_url
+POST {{baseUrl}}/start
+Content-Type: application/json
+
+{
+    "service_id": "{{serviceId}}"
+}
+
+### Start scraping - Invalid max_pages (exceeds limit)
+POST {{baseUrl}}/start
+Content-Type: application/json
+
+{
+    "service_id": "{{serviceId}}",
+    "website_url": "https://example.com",
+    "max_pages": 1000
+}
+
+### Start scraping - Invalid max_pages (negative)
+POST {{baseUrl}}/start
+Content-Type: application/json
+
+{
+    "service_id": "{{serviceId}}",
+    "website_url": "https://example.com",
+    "max_pages": -1
+}
+
+### ==============================================
+### Full Workflow Test
+### ==============================================
+
+### Step 1: Start scraping
+# @name startScraping
+POST {{baseUrl}}/start
+Content-Type: application/json
+
+{
+    "service_id": "{{serviceId}}",
+    "website_url": "https://www.example.com",
+    "max_pages": 50
+}
+
+### Step 2: Check status (repeat until completed)
+GET {{baseUrl}}/status/{{serviceId}}
+
+### Step 3: Get collection info
+GET {{baseUrl}}/collection/{{serviceId}}
+
+### Step 4: (Optional) Delete collection
+DELETE {{baseUrl}}/collection/{{serviceId}}

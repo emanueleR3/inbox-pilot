@@ -437,9 +437,17 @@ class ThreadRepository:
             print(f"❌ Error in global thread search: {e}")
             return None
     
-    def find_or_create_local_thread_for_conversation(self, reply_to_id: str, box_email: str, 
-                                                   message_id: str, message_timestamp: datetime,
-                                                   subject: str, sender_email: str, cc_emails: List[str] = None) -> Optional[dict]:
+    def find_or_create_local_thread_for_conversation(
+            self, 
+            reply_to_id: str, 
+            box_email: str, 
+            message_id: str, 
+            message_timestamp: datetime,
+            subject: str, 
+            sender_email: str, 
+            cc_emails: List[str] = None, 
+            status: str = "TO_PROCESS"
+        ) -> Optional[dict]:
         """
         Trova o crea un thread locale per la mailbox corrente che sia collegato alla conversazione.
         Cerca prima un thread locale che contenga qualsiasi message_id della conversazione cross-mailbox.
@@ -532,7 +540,7 @@ class ThreadRepository:
                 human_response=False,
                 last_sender_email=sender_email,
                 box_email=box_email,
-                status="TO_PROCESS" # TODO gestire i vari casi
+                status=status
             )
             
             if new_thread and new_thread.get("thread_id"):

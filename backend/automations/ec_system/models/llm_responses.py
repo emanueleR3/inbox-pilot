@@ -141,7 +141,7 @@ class ReaderAppointmentResponse(BaseModel):
     )
     date: Optional[str] = Field(
         None,
-        description="Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss, None se non specificato"
+        description="Data e ora appuntamento: YYYY-MM-DDThh:mm:ss se specificati entrambi, YYYY-MM-DDT--:-- se solo giorno preferito, None se non specificato"
     )
     duration: int = Field(
         60,
@@ -173,7 +173,7 @@ class ReaderConfirmAppointmentResponse(BaseModel):
     )
     date: Optional[str] = Field(
         None,
-        description="Data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss, None se non specificato data e orario completi"
+        description="Data e ora appuntamento: YYYY-MM-DDThh:mm:ss se specificati entrambi, YYYY-MM-DDT--:-- se solo giorno preferito, None se non specificato"
     )
     event_code: Optional[str] = Field(
         None,
@@ -227,6 +227,10 @@ class SchedulerResponse(BaseModel):
         False,
         description="True se il giorno preferito non aveva slot disponibili e sono stati proposti gli slot settimanali"
     )
+    event_details: Optional[dict] = Field(
+        None,
+        description="Dettagli dell'evento creato per generare file ICS (title, start_time, end_time, location, description, attendees, event_code, timezone)"
+    )
 
 
 class ReaderAppointmentChangeResponse(BaseModel):
@@ -245,7 +249,7 @@ class ReaderAppointmentChangeResponse(BaseModel):
     )
     new_date: Optional[str] = Field(
         None,
-        description="Nuova data e ora dell'appuntamento in formato YYYY-MM-DDThh:mm:ss, None se non specificato"
+        description="Nuova data e ora appuntamento: YYYY-MM-DDThh:mm:ss se specificati entrambi, YYYY-MM-DDT--:-- se solo giorno preferito, None se non specificato"
     )
     new_duration: Optional[int] = Field(
         None,

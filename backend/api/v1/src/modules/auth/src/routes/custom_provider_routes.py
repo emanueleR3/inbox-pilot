@@ -90,7 +90,8 @@ async def custom_login_route(
             "smtp_port": 465,
             "email": "user@example.com",
             "password": "secure_password",
-            "subscription_id": "sub_12345"
+            "subscription_id": "sub_12345",
+            "calendar_provider": "google"
         },
         description="Credenziali e configurazione del server di posta personalizzato"
     )

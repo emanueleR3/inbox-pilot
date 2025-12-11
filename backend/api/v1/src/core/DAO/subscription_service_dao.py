@@ -76,7 +76,8 @@ class SubscriptionServiceDAO:
         smtp_port: int,
         email: str,
         password: str,
-        subscription_id: str
+        subscription_id: str,
+        calendar_provider: str
     ) -> SubscriptionServiceRead:
         try:
             encrypted_password = self._encrypt(password, "pass")
@@ -91,6 +92,7 @@ class SubscriptionServiceDAO:
                 "hashed_access_token": None,
                 "hashed_refresh_token": None,
                 "expiry_token": None,
+                "calendar_provider": calendar_provider
             }
 
             if self.email_exists(email):
@@ -117,6 +119,7 @@ class SubscriptionServiceDAO:
                     smtp_port=smtp_port,
                     hashed_password=encrypted_password,
                     subscription_id=subscription_id,
+                    calendar_provider=calendar_provider
                 )
 
                 if not response or not isinstance(response, dict):
@@ -138,6 +141,7 @@ class SubscriptionServiceDAO:
                 priority_threshold=record.get("priority_threshold"),
                 confidence_classification_threshold = record.get("confidence_classification_threshold"),
                 urgent_meeting_threshold = record.get("urgent_meeting_threshold"),
+                calendar_provider = record.get("calendar_provider")
             )
 
         except Exception as e:
@@ -651,3 +655,85 @@ class SubscriptionServiceDAO:
             return None
 
         return SubscriptionServiceRead(**resp.data[0])
+
+    def update_qdrant_collection(self, service_id: str, collection_name: str) -> bool:
+        """
+        Update the qdrant_collection field for a subscription service.
+        
+        Args:
+            service_id: The service_id (UUID) of the subscription service
+            collection_name: The name of the Qdrant collection
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            data = {
+                "qdrant_collection": collection_name
+            }
+            response = (
+                self.supabase.table("subscription_services")
+                .update(data)
+                .eq("service_id", service_id)
+                .execute()
+            )
+            
+            if not response.data:
+                print(f"No record updated for service_id: {service_id}")
+                return False
+            return True
+        except Exception as e:
+            print(f"Error updating qdrant_collection: {e}")
+            return False
+
+    def get_qdrant_collection(self, service_id: str) -> str | None:
+        """
+        Get the qdrant_collection name for a subscription service.
+        
+        Args:
+            service_id: The service_id (UUID) of the subscription service
+            
+        Returns:
+            The collection name or None if not found
+        """
+        try:
+            response = (
+                self.supabase.table("subscription_services")
+                .select("qdrant_collection")
+                .eq("service_id", service_id)
+                .execute()
+            )
+            
+            if not response.data:
+                return None
+            
+            return response.data[0].get("qdrant_collection")
+        except Exception as e:
+            print(f"Error getting qdrant_collection: {e}")
+            return None
+
+    def get_service_by_id(self, service_id: str) -> dict | None:
+        """
+        Get subscription service by service_id.
+        
+        Args:
+            service_id: The service_id (UUID) of the subscription service
+            
+        Returns:
+            Service data dict or None if not found
+        """
+        try:
+            response = (
+                self.supabase.table("subscription_services")
+                .select("*")
+                .eq("service_id", service_id)
+                .execute()
+            )
+            
+            if not response.data:
+                return None
+            
+            return response.data[0]
+        except Exception as e:
+            print(f"Error getting service by id: {e}")
+            return None
