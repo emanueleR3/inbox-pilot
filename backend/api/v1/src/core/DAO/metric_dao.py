@@ -1,7 +1,6 @@
 from typing import Any, Dict, List
 from src.core.database import get_supabase_client
-from src.core.DAO.model.metric import (
-    Meta,
+from src.core.model.metric import (
     MetricMetadata,
     OverviewMetrics,
     AiVsHumanBreakdown,

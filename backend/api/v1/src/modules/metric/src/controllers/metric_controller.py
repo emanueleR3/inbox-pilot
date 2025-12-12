@@ -6,7 +6,6 @@ from src.modules.metric.src.utils import validate_dates, validate_subscription_i
 
 
 class MetricsController:
-    
     def __init__(self):
         self.metric_dao = MetricDAO()
 
