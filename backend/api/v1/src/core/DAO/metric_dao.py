@@ -139,17 +139,10 @@ class MetricDAO:
             for c, v in cat_map.items()
         ]
 
-        # Media messaggi per thread = length(history)
-        avg_messages = (
-            sum([len(t["history"]) for t in threads]) / len(threads)
-            if threads else 0
-        )
-
         return {
             "ai_vs_human": ai_vs_human,
             "deflection_trend": deflection_trend,
             "deflection_by_category": deflection_by_category,
-            "avg_messages_per_thread": round(avg_messages, 2),
             "metadata": {"date_from": date_from, "date_to": date_to}
         }
 
