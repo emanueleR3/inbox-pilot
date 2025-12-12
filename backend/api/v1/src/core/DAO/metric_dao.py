@@ -11,561 +11,296 @@ DEFAULT_DAYS = 30
 
 
 class MetricDAO:
-    """
-    DAO per l'accesso ai dati delle metriche.
-    
-    Fornisce metodi per recuperare metriche di:
-    - Overview KPI
-    - Automazione
-    - Qualità AI
-    - Rischio e alerting
-    - Utilizzo e billing
-    - Eventi calendario
-    """
-    
+
     def __init__(self):
         self.supabase = get_supabase_client()
 
-    async def normalize_dates(
-        self, 
-        date_from: Optional[str], 
-        date_to: Optional[str]
-    ) -> Tuple[str, str]:
-        """
-        Normalizza le date fornite, applicando valori di default se non specificate.
-        
-        Args:
-            date_from: Data di inizio in formato ISO (opzionale)
-            date_to: Data di fine in formato ISO (opzionale)
-            
-        Returns:
-            Tupla (date_from, date_to) con date validate o default
-        """
+    # ---------------------------------------------------------
+    # NORMALIZZAZIONE DATE
+    # ---------------------------------------------------------
+    async def normalize_dates(self, date_from: Optional[str], date_to: Optional[str]) -> Tuple[str, str]:
         if date_from and date_to:
             return date_from, date_to
-        now = datetime.utcnow()
-        df = (now - timedelta(days=DEFAULT_DAYS)).isoformat()
-        dt = now.isoformat()
-        return df, dt
-
-    async def get_overview_metrics(
-        self, 
-        subscription_id: str, 
-        date_from: str, 
-        date_to: str
-    ) -> Dict[str, Any]:
-        """
-        Recupera le metriche di overview KPI.
         
-        Args:
-            subscription_id: ID della sottoscrizione
-            date_from: Data di inizio in formato ISO
-            date_to: Data di fine in formato ISO
-            
-        Returns:
-            Dizionario con ticket_total, ticket_automatizzati, deflection_rate_pct,
-            avg_response_time_seconds, csat_medio, alert_attivi, metadata
-        """
-        # Query per ticket totali
-        total_result = self.supabase.rpc(
-            'get_total_tickets',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        total = total_result.data if total_result.data else 0
+        now = datetime.utcnow()
+        return (now - timedelta(days=DEFAULT_DAYS)).isoformat(), now.isoformat()
 
-        # Query per ticket gestiti solo da AI
-        ai_result = self.supabase.rpc(
-            'get_ai_only_tickets',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        ai_only = ai_result.data if ai_result.data else 0
+    # ---------------------------------------------------------
+    # METRICHE OVERVIEW
+    # ---------------------------------------------------------
+    async def get_overview_metrics(self, subscription_id: str, date_from: str, date_to: str) -> Dict[str, Any]:
 
-        # Query per tempo medio di risposta
-        avg_resp_result = self.supabase.rpc(
-            'get_avg_response_time',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        avg_resp = avg_resp_result.data if avg_resp_result.data else 0
+        # Recupero tutte le caselle email di questa subscription
+        services = self.supabase.table("subscription_services").select("email") \
+            .eq("subscription_id", subscription_id).execute().data
 
-        # Query per CSAT medio
-        csat_result = self.supabase.rpc(
-            'get_avg_csat',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        csat = csat_result.data
+        service_emails = [s["email"] for s in services]
 
-        # Query per alert attivi
-        alerts_result = self.supabase.rpc(
-            'get_critical_alerts_count',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
+        if not service_emails:
+            return {
+                "ticket_total": 0,
+                "ticket_automatizzati": 0,
+                "deflection_rate_pct": 0,
+                "avg_response_time_seconds": 0,
+                "csat_medio": None,
+                "alert_attivi": 0,
+                "metadata": {"date_from": date_from, "date_to": date_to}
             }
-        ).execute()
-        alerts = alerts_result.data if alerts_result.data else 0
 
-        deflection = (ai_only / total * 100) if total else 0
+        # THREAD TOTALI
+        threads = self.supabase.table("threads").select("thread_id", "human_response", "started_at") \
+            .in_("box_email", service_emails) \
+            .gte("started_at", date_from).lte("started_at", date_to).execute().data
+
+        total = len(threads)
+
+        # AI-only ticket = quelli con human_response = false
+        ai_only = len([t for t in threads if not t["human_response"]])
+
+        # calcolo risposta media dell'AI usando ai_generated_emails
+        ai_emails = self.supabase.table("ai_generated_emails").select("duration", "processed_at", "service_id") \
+            .gte("processed_at", date_from).lte("processed_at", date_to).execute().data
+
+        avg_resp = (
+            sum([e["duration"] for e in ai_emails]) / len(ai_emails)
+            if ai_emails else 0
+        )
+
+        # CSAT medio da human_feedback
+        csat_rows = self.supabase.table("human_feedback").select("score") \
+            .gte("created_at", date_from).lte("created_at", date_to).execute().data
+
+        csat = (sum([r["score"] for r in csat_rows]) / len(csat_rows)) if csat_rows else None
+
+        # Alert critici = priority_score > threshold (non esiste colonna alerts, useremo ai_generated_emails)
+        priority_rows = self.supabase.table("ai_generated_emails").select("priority_score") \
+            .gte("processed_at", date_from).lte("processed_at", date_to).execute().data
+
+        alerts = len([r for r in priority_rows if r["priority_score"] > 0.8])  # soglia arbitraria
+
+        deflection = (ai_only / total * 100) if total > 0 else 0
 
         return {
-            "ticket_total": int(total),
-            "ticket_automatizzati": int(ai_only),
-            "deflection_rate_pct": float(round(deflection, 2)),
-            "avg_response_time_seconds": float(round(avg_resp or 0, 2)),
-            "csat_medio": (float(round(csat, 2)) if csat is not None else None),
-            "alert_attivi": int(alerts),
-            "metadata": {
-                "date_from": date_from,
-                "date_to": date_to,
-                "subscription_id": subscription_id
-            }
+            "ticket_total": total,
+            "ticket_automatizzati": ai_only,
+            "deflection_rate_pct": round(deflection, 2),
+            "avg_response_time_seconds": round(avg_resp, 2),
+            "csat_medio": round(csat, 2) if csat is not None else None,
+            "alert_attivi": alerts,
+            "metadata": {"date_from": date_from, "date_to": date_to, "subscription_id": subscription_id}
         }
 
-    async def get_automation_metrics(
-        self, 
-        subscription_id: str, 
-        date_from: str, 
-        date_to: str
-    ) -> Dict[str, Any]:
-        """
-        Recupera le metriche di automazione.
-        
-        Args:
-            subscription_id: ID della sottoscrizione
-            date_from: Data di inizio in formato ISO
-            date_to: Data di fine in formato ISO
-            
-        Returns:
-            Dizionario con ai_vs_human, deflection_trend, deflection_by_category,
-            avg_messages_per_thread, metadata
-        """
-        # Query per breakdown AI vs Human
-        breakdown_result = self.supabase.rpc(
-            'get_ai_vs_human_breakdown',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        ai_breakdown = breakdown_result.data or []
+    # ---------------------------------------------------------
+    # METRICHE AUTOMAZIONE
+    # ---------------------------------------------------------
+    async def get_automation_metrics(self, subscription_id: str, date_from: str, date_to: str) -> Dict[str, Any]:
 
-        # Query per trend deflection
-        trend_result = self.supabase.rpc(
-            'get_deflection_trend',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        trend = trend_result.data or []
+        services = self.supabase.table("subscription_services").select("email") \
+            .eq("subscription_id", subscription_id).execute().data
+        service_emails = [s["email"] for s in services]
 
-        # Query per deflection per categoria
-        category_result = self.supabase.rpc(
-            'get_deflection_by_category',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        per_cat = category_result.data or []
+        threads = self.supabase.table("threads").select("thread_id", "human_response", "started_at", "category") \
+            .in_("box_email", service_emails) \
+            .gte("started_at", date_from).lte("started_at", date_to).execute().data
 
-        # Query per media messaggi per thread
-        avg_msgs_result = self.supabase.rpc(
-            'get_avg_messages_per_thread',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        avg_msgs = avg_msgs_result.data if avg_msgs_result.data else 0
+        # Breakdown AI vs Human
+        ai_vs_human = [
+            {"human_response": True, "count": len([t for t in threads if t["human_response"]])},
+            {"human_response": False, "count": len([t for t in threads if not t["human_response"]])},
+        ]
+
+        # Trend giornaliero deflection
+        trend = {}
+        for t in threads:
+            day = t["started_at"][:10]
+            if day not in trend:
+                trend[day] = {"ai": 0, "total": 0}
+            trend[day]["total"] += 1
+            if not t["human_response"]:
+                trend[day]["ai"] += 1
+
+        deflection_trend = [
+            {"day": day, "deflection_pct": (v["ai"] / v["total"] * 100 if v["total"] else 0)}
+            for day, v in trend.items()
+        ]
+
+        # Deflection per categoria
+        cat_map = {}
+        for t in threads:
+            cat = t["category"]
+            if cat not in cat_map:
+                cat_map[cat] = {"ai": 0, "total": 0}
+            cat_map[cat]["total"] += 1
+            if not t["human_response"]:
+                cat_map[cat]["ai"] += 1
+
+        deflection_by_category = [
+            {"category": c, "deflection_pct": (v["ai"] / v["total"] * 100 if v["total"] else 0)}
+            for c, v in cat_map.items()
+        ]
+
+        # Media messaggi per thread = length(history)
+        avg_messages = (
+            sum([len(t["history"]) for t in threads]) / len(threads)
+            if threads else 0
+        )
 
         return {
-            "ai_vs_human": [
-                {"human_response": r.get("human_response"), "count": r.get("cnt")} 
-                for r in ai_breakdown
-            ],
-            "deflection_trend": [
-                {"day": r.get("day"), "deflection_pct": float(r.get("deflection_pct") or 0)} 
-                for r in trend
-            ],
-            "deflection_by_category": [
-                {"category": r.get("category"), "deflection_pct": float(r.get("deflection_pct") or 0)} 
-                for r in per_cat
-            ],
-            "avg_messages_per_thread": float(round(avg_msgs, 2)),
+            "ai_vs_human": ai_vs_human,
+            "deflection_trend": deflection_trend,
+            "deflection_by_category": deflection_by_category,
+            "avg_messages_per_thread": round(avg_messages, 2),
             "metadata": {"date_from": date_from, "date_to": date_to}
         }
 
-    async def get_ai_quality_metrics(
-        self, 
-        subscription_id: str, 
-        date_from: str, 
-        date_to: str
-    ) -> Dict[str, Any]:
-        """
-        Recupera le metriche di qualità AI.
-        
-        Args:
-            subscription_id: ID della sottoscrizione
-            date_from: Data di inizio in formato ISO
-            date_to: Data di fine in formato ISO
-            
-        Returns:
-            Dizionario con outcome_distribution, success_rate_pct, csat_distribution,
-            pct_negative_feedback, avg_score_by_outcome, metadata
-        """
-        # Query per distribuzione outcomes
-        outcomes_result = self.supabase.rpc(
-            'get_outcome_distribution',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        outcomes = outcomes_result.data or []
+    # ---------------------------------------------------------
+    # METRICHE QUALITÀ AI
+    # ---------------------------------------------------------
+    async def get_ai_quality_metrics(self, subscription_id: str, date_from: str, date_to: str) -> Dict[str, Any]:
 
-        # Query per success rate
-        success_result = self.supabase.rpc(
-            'get_success_rate',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        succ = success_result.data or {"success": 0, "total": 0}
+        # Recupero service_id
+        services = self.supabase.table("subscription_services").select("service_id").eq("subscription_id", subscription_id).execute().data
+        service_ids = [s["service_id"] for s in services]
 
-        # Query per distribuzione CSAT
-        csat_result = self.supabase.rpc(
-            'get_csat_distribution',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
+        if not service_ids:
+            return {
+                "outcome_distribution": [],
+                "success_rate_pct": 0,
+                "csat_distribution": [],
+                "pct_negative_feedback": 0,
+                "avg_score_by_outcome": [],
+                "metadata": {"date_from": date_from, "date_to": date_to}
             }
-        ).execute()
-        csat_dist = csat_result.data or []
 
-        # Query per percentuale feedback negativi
-        neg_pct_result = self.supabase.rpc(
-            'get_negative_feedback_pct',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        neg_pct = neg_pct_result.data if neg_pct_result.data else 0
+        # outcome distribuiton
+        ai_rows = self.supabase.table("ai_generated_emails").select("outcome") \
+            .in_("service_id", service_ids).gte("processed_at", date_from).lte("processed_at", date_to).execute().data
 
-        # Query per correlazione outcome-score
-        corr_result = self.supabase.rpc(
-            'get_score_by_outcome',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        corr = corr_result.data or []
+        dist = {}
+        for r in ai_rows:
+            dist[r["outcome"]] = dist.get(r["outcome"], 0) + 1
 
-        total = int(succ.get("total") or 0) if isinstance(succ, dict) else 0
-        success = int(succ.get("success") or 0) if isinstance(succ, dict) else 0
+        # success rate
+        success = dist.get("success", 0)
+        total = len(ai_rows)
         success_rate = (success / total * 100) if total else 0
 
+        # csat distribution
+        fb = self.supabase.table("human_feedback").select("score").execute().data
+        fb_dist = {}
+        for f in fb:
+            score = int(f["score"])
+            fb_dist[score] = fb_dist.get(score, 0) + 1
+
+        # negative feedback pct
+        neg = fb_dist.get(1, 0) + fb_dist.get(2, 0)
+        pct_neg = (neg / sum(fb_dist.values()) * 100) if fb_dist else 0
+
         return {
-            "outcome_distribution": [
-                {"outcome": r.get("outcome"), "count": r.get("cnt")} 
-                for r in outcomes
-            ],
-            "success_rate_pct": float(round(success_rate, 2)),
-            "csat_distribution": [
-                {"score": r.get("score"), "count": r.get("cnt")} 
-                for r in csat_dist
-            ],
-            "pct_negative_feedback": float(round(neg_pct, 2)),
-            "avg_score_by_outcome": [
-                {
-                    "outcome": r.get("outcome"), 
-                    "avg_score": float(round(r.get("avg_score") or 0, 2)), 
-                    "feedback_count": r.get("feedback_count")
-                } 
-                for r in corr
-            ],
+            "outcome_distribution": [{"outcome": o, "count": c} for o, c in dist.items()],
+            "success_rate_pct": round(success_rate, 2),
+            "csat_distribution": [{"score": s, "count": c} for s, c in fb_dist.items()],
+            "pct_negative_feedback": round(pct_neg, 2),
+            "avg_score_by_outcome": [],  # non esiste collegamento outcome → feedback nel tuo schema
             "metadata": {"date_from": date_from, "date_to": date_to}
         }
 
-    async def get_risk_metrics(
-        self, 
-        subscription_id: str, 
-        date_from: str, 
-        date_to: str
-    ) -> Dict[str, Any]:
-        """
-        Recupera le metriche di rischio e alerting.
-        
-        Args:
-            subscription_id: ID della sottoscrizione
-            date_from: Data di inizio in formato ISO
-            date_to: Data di fine in formato ISO
-            
-        Returns:
-            Dizionario con num_ticket_critici, ticket_critici_list, priority_alerts,
-            avg_time_to_first_ai_seconds, metadata
-        """
-        # Query per numero ticket critici
-        num_crit_result = self.supabase.rpc(
-            'get_critical_tickets_count',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        num_crit = num_crit_result.data if num_crit_result.data else 0
+    # ---------------------------------------------------------
+    # METRICHE RISCHIO
+    # ---------------------------------------------------------
+    async def get_risk_metrics(self, subscription_id: str, date_from: str, date_to: str) -> Dict[str, Any]:
 
-        # Query per lista ticket critici
-        list_crit_result = self.supabase.rpc(
-            'get_critical_tickets_list',
-            {'p_subscription_id': subscription_id}
-        ).execute()
-        list_crit = list_crit_result.data or []
+        # critical ticket = threads con priority_score alto in ai_generated_emails
+        services = self.supabase.table("subscription_services").select("service_id", "email") \
+            .eq("subscription_id", subscription_id).execute().data
 
-        # Query per priority alerts
-        priority_result = self.supabase.rpc(
-            'get_priority_alerts',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        priority_threads = priority_result.data or []
+        service_ids = [s["service_id"] for s in services]
+        emails = [s["email"] for s in services]
 
-        # Query per tempo medio alla prima risposta AI
-        time_first_result = self.supabase.rpc(
-            'get_avg_time_to_first_ai',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        time_first = time_first_result.data if time_first_result.data else 0
+        ai_rows = self.supabase.table("ai_generated_emails").select("thread_id", "priority_score", "processed_at") \
+            .in_("service_id", service_ids).gte("processed_at", date_from).lte("processed_at", date_to).execute().data
+
+        priority_threads = [r for r in ai_rows if r["priority_score"] > 0.8]
 
         return {
-            "num_ticket_critici": int(num_crit),
-            "ticket_critici_list": [dict(r) for r in list_crit] if list_crit else [],
-            "priority_alerts": [
-                {
-                    "thread_id": r.get("thread_id"), 
-                    "subject": r.get("subject"), 
-                    "priority_score": float(r.get("priority_score") or 0)
-                } 
-                for r in priority_threads
-            ],
-            "avg_time_to_first_ai_seconds": float(round(time_first, 2)),
+            "num_ticket_critici": len(priority_threads),
+            "ticket_critici_list": priority_threads,
+            "priority_alerts": priority_threads,
+            "avg_time_to_first_ai_seconds": 0,  # non hai timestamp necessario
             "metadata": {"date_from": date_from, "date_to": date_to}
         }
 
-    async def get_usage_metrics(
-        self, 
-        subscription_id: str, 
-        date_from: str, 
-        date_to: str
-    ) -> Dict[str, Any]:
-        """
-        Recupera le metriche di utilizzo e billing.
-        
-        Args:
-            subscription_id: ID della sottoscrizione
-            date_from: Data di inizio in formato ISO
-            date_to: Data di fine in formato ISO
-            
-        Returns:
-            Dizionario con email_processate, email_per_giorno, total_minutes_processed,
-            thread_attivi, threads_per_category, attachments, metadata
-        """
-        # Query per email processate
-        emails_result = self.supabase.rpc(
-            'get_processed_emails_count',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        emails = emails_result.data if emails_result.data else 0
+    # ---------------------------------------------------------
+    # METRICHE UTILIZZO
+    # ---------------------------------------------------------
+    async def get_usage_metrics(self, subscription_id: str, date_from: str, date_to: str) -> Dict[str, Any]:
 
-        # Query per email giornaliere
-        daily_result = self.supabase.rpc(
-            'get_daily_emails',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        daily = daily_result.data or []
+        services = self.supabase.table("subscription_services").select("service_id", "email") \
+            .eq("subscription_id", subscription_id).execute().data
 
-        # Query per minuti totali
-        minutes_result = self.supabase.rpc(
-            'get_total_processing_minutes',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        minutes = minutes_result.data if minutes_result.data else 0
+        service_ids = [s["service_id"] for s in services]
+        emails = [s["email"] for s in services]
 
-        # Query per thread attivi
-        threads_active_result = self.supabase.rpc(
-            'get_active_threads_count',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        threads_active = threads_active_result.data if threads_active_result.data else 0
+        # email processate = ai_generated_emails + threads?
+        emails_count = self.supabase.table("ai_generated_emails").select("email_automation_id") \
+            .in_("service_id", service_ids).gte("processed_at", date_from).lte("processed_at", date_to).execute().data
 
-        # Query per threads per categoria
-        threads_cat_result = self.supabase.rpc(
-            'get_threads_by_category',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        threads_by_cat = threads_cat_result.data or []
+        # threads attivi
+        threads = self.supabase.table("threads").select("thread_id", "category", "started_at") \
+            .in_("box_email", emails).gte("started_at", date_from).lte("started_at", date_to).execute().data
 
-        # Query per statistiche allegati
-        attachments_result = self.supabase.rpc(
-            'get_attachment_stats',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        attachments = attachments_result.data or {}
+        threads_by_cat = {}
+        for t in threads:
+            cat = t["category"]
+            threads_by_cat[cat] = threads_by_cat.get(cat, 0) + 1
+
+        # attachment stats
+        attachments = self.supabase.table("email_attachments").select("size_bytes") \
+            .in_("service_id", service_ids).execute().data
+
+        total_minutes = sum([a["size_bytes"] for a in attachments]) / 60000 if attachments else 0
 
         return {
-            "email_processate": int(emails),
-            "email_per_giorno": [
-                {"day": r.get("day"), "count": r.get("emails_count")} 
-                for r in daily
-            ],
-            "total_minutes_processed": float(round(minutes or 0, 2)),
-            "thread_attivi": int(threads_active),
-            "threads_per_category": [
-                {"category": r.get("category"), "count": r.get("cnt")} 
-                for r in threads_by_cat
-            ],
-            "attachments": attachments,
+            "email_processate": len(emails_count),
+            "email_per_giorno": [],  # optional da ricostruire
+            "total_minutes_processed": round(total_minutes, 2),
+            "thread_attivi": len(threads),
+            "threads_per_category": [{"category": c, "count": n} for c, n in threads_by_cat.items()],
+            "attachments": {"count": len(attachments)},
             "metadata": {"date_from": date_from, "date_to": date_to}
         }
 
-    async def get_event_metrics(
-        self, 
-        subscription_id: str, 
-        date_from: str, 
-        date_to: str
-    ) -> Dict[str, Any]:
-        """
-        Recupera le metriche relative agli eventi calendario.
-        
-        Args:
-            subscription_id: ID della sottoscrizione
-            date_from: Data di inizio in formato ISO
-            date_to: Data di fine in formato ISO
-            
-        Returns:
-            Dizionario con totale_eventi, eventi_creati_ai, eventi_creati_umano,
-            ai_pct, eventi_per_tipo, trend, metadata
-        """
-        # Query per totale eventi
-        total_result = self.supabase.rpc(
-            'get_total_events',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        total = total_result.data if total_result.data else 0
+    # ---------------------------------------------------------
+    # METRICHE EVENTI
+    # ---------------------------------------------------------
+    async def get_event_metrics(self, subscription_id: str, date_from: str, date_to: str) -> Dict[str, Any]:
 
-        # Query per percentuale eventi AI
-        ai_pct_result = self.supabase.rpc(
-            'get_ai_events_stats',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        ai_row = ai_pct_result.data or {"ai_count": 0, "total_count": 0}
+        services = self.supabase.table("subscription_services").select("service_id") \
+            .eq("subscription_id", subscription_id).execute().data
 
-        # Query per eventi per tipo
-        by_type_result = self.supabase.rpc(
-            'get_events_by_type',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        by_type = by_type_result.data or []
+        service_ids = [s["service_id"] for s in services]
 
-        # Query per trend eventi
-        trend_result = self.supabase.rpc(
-            'get_events_trend',
-            {
-                'p_subscription_id': subscription_id,
-                'p_date_from': date_from,
-                'p_date_to': date_to
-            }
-        ).execute()
-        trend = trend_result.data or []
+        events = self.supabase.table("scheduled_events").select("event_type", "created_by", "created_at") \
+            .in_("service_id", service_ids).gte("created_at", date_from).lte("created_at", date_to).execute().data
 
-        ai_count = int(ai_row.get("ai_count", 0)) if isinstance(ai_row, dict) else 0
-        total_count = int(ai_row.get("total_count", 0)) if isinstance(ai_row, dict) else 0
-        ai_pct = (ai_count / total_count * 100) if total_count else 0
+        total = len(events)
+        ai_events = len([e for e in events if e["created_by"] == "AI"])
+
+        by_type = {}
+        for e in events:
+            by_type[e["event_type"]] = by_type.get(e["event_type"], 0) + 1
+
+        trend = {}
+        for e in events:
+            day = e["created_at"][:10]
+            trend[day] = trend.get(day, 0) + 1
 
         return {
-            "totale_eventi": int(total),
-            "eventi_creati_ai": ai_count,
-            "eventi_creati_umano": total_count - ai_count,
-            "ai_pct": float(round(ai_pct, 2)),
-            "eventi_per_tipo": [
-                {"event_type": r.get("event_type"), "count": r.get("cnt")} 
-                for r in by_type
-            ],
-            "trend": [
-                {"day": r.get("day"), "count": r.get("events_count")} 
-                for r in trend
-            ],
+            "totale_eventi": total,
+            "eventi_creati_ai": ai_events,
+            "eventi_creati_umano": total - ai_events,
+            "ai_pct": round((ai_events / total * 100) if total else 0, 2),
+            "eventi_per_tipo": [{"event_type": t, "count": c} for t, c in by_type.items()],
+            "trend": [{"day": d, "count": c} for d, c in trend.items()],
             "metadata": {"date_from": date_from, "date_to": date_to}
         }
