@@ -4,7 +4,7 @@ Modelli Pydantic per le risposte delle API delle metriche.
 Definisce i tipi di dati per tutte le metriche esposte dall'applicazione.
 """
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 
 
 class Meta(BaseModel):
@@ -14,15 +14,12 @@ class Meta(BaseModel):
     subscription_id: Optional[str] = Field(None, description="ID della sottoscrizione")
 
 
-# --- Overview Models ---
-
 class OverviewResponse(BaseModel):
     """Risposta per le metriche di overview KPI."""
     ticket_total: int = Field(..., description="Numero totale di ticket nel periodo")
     ticket_automatizzati: int = Field(..., description="Numero di ticket gestiti automaticamente dall'AI")
     deflection_rate_pct: float = Field(..., description="Percentuale di deflection (ticket automatizzati/totali * 100)")
     avg_response_time_seconds: float = Field(..., description="Tempo medio di risposta in secondi")
-    csat_medio: Optional[float] = Field(None, description="Punteggio CSAT medio (Customer Satisfaction)")
     alert_attivi: int = Field(..., description="Numero di alert attualmente attivi")
     metadata: Meta = Field(..., description="Metadati della richiesta")
 
@@ -64,12 +61,6 @@ class OutcomeDistributionItem(BaseModel):
     count: int = Field(..., description="Numero di occorrenze")
 
 
-class CSATDistributionItem(BaseModel):
-    """Singolo elemento della distribuzione dei punteggi CSAT."""
-    score: Optional[int] = Field(None, description="Punteggio CSAT (1-5)")
-    count: int = Field(..., description="Numero di occorrenze")
-
-
 class ScoreByOutcomeItem(BaseModel):
     """Score medio per tipo di outcome."""
     outcome: Optional[str] = Field(None, description="Tipo di outcome")
@@ -81,7 +72,6 @@ class AIQualityResponse(BaseModel):
     """Risposta per le metriche di qualità AI."""
     outcome_distribution: List[OutcomeDistributionItem] = Field(..., description="Distribuzione degli outcome")
     success_rate_pct: float = Field(..., description="Tasso di successo in percentuale")
-    csat_distribution: List[CSATDistributionItem] = Field(..., description="Distribuzione dei punteggi CSAT")
     pct_negative_feedback: float = Field(..., description="Percentuale di feedback negativi (score <= 2)")
     avg_score_by_outcome: List[ScoreByOutcomeItem] = Field(..., description="Score medio per tipo di outcome")
     metadata: Meta = Field(..., description="Metadati della richiesta")
