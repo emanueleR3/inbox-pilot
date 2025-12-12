@@ -3,7 +3,7 @@ from fastapi import APIRouter, Query
 from typing import Optional
 from src.modules.metric.src.controllers.metric_controller import MetricsController
 
-router = APIRouter(prefix="/metrics", tags=["metrics"])
+router = APIRouter(tags=["metrics"])
 controller = MetricsController()
 
 
