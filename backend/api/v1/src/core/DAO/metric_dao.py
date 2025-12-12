@@ -1,6 +1,6 @@
 from typing import Dict, List
 from src.core.database import get_supabase_client
-from src.core.model.metric_models import (
+from src.core.model.metric import (
     MetricMetadata,
     OverviewMetrics,
     AiVsHumanBreakdown,
