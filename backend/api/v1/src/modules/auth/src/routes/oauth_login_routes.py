@@ -1,9 +1,14 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from ..controllers.oauth_login_controller import (
     oauth_login,
     google_callback,
     microsoft_callback,
     OAuthLoginRequest
+)
+from src.handler_exception import (
+    SubscriptionIdRequiredException,
+    OAuthException,
+    BadRequestException
 )
 
 router = APIRouter()
@@ -32,17 +37,20 @@ async def oauth_login_route(provider_name: str, request: Request):
             email = json_data.get("email")  # Può essere None
         
         if not subscription_id:
-            raise HTTPException(status_code=400, detail="Missing subscription_id")
+            raise SubscriptionIdRequiredException()
         
         oauth_request = OAuthLoginRequest(subscription_id=subscription_id, services=services, email=email)
         return await oauth_login(provider_name, oauth_request, request)
         
+    except SubscriptionIdRequiredException:
+        raise
+    except BadRequestException:
+        raise
     except Exception as e:
         import logging
         logger = logging.getLogger("oauth_login_routes")
-        
         logger.error(f"Error in OAuth login: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error during OAuth login")
+        raise OAuthException(provider=provider_name, reason=str(e))
 
 @router.get("/google/callback")
 async def google_callback_route(request: Request):

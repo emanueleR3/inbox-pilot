@@ -1,7 +1,9 @@
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from src.core.config import settings
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 from src.core.model.subscription_service import OAuthGoogleCredentials
+from src.handler_exception import GmailAPIException, SubscriptionCreationException
 
 subscription_service_dao = SubscriptionServiceDAO()
 
@@ -33,16 +35,22 @@ def create_watch_for_user(access_token: str = None, refresh_token: str = None, u
             ]
         )
 
-    service = build("gmail", "v1", credentials=credentials)
+    try:
+        service = build("gmail", "v1", credentials=credentials)
 
-    request = {
-        "labelIds": ["INBOX"], # NOTE: sembrerebbe dar problemi 
-        "topicName": settings.PUBSUB_TOPIC_PATH
-    }
+        request = {
+            "labelIds": ["INBOX"], # NOTE: sembrerebbe dar problemi 
+            "topicName": settings.PUBSUB_TOPIC_PATH
+        }
 
-    response = service.users().watch(userId="me", body=request).execute()
+        response = service.users().watch(userId="me", body=request).execute()
 
-    import logging
-    logging.info(f"Gmail watch created for {user_email}: {response}")
+        import logging
+        logging.info(f"Gmail watch created for {user_email}: {response}")
 
-    return response  # contiene historyId e expiration
+        return response  # contiene historyId e expiration
+    
+    except HttpError as e:
+        raise GmailAPIException(reason=f"Errore API Gmail: {e.reason if hasattr(e, 'reason') else str(e)}")
+    except Exception as e:
+        raise SubscriptionCreationException(provider="Gmail", reason=str(e))

@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 from datetime import datetime, timedelta
-from fastapi import HTTPException, status
+from src.handler_exception import SubscriptionIdRequiredException
 
 
 def validate_dates(date_from: Optional[str], date_to: Optional[str], default_days: int = 30) -> Tuple[str, str]:
@@ -30,10 +30,7 @@ def validate_subscription_id(subscription_id: str) -> None:
         subscription_id: ID della sottoscrizione
         
     Raises:
-        HTTPException: Se subscription_id è vuoto o None
+        SubscriptionIdRequiredException: Se subscription_id è vuoto o None
     """
     if not subscription_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="subscription_id richiesto"
-        )
+        raise SubscriptionIdRequiredException()

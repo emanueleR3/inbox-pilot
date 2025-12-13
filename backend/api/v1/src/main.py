@@ -5,6 +5,7 @@ import uvicorn
 
 from src.core.config import settings
 from src.core.logger import setup_logger
+from src.handler_exception import register_exception_handlers
 
 # Importa le routes dei vari moduli (man mano che li aggiungi)
 from src.modules.auth.src.routes import router as auth_router
@@ -16,6 +17,9 @@ from src.modules.scraper.src.routes import router as scraper_router
 
 logger = setup_logger()
 app = FastAPI(title="AI Mail Automation API", version="1.0.0")
+
+# Registra gli exception handlers globali
+register_exception_handlers(app)
 
 # CORS (puoi restringerlo in produzione) - must be added before routers
 app.add_middleware(

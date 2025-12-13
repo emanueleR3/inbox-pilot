@@ -1,8 +1,8 @@
 # app/controllers/metrics_controller.py
-from fastapi import HTTPException, status
 from typing import Optional
 from src.core.DAO.metric_dao import MetricDAO
-from src.modules.metric.src.utils import validate_dates, validate_subscription_id
+from src.handler_exception import SubscriptionIdRequiredException, MetricsException
+from src.modules.metric.src.utils.utils import validate_dates, validate_subscription_id
 
 
 class MetricsController:
@@ -19,13 +19,10 @@ class MetricsController:
         try:
             df, dt = validate_dates(date_from, date_to)
             return await self.metric_dao.get_overview_metrics(subscription_id, df, dt)
-        except HTTPException:
+        except SubscriptionIdRequiredException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                detail=f"Errore overview: {str(e)}"
-            )
+            raise MetricsException(metric_type="overview", reason=str(e))
 
     async def get_automation_metrics(
         self, 
@@ -37,13 +34,10 @@ class MetricsController:
         try:
             df, dt = validate_dates(date_from, date_to)
             return await self.metric_dao.get_automation_metrics(subscription_id, df, dt)
-        except HTTPException:
+        except SubscriptionIdRequiredException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                detail=f"Errore automation: {str(e)}"
-            )
+            raise MetricsException(metric_type="automation", reason=str(e))
 
     async def get_ai_quality_metrics(
         self, 
@@ -55,13 +49,10 @@ class MetricsController:
         try:
             df, dt = validate_dates(date_from, date_to)
             return await self.metric_dao.get_ai_quality_metrics(subscription_id, df, dt)
-        except HTTPException:
+        except SubscriptionIdRequiredException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                detail=f"Errore ai-quality: {str(e)}"
-            )
+            raise MetricsException(metric_type="ai-quality", reason=str(e))
 
     async def get_risk_metrics(
         self, 
@@ -73,13 +64,10 @@ class MetricsController:
         try:
             df, dt = validate_dates(date_from, date_to)
             return await self.metric_dao.get_risk_metrics(subscription_id, df, dt)
-        except HTTPException:
+        except SubscriptionIdRequiredException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                detail=f"Errore risk: {str(e)}"
-            )
+            raise MetricsException(metric_type="risk", reason=str(e))
 
     async def get_usage_metrics(
         self, 
@@ -91,13 +79,10 @@ class MetricsController:
         try:
             df, dt = validate_dates(date_from, date_to)
             return await self.metric_dao.get_usage_metrics(subscription_id, df, dt)
-        except HTTPException:
+        except SubscriptionIdRequiredException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                detail=f"Errore usage: {str(e)}"
-            )
+            raise MetricsException(metric_type="usage", reason=str(e))
 
     async def get_event_metrics(
         self, 
@@ -109,10 +94,7 @@ class MetricsController:
         try:
             df, dt = validate_dates(date_from, date_to)
             return await self.metric_dao.get_event_metrics(subscription_id, df, dt)
-        except HTTPException:
+        except SubscriptionIdRequiredException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                detail=f"Errore events: {str(e)}"
-            )
+            raise MetricsException(metric_type="events", reason=str(e))

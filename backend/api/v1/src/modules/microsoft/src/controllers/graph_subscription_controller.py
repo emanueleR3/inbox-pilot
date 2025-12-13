@@ -2,6 +2,7 @@ import os
 import httpx
 from datetime import datetime, timedelta
 from src.core.logger import setup_logger
+from src.handler_exception import SubscriptionCreationException, GraphAPIException
 
 logger = setup_logger()
 
@@ -74,7 +75,7 @@ async def create_subscription_for_user(access_token: str, user_id: str):
             logger.error(f"Errore creazione subscription SentItems per user {user_id}: {str(e)}")
 
     if not subscriptions:
-        raise Exception("Impossibile creare nessuna subscription per l'utente")
+        raise SubscriptionCreationException(provider="Microsoft", reason="Impossibile creare subscription per l'utente")
 
     logger.info(f"Create {len(subscriptions)} subscription(s) per user {user_id}")
     return subscriptions

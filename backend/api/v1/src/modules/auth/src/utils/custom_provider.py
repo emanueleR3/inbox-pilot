@@ -1,7 +1,12 @@
 import imaplib
 import smtplib
 import ssl
-from fastapi import HTTPException, status
+from src.handler_exception import (
+    IMAPConnectionException,
+    SMTPConnectionException,
+    IMAPAuthenticationException,
+    SMTPAuthenticationException
+)
 
 
 def test_imap_connection(server_imap: str, imap_port: int):
@@ -19,10 +24,7 @@ def test_imap_connection(server_imap: str, imap_port: int):
         imap.logout()
         return True
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Impossibile connettersi al server IMAP: " + str(e)
-        )
+        raise IMAPConnectionException(server=server_imap, reason=str(e))
 
 
 def test_imap_login(server_imap: str, imap_port: int, email: str, password: str):
@@ -42,15 +44,9 @@ def test_imap_login(server_imap: str, imap_port: int, email: str, password: str)
         imap.logout()
         return True
     except imaplib.IMAP4.error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Credenziali IMAP non valide"
-        )
+        raise IMAPAuthenticationException()
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Errore durante il tentativo di login IMAP: " + str(e)
-        )
+        raise IMAPConnectionException(server=server_imap, reason=f"Errore login: {str(e)}")
 
 
 def test_smtp_connection(server_smtp: str, smtp_port: int):
@@ -68,10 +64,7 @@ def test_smtp_connection(server_smtp: str, smtp_port: int):
         smtp.quit()
         return True
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Impossibile connettersi al server SMTP: " + str(e)
-        )
+        raise SMTPConnectionException(server=server_smtp, reason=str(e))
 
 
 def test_smtp_login(server_smtp: str, smtp_port: int, email: str, password: str):
@@ -81,10 +74,7 @@ def test_smtp_login(server_smtp: str, smtp_port: int, email: str, password: str)
         smtp.quit()
         return True
     except smtplib.SMTPAuthenticationError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Credenziali SMTP non valide"
-        )
+        raise SMTPAuthenticationException()
     except Exception:
         pass
 
@@ -96,12 +86,6 @@ def test_smtp_login(server_smtp: str, smtp_port: int, email: str, password: str)
         smtp.quit()
         return True
     except smtplib.SMTPAuthenticationError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Credenziali SMTP non valide"
-        )
+        raise SMTPAuthenticationException()
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Errore durante il tentativo di login SMTP: " + str(e)
-        )
+        raise SMTPConnectionException(server=server_smtp, reason=f"Errore login: {str(e)}")
