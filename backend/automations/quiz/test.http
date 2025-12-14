@@ -1,0 +1,108 @@
+### Quiz API Tests
+### Base URL for automations service
+
+@baseUrl = http://localhost:8010
+@serviceId = 29cd9df9-7607-4728-a1b0-db7678f9e3da
+
+### ============================================================================
+### Start Quiz
+### ============================================================================
+
+### Start a new quiz session
+# This will check if qdrant_collection exists for the service
+# If no collection: starts with initial business question
+# If collection exists: TODO (returns message about RAG)
+
+POST {{baseUrl}}/internal-quiz/start
+Content-Type: application/json
+
+{
+    "service_id": "{{serviceId}}"
+}
+
+### ============================================================================
+### Submit Answer
+### ============================================================================
+
+### Submit answer to initial business question
+# After starting, answer the first question about your business field
+# This will generate the bullet list of information to collect
+
+@sessionId = 0efb2f20-cd17-4d1d-8886-4b54a6ace84f
+
+POST {{baseUrl}}/internal-quiz/answer
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}",
+    "answer": "Siamo una RSA per anziani"
+}
+
+### Submit subsequent answers
+# Continue answering questions until all bullet items are completed
+# Each response includes the updated bullet_list with completion status
+
+POST {{baseUrl}}/internal-quiz/answer
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}",
+    "answer": "i servizi includono assistenza medica, attività ricreative e pasti personalizzati. Il prezzo varia in base al tipo di camera e ai servizi richiesti. Quindi è necessario fissare un appuntamento per una consulenza personalizzata."
+}
+
+### ============================================================================
+### Get State
+### ============================================================================
+
+### Get current session state
+# Returns full state including messages history and bullet list
+
+GET {{baseUrl}}/internal-quiz/{{sessionId}}/state
+
+### ============================================================================
+### Finish Quiz
+### ============================================================================
+
+### Force finish quiz early
+# Generates markdown with information collected so far
+
+POST {{baseUrl}}/internal-quiz/finish
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}"
+}
+
+### ============================================================================
+### List Sessions
+### ============================================================================
+
+### List all active sessions
+
+GET {{baseUrl}}/internal-quiz/sessions
+
+
+### ============================================================================
+### Example Flow
+### ============================================================================
+
+### 1. Start quiz
+# POST /internal-quiz/start with service_id
+# Response: {session_id, question, bullet_list: [], phase: "initial_question", ...}
+
+### 2. Answer initial question about business
+# POST /internal-quiz/answer with session_id and answer about your business
+# Response: {question, bullet_list: [{name: "servizi", completed: false}, ...], phase: "collecting", ...}
+
+### 3. Continue answering
+# POST /internal-quiz/answer with subsequent answers
+# bullet_list items become completed: true as information is collected
+# Response includes updated bullet_list each time
+
+### 4. Quiz completes when:
+# - All bullet_list items have completed: true
+# - OR max_turns (20) is reached
+# Response: {done: true, extracted_markdown: "...", bullet_list: [...]}
+
+### 5. (Optional) Force finish early
+# POST /internal-quiz/finish to end quiz and generate markdown with partial info

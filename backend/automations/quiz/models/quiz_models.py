@@ -1,10 +1,52 @@
+"""
+Quiz models for the quiz system.
+
+Contains Pydantic models for quiz data structures, API responses,
+and legacy models for backward compatibility.
+"""
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, List, Optional
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator, EmailStr, AnyUrl
+from pydantic import BaseModel, Field, EmailStr, AnyUrl
+
+
+# ============================================================================
+# Bullet List Models (for new quiz flow)
+# ============================================================================
+
+class BulletListItem(BaseModel):
+    """Single item in the bullet list checklist."""
+    name: str = Field(..., description="Name/title of the information category")
+    completed: bool = Field(default=False, description="Whether this item has been completed")
+    info: Optional[str] = Field(default=None, description="Information collected for this item")
+
+
+class QuizStartResponse(BaseModel):
+    """Response when starting the quiz."""
+    session_id: str = Field(..., description="Unique session identifier")
+    question: str = Field(..., description="The initial question to ask")
+    bullet_list: List[BulletListItem] = Field(default_factory=list, description="Current bullet list status")
+    phase: str = Field(..., description="Current quiz phase")
+    turn_count: int = Field(default=1, description="Current turn number")
+    max_turns: int = Field(default=20, description="Maximum turns allowed")
+
+
+class QuizAnswerResponse(BaseModel):
+    """Response after submitting an answer."""
+    done: bool = Field(default=False, description="Whether the quiz is complete")
+    question: Optional[str] = Field(default=None, description="Next question or final message")
+    bullet_list: List[BulletListItem] = Field(default_factory=list, description="Updated bullet list status")
+    phase: str = Field(..., description="Current quiz phase")
+    turn_count: int = Field(..., description="Current turn number")
+    max_turns: int = Field(..., description="Maximum turns allowed")
+    extracted_markdown: Optional[str] = Field(default=None, description="Final markdown if quiz is done")
+
+
+# ============================================================================
+# Legacy Models (kept for backward compatibility)
+# ============================================================================
 
 class Address(BaseModel):
     street: Optional[str] = None
@@ -12,6 +54,7 @@ class Address(BaseModel):
     region: Optional[str] = None
     postal_code: Optional[str] = None
     country: Optional[str] = None
+
 
 class CompanyInfo(BaseModel):
     company_name: Optional[str] = None
@@ -71,18 +114,35 @@ class CompanyInfo(BaseModel):
         
         return "\n".join(lines) if lines else "No company information collected yet."
 
+
 class Question(BaseModel):
     id: str = Field(..., description="Unique identifier for the question")
     text: str = Field(..., description="Question text shown to the user")
     helper_text: Optional[str] = None
-    order: Optional[int] = None	
+    order: Optional[int] = None
+
 
 class Answer(BaseModel):
     question_id: str
     value: Any
+
 
 class Quiz(BaseModel):
     id: Optional[str] = None
     questions: List[Question] = Field(default_factory=list)
     answers: Optional[List[Answer]] = None
     created_at: datetime = Field(default_factory=datetime.now)
+
+
+__all__ = [
+    # New quiz flow models
+    "BulletListItem",
+    "QuizStartResponse",
+    "QuizAnswerResponse",
+    # Legacy models
+    "Address",
+    "CompanyInfo",
+    "Question",
+    "Answer",
+    "Quiz",
+]
