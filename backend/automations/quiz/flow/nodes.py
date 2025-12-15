@@ -16,6 +16,7 @@ from automations.quiz.models.llm_response import (
     CollectedInfoItem,
     NewBulletItem,
     ValidationResponse,
+    ContextEditResponse,
 )
 from automations.quiz.prompts import (
     VALIDATE_BUSINESS_SYSTEM_PROMPT,
@@ -26,6 +27,9 @@ from automations.quiz.prompts import (
     PROCESS_ANSWER_USER_PROMPT_TEMPLATE,
     GENERATE_MARKDOWN_SYSTEM_PROMPT,
     GENERATE_MARKDOWN_USER_PROMPT_TEMPLATE,
+    REVIEW_CONTEXT_START_MESSAGE,
+    EDIT_CONTEXT_SYSTEM_PROMPT,
+    EDIT_CONTEXT_USER_PROMPT_TEMPLATE,
     INITIAL_QUESTION,
     WITH_CONTEXT_TODO_MESSAGE,
 )
@@ -163,45 +167,46 @@ def generate_plan_node(state: QuizState) -> QuizState:
     
     print(f"   📝 Business field: {business_description[:100]}...")
 
-    # Domain shortcut: RSA / casa di riposo / struttura per anziani
-    business_lower = (business_description or "").lower()
-    rsa_keywords = [
-        "rsa",
-        "residenza sanitaria assistenziale",
-        "casa di riposo",
-        "struttura per anziani",
-        "anziani",
-    ]
+    def _normalize_category_name(name: str) -> str:
+        return re.sub(r"\s+", " ", (name or "").strip())
 
-    if any(k in business_lower for k in rsa_keywords):
-        print("   🏥 Detected RSA domain, using curated plan")
-        curated = [
-            "Servizi sanitari e assistenziali",
-            "Assistenza medica e infermieristica (H24)",
-            "Rette, costi e cosa include",
-            "Accreditamento ASL e quota coperta",
-            "Processo di ammissione",
-            "Tipologie di camere e servizi inclusi",
-            "Orari visite e modalità di accesso",
-            "Attività ricreative e socializzazione",
-            "Personale e qualifiche",
-            "Sicurezza, igiene e gestione farmaci",
+    def _business_sells_products(desc: str) -> bool:
+        d = (desc or "").lower()
+        product_signals = [
+            "e-commerce",
+            "ecommerce",
+            "shop",
+            "store",
+            "negozio",
+            "vendita",
+            "vendiamo",
+            "prodotti",
+            "articoli",
+            "catalogo",
+            "ordini",
+            "spedizione",
+            "spedizioni",
+            "consegna",
+            "consegne",
+            "merce",
+            "magazzino",
+            "carrello",
         ]
+        return any(k in d for k in product_signals)
 
-        state["bullet_list"] = [{"name": name, "completed": False, "info": None} for name in curated]
-        first_question = "Quali servizi sanitari e assistenziali offrite agli ospiti?"
-        state["current_response"] = first_question
-        state["phase"] = QuizPhases.COLLECTING
-        state["messages"].append({
-            "role": "assistant",
-            "content": first_question,
-        })
-        state["turn_count"] += 1
+    def _should_keep_category(name: str, desc: str) -> bool:
+        """Generic filter for obviously irrelevant categories.
 
-        print(f"   ✅ Curated plan generated with {len(curated)} categories")
-        for item in curated:
-            print(f"      - {item}")
-        return state
+        We keep this intentionally conservative: only drop categories that
+        are clearly out-of-context for many service businesses.
+        """
+        n = (name or "").strip().lower()
+
+        # Returns / warranty only if the business likely sells products.
+        if any(k in n for k in ["reso", "resi", "garanzia", "garanzie", "rimborso", "rimborsi"]):
+            return _business_sells_products(desc)
+
+        return True
     
     llm = get_llm(temperature=0.3)
     structured_llm = llm.with_structured_output(PlanResponse, method="function_calling")
@@ -216,11 +221,21 @@ def generate_plan_node(state: QuizState) -> QuizState:
             {"role": "user", "content": user_prompt}
         ])
         
-        # Convert to state format
-        bullet_list: List[BulletItem] = [
-            {"name": item.name, "completed": False, "info": None}
-            for item in response.bullet_list
-        ]
+        # Convert to state format + normalize + deduplicate + filter
+        seen = set()
+        bullet_list: List[BulletItem] = []
+        for item in response.bullet_list:
+            name = _normalize_category_name(item.name)
+            if not name:
+                continue
+            key = name.lower()
+            if key in seen:
+                continue
+            if not _should_keep_category(name, business_description):
+                print(f"   🚫 Filtered category (not relevant): {name}")
+                continue
+            seen.add(key)
+            bullet_list.append({"name": name, "completed": False, "info": None})
         
         state["bullet_list"] = bullet_list
         state["current_response"] = response.answer
@@ -324,6 +339,43 @@ def process_answer_node(state: QuizState) -> QuizState:
         return state
     
     print(f"   📝 User answer: {last_user_message[:100]}...")
+
+    # Fast-path: user wants to add a new bullet item but didn't provide a name.
+    # This avoids relying on the LLM to set needs_name_for_new_item correctly.
+    def _wants_add_item_without_name(text: str) -> bool:
+        t = (text or "").strip().lower()
+        if not t:
+            return False
+        add_intent = any(k in t for k in ["voglio aggiungere", "aggiungi", "aggiungere"])
+        if not add_intent or "punto" not in t:
+            return False
+
+        # If they used a clear separator, assume a name is present.
+        if ":" in t or "-" in t:
+            return False
+
+        tokens = re.split(r"\s+", re.sub(r"[^\w\s]", " ", t))
+        stop = {"della", "dell", "del", "di", "da", "alla", "nella", "sulla", "dello", "lista"}
+        try:
+            idx = tokens.index("punto")
+        except ValueError:
+            return False
+        next_token = tokens[idx + 1] if idx + 1 < len(tokens) else ""
+        # If next token is empty or a stopword, there's no explicit name.
+        if not next_token or next_token in stop:
+            return True
+        # If it's just a generic adjective (altro/nuovo), still no name.
+        if next_token in {"altro", "nuovo", "ulteriore"}:
+            return True
+        # Otherwise, assume they provided a name.
+        return False
+
+    if _wants_add_item_without_name(last_user_message):
+        clarification = "Certo. Come vuoi chiamare il nuovo punto che vuoi aggiungere alla lista?"
+        state["current_response"] = clarification
+        state["messages"].append({"role": "assistant", "content": clarification})
+        state["turn_count"] += 1
+        return state
     
     llm = get_llm(temperature=0.2)
     structured_llm = llm.with_structured_output(CollectResponse, method="function_calling")
@@ -484,7 +536,15 @@ def process_answer_node(state: QuizState) -> QuizState:
         def _fallback_next_question(items: List[BulletItem]) -> str:
             next_cat = _next_incomplete_category(items)
             if next_cat:
-                return f"Perfetto. Per completare il profilo mi serve anche: {next_cat}. Mi dai qualche dettaglio?"
+                return (
+                    f"Perfetto. Ora mi serve completare la sezione: {next_cat}.\n\n"
+                    "Per aiutarmi, nella risposta includi se puoi:\n"
+                    "- Cosa include esattamente (dettagli e varianti)\n"
+                    "- Per chi è pensato / a chi si rivolge\n"
+                    "- Eventuali condizioni, limiti, prerequisiti o documenti richiesti\n"
+                    "- Esempi pratici o casi tipici (se ci sono)\n"
+                    "- Qualsiasi nota importante che i clienti chiedono spesso"
+                )
             return "Perfetto, direi che abbiamo completato tutto."
 
         proposed_answer = response.answer or ""
@@ -503,7 +563,12 @@ def process_answer_node(state: QuizState) -> QuizState:
 
         should_override_question = bool(remove_set) or bool(removed_this_turn) or is_repeat or bool(removed_match) or refers_to_missing_category
 
-        final_answer = _fallback_next_question(updated_bullet_list) if should_override_question else proposed_answer
+        if response.needs_name_for_new_item:
+            final_answer = (proposed_answer or "").strip() or "Come vuoi chiamare il nuovo punto che vuoi aggiungere alla lista?"
+        elif should_override_question or not (proposed_answer or "").strip():
+            final_answer = _fallback_next_question(updated_bullet_list)
+        else:
+            final_answer = proposed_answer
 
         state["current_response"] = final_answer
         state["messages"].append({
@@ -627,3 +692,105 @@ def with_context_node(state: QuizState) -> QuizState:
     state["final_markdown"] = ""
     
     return state
+
+
+def start_review_context_node(state: QuizState) -> QuizState:
+    """Start the post-quiz review chat showing the saved markdown and asking for edits/confirmation."""
+    state["phase"] = QuizPhases.REVIEWING
+    state["is_done"] = False
+    state["turn_count"] = 0
+    state["max_turns"] = 30
+
+    state["current_response"] = REVIEW_CONTEXT_START_MESSAGE
+    state["messages"].append({
+        "role": "assistant",
+        "content": REVIEW_CONTEXT_START_MESSAGE,
+    })
+    return state
+
+
+def _is_confirmation_message(text: str) -> bool:
+    normalized = (text or "").strip().lower()
+    if not normalized:
+        return False
+    # Keep it strict to avoid accidental confirmations
+    patterns = [
+        r"^ok\s*,?\s*salva\.?$",
+        r"^ok\s+salva\.?$",
+        r"^confermo\.?$",
+        r"^va\s+bene\s*,?\s*salva\.?$",
+        r"^perfetto\s*,?\s*salva\.?$",
+    ]
+    return any(re.match(p, normalized) for p in patterns)
+
+
+def _looks_like_full_markdown(text: str) -> bool:
+    t = (text or "").lstrip()
+    if len(t) < 80:
+        return False
+    return t.startswith("#") or ("\n## " in t) or ("\n### " in t)
+
+
+def edit_context_node(state: QuizState, user_message: str) -> QuizState:
+    """Apply user edits to the markdown context until they confirm it can be saved."""
+    # Max 30 user turns in this review chat
+    if state["turn_count"] >= state["max_turns"]:
+        state["context_confirmed"] = True
+        state["is_done"] = True
+        state["phase"] = QuizPhases.COMPLETED
+        state["current_response"] = "Ho raggiunto il numero massimo di modifiche. Ho salvato l'ultima versione disponibile."
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        return state
+
+    # Fast path: explicit confirmation without LLM
+    if _is_confirmation_message(user_message):
+        state["context_confirmed"] = True
+        state["is_done"] = True
+        state["phase"] = QuizPhases.COMPLETED
+        state["current_response"] = "Perfetto. Ho salvato il contesto aziendale definitivo."
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        return state
+
+    # Fast path: user pasted a full markdown replacement
+    if _looks_like_full_markdown(user_message):
+        state["final_markdown"] = user_message.strip()
+        state["current_response"] = (
+            "Ricevuto. Ho aggiornato il testo con la tua versione. "
+            "Se è tutto corretto scrivi: \"OK, salva\"."
+        )
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        state["turn_count"] += 1
+        return state
+
+    llm = get_llm(temperature=0.2)
+    structured_llm = llm.with_structured_output(ContextEditResponse, method="function_calling")
+
+    current_markdown = state.get("final_markdown") or ""
+    user_prompt = EDIT_CONTEXT_USER_PROMPT_TEMPLATE.format(
+        current_markdown=current_markdown,
+        user_request=user_message,
+    )
+
+    try:
+        response: ContextEditResponse = structured_llm.invoke([
+            {"role": "system", "content": EDIT_CONTEXT_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ])
+
+        state["final_markdown"] = (response.updated_markdown or current_markdown).strip()
+        state["current_response"] = response.answer
+
+        if response.is_confirmed:
+            state["context_confirmed"] = True
+            state["is_done"] = True
+            state["phase"] = QuizPhases.COMPLETED
+
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        state["turn_count"] += 1
+        return state
+    except Exception as e:
+        state["error"] = str(e)
+        state["current_response"] = "Non sono riuscito ad applicare la modifica. Puoi riprovare in modo più specifico?"
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        state["turn_count"] += 1
+        return state

@@ -43,6 +43,10 @@ class QuizState(TypedDict):
     
     # Final output
     final_markdown: Optional[str]
+
+    # Post-quiz review stage
+    context_draft_saved: bool
+    context_confirmed: bool
     
     # Status flags
     is_done: bool
@@ -70,6 +74,9 @@ def create_initial_state(
         "messages": [],
         "current_response": None,
         "final_markdown": None,
+
+        "context_draft_saved": False,
+        "context_confirmed": False,
         "is_done": False,
         "error": None,
     }

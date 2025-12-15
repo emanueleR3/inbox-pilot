@@ -153,6 +153,7 @@ class QuizControllerV2:
                 "messages": state["messages"],
                 "is_done": state["is_done"],
                 "has_context": state.get("has_qdrant_collection", False),
+                "final_markdown": state.get("final_markdown"),
             }
             
         except HTTPException:

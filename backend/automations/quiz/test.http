@@ -1,17 +1,16 @@
-### Quiz API Tests
+### Quiz API Tests (END-TO-END)
 ### Base URL for automations service
 
 @baseUrl = http://localhost:8010
-@serviceId = 29cd9df9-7607-4728-a1b0-db7678f9e3da
+@serviceId = INSERIRE
+
+# NOTE:
+# 1) Esegui “Start Quiz” e copia il session_id nella variabile @sessionId.
+# 2) Le domande cambiano in base al business: qui testiamo soprattutto la logica (skip/add/remove + review).
 
 ### ============================================================================
 ### Start Quiz
 ### ============================================================================
-
-### Start a new quiz session
-# This will check if qdrant_collection exists for the service
-# If no collection: starts with initial business question
-# If collection exists: TODO (returns message about RAG)
 
 POST {{baseUrl}}/internal-quiz/start
 Content-Type: application/json
@@ -21,51 +20,121 @@ Content-Type: application/json
 }
 
 ### ============================================================================
-### Submit Answer
+### Submit Answer (Collecting)
 ### ============================================================================
 
-### Submit answer to initial business question
-# After starting, answer the first question about your business field
-# This will generate the bullet list of information to collect
+@sessionId = ee3e1fea-4b63-4cd6-a293-d70763bd3259
 
-@sessionId = 0efb2f20-cd17-4d1d-8886-4b54a6ace84f
-
+### 1) Business description (generates plan)
 POST {{baseUrl}}/internal-quiz/answer
 Content-Type: application/json
 
 {
     "session_id": "{{sessionId}}",
-    "answer": "Siamo una RSA per anziani"
+    "answer": "è preferibile avere tutta la documentazione necessaria. Offriamo supporto post consulenza, in modo da garantire un'assistenza completa"
 }
 
-### Submit subsequent answers
-# Continue answering questions until all bullet items are completed
-# Each response includes the updated bullet_list with completion status
-
+### 2) Remove a point
 POST {{baseUrl}}/internal-quiz/answer
 Content-Type: application/json
 
 {
     "session_id": "{{sessionId}}",
-    "answer": "i servizi includono assistenza medica, attività ricreative e pasti personalizzati. Il prezzo varia in base al tipo di camera e ai servizi richiesti. Quindi è necessario fissare un appuntamento per una consulenza personalizzata."
+    "answer": "Rimuovi il punto Processo di consulenza iniziale"
+}
+
+### 3) Add a new point WITH a name
+POST {{baseUrl}}/internal-quiz/answer
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}",
+    "answer": "Aggiungi anche un punto: Convenzioni e patrocini (es. gratuito patrocinio, assicurazioni legali)"
+}
+
+### 4) Add a new point WITHOUT a name (should ask how to call it)
+POST {{baseUrl}}/internal-quiz/answer
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}",
+    "answer": "Voglio aggiungere un altro punto della lista."
+}
+
+### 5) Update an EXISTING category using 'aggiungi/integra' wording (must UPDATE, not ADD)
+POST {{baseUrl}}/internal-quiz/answer
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}",
+    "answer": "Per quanto riguarda i prezzi: non ho un listino fisso. È necessario fissare un appuntamento per poter fornire un preventivo accurato."
+}
+
+### 6) Skip explicitly (info must stay null, completed=true)
+POST {{baseUrl}}/internal-quiz/answer
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}",
+    "answer": "Questo punto non lo voglio configurare, lo gestiamo manualmente."
+}
+
+### 7) Batch answer to complete more items faster
+POST {{baseUrl}}/internal-quiz/answer
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}",
+    "answer": "Orari: lun-ven 9-13 e 15-19. Contatti: email studio@example.it, tel 0123456789, indirizzo Via Roma 1."
 }
 
 ### ============================================================================
-### Get State
+### Get State (debug)
 ### ============================================================================
-
-### Get current session state
-# Returns full state including messages history and bullet list
 
 GET {{baseUrl}}/internal-quiz/{{sessionId}}/state
 
 ### ============================================================================
-### Finish Quiz
+### Review / Edit Context (NEW FLOW)
 ### ============================================================================
 
-### Force finish quiz early
-# Generates markdown with information collected so far
+### Quando la raccolta è completa:
+### - phase = "reviewing"
+### - extracted_markdown valorizzato
+### - question contiene il messaggio di revisione ("OK, salva")
 
+### R1) Ask to edit the context (LLM applies changes)
+POST {{baseUrl}}/internal-quiz/answer
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}",
+    "answer": "Aggiungi che gestiamo anche consulenza stragiudiziale e redazione contratti."
+}
+
+### R2) Paste a full markdown replacement (fast-path)
+POST {{baseUrl}}/internal-quiz/answer
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}",
+    "answer": "Aggiungi relativamwente agli orari di apertura, che siamo chiusi nei giorni rossi del calendario e per le festività nazionali."
+}
+
+### R3) Confirm and save (closes the session)
+POST {{baseUrl}}/internal-quiz/answer
+Content-Type: application/json
+
+{
+    "session_id": "{{sessionId}}",
+    "answer": "OK, salva"
+}
+
+### ============================================================================
+### Finish Quiz (optional)
+### ============================================================================
+
+### Force finish quiz early (generates markdown + starts review)
 POST {{baseUrl}}/internal-quiz/finish
 Content-Type: application/json
 
@@ -73,36 +142,5 @@ Content-Type: application/json
     "session_id": "{{sessionId}}"
 }
 
-### ============================================================================
-### List Sessions
-### ============================================================================
-
-### List all active sessions
-
+### List active sessions
 GET {{baseUrl}}/internal-quiz/sessions
-
-
-### ============================================================================
-### Example Flow
-### ============================================================================
-
-### 1. Start quiz
-# POST /internal-quiz/start with service_id
-# Response: {session_id, question, bullet_list: [], phase: "initial_question", ...}
-
-### 2. Answer initial question about business
-# POST /internal-quiz/answer with session_id and answer about your business
-# Response: {question, bullet_list: [{name: "servizi", completed: false}, ...], phase: "collecting", ...}
-
-### 3. Continue answering
-# POST /internal-quiz/answer with subsequent answers
-# bullet_list items become completed: true as information is collected
-# Response includes updated bullet_list each time
-
-### 4. Quiz completes when:
-# - All bullet_list items have completed: true
-# - OR max_turns (20) is reached
-# Response: {done: true, extracted_markdown: "...", bullet_list: [...]}
-
-### 5. (Optional) Force finish early
-# POST /internal-quiz/finish to end quiz and generate markdown with partial info

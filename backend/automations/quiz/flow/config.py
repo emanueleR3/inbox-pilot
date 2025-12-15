@@ -47,4 +47,5 @@ class QuizPhases:
     INITIAL_QUESTION = "initial_question"
     PLANNING = "planning"
     COLLECTING = "collecting"
+    REVIEWING = "reviewing"
     COMPLETED = "completed"

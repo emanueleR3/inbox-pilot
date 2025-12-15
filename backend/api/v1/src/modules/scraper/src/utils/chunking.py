@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import List
+import hashlib
 
 from src.modules.scraper.src.models.config import (
     MAX_CHARS,
@@ -20,6 +21,9 @@ class Chunk:
     page_index: int
     chunk_index: int
     text: str
+    deprecated: bool = False
+    source: str = ""
+    content_hash: str = ""
 
 
 def chunk_text(text: str, max_chars: int = MAX_CHARS, overlap: int = OVERLAP_CHARS) -> List[str]:
@@ -134,7 +138,10 @@ def chunk_pages(pages: List[dict]) -> List[Chunk]:
                 title=title,
                 page_index=page_index,
                 chunk_index=chunk_index,
-                text=chunk_text_content
+                text=chunk_text_content,
+                deprecated=False,
+                source="scraped",
+                content_hash=hashlib.sha256(chunk_text_content.encode('utf-8')).hexdigest(),
             )
             all_chunks.append(chunk)
     

@@ -46,8 +46,15 @@ class CollectResponse(BaseModel):
     items_to_add: List[NewBulletItem] = Field(default=[], description="New categories to add")
     items_to_remove: List[str] = Field(default=[], description="Categories to remove")
     needs_name_for_new_item: bool = Field(default=False, description="True if user wants to add but didn't specify name")
-    answer: str = Field(description="Next question or response")
+    answer: str = Field(default="", description="Next question or response")
     all_completed: bool = Field(default=False, description="All items done")
+
+
+class ContextEditResponse(BaseModel):
+    """Response for post-quiz context editing."""
+    updated_markdown: str = Field(description="Updated markdown context after applying the user's request")
+    answer: str = Field(description="Assistant message to the user")
+    is_confirmed: bool = Field(default=False, description="True if user confirmed the context is ready to be saved")
 
 
 __all__ = [
@@ -57,4 +64,5 @@ __all__ = [
     "CollectedInfoItem",
     "NewBulletItem",
     "CollectResponse",
+    "ContextEditResponse",
 ]

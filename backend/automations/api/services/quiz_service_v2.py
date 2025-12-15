@@ -5,7 +5,7 @@ This service manages quiz sessions using a simple state machine pattern
 instead of LangGraph.
 """
 import uuid
-from typing import Optional
+from typing import Optional, List
 
 from quiz.flow.quiz_flow import QuizFlow
 from quiz.flow.state import QuizState
@@ -103,12 +103,27 @@ async def submit_answer(session_id: str, user_answer: str) -> dict:
     flow = get_session(session_id)
     if not flow:
         raise ValueError(f"Session not found: {session_id}")
+
+    previous_state = flow.get_state()
+    previous_plan: List[str] = []
+    if previous_state:
+        previous_plan = [item.get("name") for item in previous_state.get("bullet_list", []) if item.get("name")]
     
     # Process the answer
     state = flow.answer(user_answer)
+
+    # Persist informations_plan when generated or changed
+    current_plan: List[str] = [item.get("name") for item in state.get("bullet_list", []) if item.get("name")]
+    if current_plan != previous_plan:
+        await persist_informations_plan(state["service_id"], current_plan)
     
-    # If quiz is done, persist the result
-    if state["is_done"] and state.get("final_markdown"):
+    # Persist the first generated markdown as a draft (once)
+    if state.get("final_markdown") and not state.get("context_draft_saved", False):
+        await persist_quiz_result(state)
+        state["context_draft_saved"] = True
+
+    # If user confirmed, persist final version and close session
+    if state.get("context_confirmed"):
         await persist_quiz_result(state)
         delete_session(session_id)
     
@@ -131,10 +146,15 @@ async def force_finish_quiz(session_id: str) -> dict:
     
     # Force finish
     state = flow.force_finish()
+
+    # Persist informations_plan on force finish as well
+    current_plan: List[str] = [item.get("name") for item in state.get("bullet_list", []) if item.get("name")]
+    await persist_informations_plan(state["service_id"], current_plan)
     
-    # Persist the result
-    await persist_quiz_result(state)
-    delete_session(session_id)
+    # Persist draft markdown and keep session alive for review
+    if state.get("final_markdown") and not state.get("context_draft_saved", False):
+        await persist_quiz_result(state)
+        state["context_draft_saved"] = True
     
     return _build_response(state)
 
@@ -207,12 +227,21 @@ async def persist_quiz_result(state: QuizState) -> None:
         "information": state.get("final_markdown", ""),
         "config_completed": True,
         "activated": True,
-        "quiz_q_a": qa_history
+        "quiz_q_a": qa_history,
+        "informations_plan": [item.get("name") for item in state.get("bullet_list", []) if item.get("name")],
     }
     
     supabase.table("subscription_services").update(update_data).eq(
         "service_id", state["service_id"]
     ).execute()
+
+
+async def persist_informations_plan(service_id: str, informations_plan: List[str]) -> None:
+    """Persist the plan (titles only) into subscription_services.informations_plan."""
+    supabase = get_supabase_client()
+    supabase.table("subscription_services").update({
+        "informations_plan": informations_plan,
+    }).eq("service_id", service_id).execute()
 
 
 async def append_quiz_history(service_id: str, question: str, answer: str) -> None:

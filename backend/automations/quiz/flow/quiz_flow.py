@@ -27,6 +27,8 @@ from .nodes import (
     check_completion_node,
     generate_markdown_node,
     with_context_node,
+    start_review_context_node,
+    edit_context_node,
 )
 
 
@@ -122,6 +124,12 @@ class QuizFlow:
             # If done, generate markdown
             if self.state["is_done"]:
                 self.state = generate_markdown_node(self.state)
+                # Start review chat
+                self.state = start_review_context_node(self.state)
+
+        elif self.state["phase"] == QuizPhases.REVIEWING:
+            # Post-quiz review/edit chat
+            self.state = edit_context_node(self.state, user_answer)
         
         return self.state
     
@@ -138,6 +146,7 @@ class QuizFlow:
         self.state["is_done"] = True
         self.state["phase"] = QuizPhases.COMPLETED
         self.state = generate_markdown_node(self.state)
+        self.state = start_review_context_node(self.state)
         return self.state
     
     def get_state(self) -> Optional[QuizState]:

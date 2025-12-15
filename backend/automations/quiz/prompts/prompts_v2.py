@@ -29,7 +29,13 @@ Regole:
 
 Esempi (adatta al settore): servizi offerti, prezzi/rette, orari, contatti, modalità di accesso/prenotazione, processo (ammissione/acquisto), supporto/assistenza.
 
-Domande al TITOLARE su cosa OFFRE (mai "cosa cercate"). Brevi e dirette."""
+Stile delle domande:
+- La domanda NON deve essere telegrafica.
+- Nel campo answer scrivi SEMPRE:
+    1) la domanda principale per la prossima categoria
+    2) una mini-scaletta (3-5 punti) su cosa e come rispondere per quella categoria (esempi di dettagli utili).
+
+Domande al TITOLARE su cosa OFFRE (mai "cosa cercate")."""
 
 GENERATE_PLAN_USER_PROMPT_TEMPLATE = """Settore: {business_description}
 
@@ -63,9 +69,15 @@ REGOLE DI SICUREZZA (IMPORTANTISSIME):
 - NON segnare all_completed=true a meno che TUTTE le categorie siano davvero complete.
 - items_to_remove SOLO se l'utente lo chiede esplicitamente. Se l'utente dice "rimuovi questo punto" senza specificare il nome, rimuovi SOLO la categoria della domanda corrente.
 
-Se utente vuole aggiungere senza nome → needs_name_for_new_item=true.
+Se utente vuole aggiungere senza nome → needs_name_for_new_item=true E in answer devi chiedere il nome (es. "Come vuoi chiamare il nuovo punto?").
 
-Domande BREVI su cosa OFFRE. Una categoria alla volta."""
+STILE DELLA PROSSIMA DOMANDA (campo answer):
+- NON essere troppo breve.
+- Fai 1 domanda alla volta, sulla prossima categoria da completare.
+- Includi SEMPRE una mini-scaletta (3-5 punti) che guida l'utente su cosa inserire per quella categoria.
+    Esempio formato:
+    "Domanda: ...\n\nPer aiutarmi, includi se puoi:\n- ...\n- ...\n- ..."
+"""
 
 PROCESS_ANSWER_USER_PROMPT_TEMPLATE = """Settore: {business_field}
 
@@ -90,6 +102,39 @@ Info:
 {collected_info}
 
 Genera MD completo."""
+
+
+# ============================================================================
+# Review / Edit Context (post-quiz)
+# ============================================================================
+
+REVIEW_CONTEXT_START_MESSAGE = (
+    "Questa è la prima versione del contesto aziendale che ho salvato.\n"
+    "Puoi:\n"
+    "- modificare direttamente il testo (incollando la versione corretta), oppure\n"
+    "- dirmi cosa vuoi eliminare, modificare o aggiungere.\n\n"
+    "Quando ti sembra tutto corretto, scrivi: \"OK, salva\"."
+)
+
+EDIT_CONTEXT_SYSTEM_PROMPT = """Aggiorna il Markdown del contesto aziendale.
+
+Regole:
+- Applica fedelmente le richieste dell'utente (aggiunte/rimozioni/correzioni).
+- Se l'utente incolla un nuovo Markdown completo, usa quello.
+- Non inventare dati.
+- Mantieni stile Markdown pulito e sezioni coerenti.
+
+Conferma:
+- is_confirmed=true SOLO se l'utente dice chiaramente che va bene e che vuoi salvare (es. "OK, salva", "confermo").
+"""
+
+EDIT_CONTEXT_USER_PROMPT_TEMPLATE = """Markdown attuale:
+{current_markdown}
+
+Richiesta utente:
+{user_request}
+
+Restituisci markdown aggiornato e un messaggio breve."""
 
 
 # ============================================================================
@@ -120,4 +165,7 @@ __all__ = [
     "GENERATE_MARKDOWN_USER_PROMPT_TEMPLATE",
     "INITIAL_QUESTION",
     "WITH_CONTEXT_TODO_MESSAGE",
+    "REVIEW_CONTEXT_START_MESSAGE",
+    "EDIT_CONTEXT_SYSTEM_PROMPT",
+    "EDIT_CONTEXT_USER_PROMPT_TEMPLATE",
 ]
