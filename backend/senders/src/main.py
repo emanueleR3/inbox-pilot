@@ -8,7 +8,7 @@ import logging
 from fastapi import FastAPI
 import uvicorn
 from dotenv import load_dotenv
-from senders.src.handler_exception import register_exception_handlers
+from src.handler_exception import register_exception_handlers
 
 load_dotenv()
 
