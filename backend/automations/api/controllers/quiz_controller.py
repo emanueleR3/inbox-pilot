@@ -1,4 +1,4 @@
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from automations.api.services.quiz_service import (
     create_session,
     get_session,
@@ -6,6 +6,21 @@ from automations.api.services.quiz_service import (
     append_quiz_answer,
     persist_quiz_result,
     get_session_keys,
+)
+from automations.api.handler_exception import (
+    QuizEmailRequiredException,
+    QuizErrorAppendingAnswerException,
+    QuizErrorFinishingException,
+    QuizErrorGettingStateException,
+    QuizErrorListingSessionsException,
+    QuizErrorPersistingResultException,
+    QuizErrorStartingException,
+    QuizErrorSubmittingAnswerException,
+    QuizNoQuestionsToAnswerException,
+    QuizServiceIdRequiredException,
+    QuizSessionAndAnswerRequiredException,
+    QuizSessionIdRequiredException,
+    QuizSessionNotFoundException,
 )
 from automations.quiz.models import Question, Answer
 
@@ -15,10 +30,7 @@ class QuizController:
 
     def start_quiz(self, service_id: str):
         if not service_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Service ID richiesto"
-            )
+            raise QuizServiceIdRequiredException()
 
         try:
             sess = create_session(service_id)
@@ -37,38 +49,23 @@ class QuizController:
                 "max_questions": sess.chain.max_questions,
             }
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Errore durante l'avvio del quiz: {str(e)}"
-            )
+            raise QuizErrorStartingException(e)
 
     def submit_answer(self, session_id: str, email: str, value: str):
 
         if not session_id or not value:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Session ID e risposta sono obbligatori"
-            )
+            raise QuizSessionAndAnswerRequiredException()
 
         if not email:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email richiesta"
-            )
+            raise QuizEmailRequiredException()
 
         try:
             sess = get_session(session_id)
             if not sess:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Sessione non trovata"
-                )
+                raise QuizSessionNotFoundException()
 
             if not sess.quiz.questions:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Nessuna domanda da rispondere. Avvia prima il quiz."
-                )
+                raise QuizNoQuestionsToAnswerException()
 
             answer = Answer(question_id=sess.quiz.questions[-1].id, value=value)
             sess.quiz.answers.append(answer)
@@ -76,10 +73,7 @@ class QuizController:
             try:
                 append_quiz_answer(sess.company_id, sess.quiz.questions[-1], answer)
             except Exception:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Errore durante l'aggiunta della risposta al quiz"
-                )
+                raise QuizErrorAppendingAnswerException()
 
             next_q = sess.chain.generate_next_question(
                 sess.quiz.questions, sess.quiz.answers, sess.company_info
@@ -90,10 +84,7 @@ class QuizController:
                 try:
                     persist_quiz_result(email, markdown)
                 except Exception:
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail="Errore durante la persistenza del risultato del quiz"
-                    )
+                    raise QuizErrorPersistingResultException()
                 delete_session(sess.session_id)
                 return {
                     "done": True,
@@ -115,24 +106,15 @@ class QuizController:
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Errore durante l'invio della risposta: {str(e)}"
-            )
+            raise QuizErrorSubmittingAnswerException(e)
 
     def get_state(self, session_id: str):
         if not session_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Session ID richiesto"
-            )
+            raise QuizSessionIdRequiredException()
         try:
             sess = get_session(session_id)
             if not sess:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Sessione non trovata"
-                )
+                raise QuizSessionNotFoundException()
             return {
                 "session_id": session_id,
                 "questions": [
@@ -149,30 +131,18 @@ class QuizController:
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Errore durante il recupero dello stato: {str(e)}"
-            )
+            raise QuizErrorGettingStateException(e)
 
     def finish_quiz(self, session_id: str, email: str):
         if not session_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Session ID richiesto"
-            )
+            raise QuizSessionIdRequiredException()
         try:
             sess = get_session(session_id)
             if not sess:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Sessione non trovata"
-                )
+                raise QuizSessionNotFoundException()
                 
             if not email:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Email richiesta"
-                )
+                raise QuizEmailRequiredException()
             markdown = sess.chain.extract_total_company_info(sess.company_info, sess.quiz)
             try:
                 persist_quiz_result(email, markdown)
@@ -183,16 +153,10 @@ class QuizController:
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Errore durante la conclusione del quiz: {str(e)}"
-            )
+            raise QuizErrorFinishingException(e)
 
     def list_sessions(self):
         try:
             return list(get_session_keys())
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Errore durante il recupero delle sessioni: {str(e)}"
-            )
+            raise QuizErrorListingSessionsException(e)

@@ -1,8 +1,3 @@
-"""
-Eccezioni HTTP personalizzate per l'API.
-Ogni eccezione eredita da HTTPException di FastAPI per garantire risposte HTTP corrette.
-"""
-
 from fastapi import HTTPException, status
 from typing import Optional
 
@@ -12,10 +7,6 @@ from typing import Optional
 # =============================================================================
 
 class APIException(HTTPException):
-    """
-    Eccezione base per tutte le eccezioni dell'API.
-    Fornisce un pattern comune per la gestione degli errori.
-    """
     def __init__(
         self, 
         status_code: int, 
@@ -30,48 +21,41 @@ class APIException(HTTPException):
 # =============================================================================
 
 class BadRequestException(APIException):
-    """Richiesta malformata o parametri non validi."""
     def __init__(self, detail: str = "Richiesta non valida"):
         super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
 class MissingFieldException(BadRequestException):
-    """Campi obbligatori mancanti nella richiesta."""
     def __init__(self, fields: list[str]):
         detail = f"Campi obbligatori mancanti: {', '.join(fields)}"
         super().__init__(detail=detail)
 
 
 class InvalidFieldException(BadRequestException):
-    """Campo con valore non valido."""
     def __init__(self, field: str, reason: str = "valore non valido"):
         detail = f"Campo '{field}' non valido: {reason}"
         super().__init__(detail=detail)
 
 
 class InvalidEmailException(BadRequestException):
-    """Formato email non valido."""
     def __init__(self, email: str = None):
         detail = "Formato email non valido" if not email else f"Email non valida: {email}"
         super().__init__(detail=detail)
 
 
 class InvalidDateException(BadRequestException):
-    """Formato data non valido."""
     def __init__(self, date_field: str = "data"):
         detail = f"Formato {date_field} non valido. Utilizzare formato ISO 8601"
         super().__init__(detail=detail)
 
 
 class InvalidPortException(BadRequestException):
-    """Porta non valida (deve essere un intero)."""
     def __init__(self, port_type: str = "porta"):
         detail = f"La {port_type} deve essere un numero intero valido"
         super().__init__(detail=detail)
 
 
 class SubscriptionIdRequiredException(BadRequestException):
-    """Subscription ID mancante o non valido."""
     def __init__(self):
         super().__init__(detail="subscription_id è obbligatorio")
 
@@ -81,7 +65,6 @@ class SubscriptionIdRequiredException(BadRequestException):
 # =============================================================================
 
 class UnauthorizedException(APIException):
-    """Autenticazione fallita o credenziali non valide."""
     def __init__(self, detail: str = "Non autorizzato"):
         super().__init__(
             status_code=status.HTTP_401_UNAUTHORIZED, 
@@ -91,27 +74,23 @@ class UnauthorizedException(APIException):
 
 
 class InvalidTokenException(UnauthorizedException):
-    """Token di accesso non valido o scaduto."""
     def __init__(self, provider: str = None):
         detail = f"Token {provider} non valido" if provider else "Token non valido o scaduto"
         super().__init__(detail=detail)
 
 
 class InvalidCredentialsException(UnauthorizedException):
-    """Credenziali di login non valide."""
     def __init__(self, service: str = None):
         detail = f"Credenziali {service} non valide" if service else "Credenziali non valide"
         super().__init__(detail=detail)
 
 
 class IMAPAuthenticationException(InvalidCredentialsException):
-    """Credenziali IMAP non valide."""
     def __init__(self):
         super().__init__(service="IMAP")
 
 
 class SMTPAuthenticationException(InvalidCredentialsException):
-    """Credenziali SMTP non valide."""
     def __init__(self):
         super().__init__(service="SMTP")
 
@@ -121,13 +100,11 @@ class SMTPAuthenticationException(InvalidCredentialsException):
 # =============================================================================
 
 class ForbiddenException(APIException):
-    """Accesso negato - permessi insufficienti."""
     def __init__(self, detail: str = "Accesso negato"):
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 class InsufficientPermissionsException(ForbiddenException):
-    """Permessi insufficienti per l'operazione richiesta."""
     def __init__(self, operation: str = None):
         detail = f"Permessi insufficienti per: {operation}" if operation else "Permessi insufficienti"
         super().__init__(detail=detail)
@@ -138,20 +115,17 @@ class InsufficientPermissionsException(ForbiddenException):
 # =============================================================================
 
 class NotFoundException(APIException):
-    """Risorsa non trovata."""
     def __init__(self, detail: str = "Risorsa non trovata"):
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
 
 class SubscriptionNotFoundException(NotFoundException):
-    """Subscription non trovata."""
     def __init__(self, subscription_id: str = None):
         detail = f"Subscription '{subscription_id}' non trovata" if subscription_id else "Subscription non trovata"
         super().__init__(detail=detail)
 
 
 class UserNotFoundException(NotFoundException):
-    """Utente non trovato."""
     def __init__(self, identifier: str = None):
         detail = f"Utente '{identifier}' non trovato" if identifier else "Utente non trovato"
         super().__init__(detail=detail)
@@ -162,13 +136,11 @@ class UserNotFoundException(NotFoundException):
 # =============================================================================
 
 class ConflictException(APIException):
-    """Conflitto - la risorsa esiste già o stato non valido."""
     def __init__(self, detail: str = "Conflitto di risorse"):
         super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
 
 class ResourceAlreadyExistsException(ConflictException):
-    """La risorsa esiste già."""
     def __init__(self, resource: str = "Risorsa"):
         detail = f"{resource} esiste già"
         super().__init__(detail=detail)
@@ -179,13 +151,11 @@ class ResourceAlreadyExistsException(ConflictException):
 # =============================================================================
 
 class UnprocessableEntityException(APIException):
-    """Entità non processabile - validazione semantica fallita."""
     def __init__(self, detail: str = "Impossibile processare la richiesta"):
         super().__init__(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
 
 
 class ValidationException(UnprocessableEntityException):
-    """Errore di validazione dei dati."""
     def __init__(self, errors: list[str]):
         detail = f"Errori di validazione: {'; '.join(errors)}"
         super().__init__(detail=detail)
@@ -196,20 +166,17 @@ class ValidationException(UnprocessableEntityException):
 # =============================================================================
 
 class InternalServerException(APIException):
-    """Errore interno del server."""
     def __init__(self, detail: str = "Errore interno del server"):
         super().__init__(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail)
 
 
 class DatabaseException(InternalServerException):
-    """Errore durante l'operazione sul database."""
     def __init__(self, operation: str = None):
         detail = f"Errore database durante: {operation}" if operation else "Errore database"
         super().__init__(detail=detail)
 
 
 class MetricsException(InternalServerException):
-    """Errore durante il recupero delle metriche."""
     def __init__(self, metric_type: str = None, reason: str = None):
         if metric_type and reason:
             detail = f"Errore recupero metriche {metric_type}: {reason}"
@@ -221,7 +188,6 @@ class MetricsException(InternalServerException):
 
 
 class OAuthException(InternalServerException):
-    """Errore durante il processo OAuth."""
     def __init__(self, provider: str = None, reason: str = None):
         if provider and reason:
             detail = f"Errore OAuth {provider}: {reason}"
@@ -237,46 +203,39 @@ class OAuthException(InternalServerException):
 # =============================================================================
 
 class BadGatewayException(APIException):
-    """Errore nel comunicare con un servizio esterno."""
     def __init__(self, detail: str = "Errore di comunicazione con servizio esterno"):
         super().__init__(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
 
 
 class ExternalServiceException(BadGatewayException):
-    """Servizio esterno non disponibile o errore nella risposta."""
     def __init__(self, service: str, reason: str = None):
         detail = f"Errore servizio {service}: {reason}" if reason else f"Servizio {service} non disponibile"
         super().__init__(detail=detail)
 
 
 class IMAPConnectionException(ExternalServiceException):
-    """Impossibile connettersi al server IMAP."""
     def __init__(self, server: str = None, reason: str = None):
         service = f"IMAP ({server})" if server else "IMAP"
         super().__init__(service=service, reason=reason)
 
 
 class SMTPConnectionException(ExternalServiceException):
-    """Impossibile connettersi al server SMTP."""
     def __init__(self, server: str = None, reason: str = None):
         service = f"SMTP ({server})" if server else "SMTP"
         super().__init__(service=service, reason=reason)
 
 
 class GraphAPIException(ExternalServiceException):
-    """Errore Microsoft Graph API."""
     def __init__(self, reason: str = None):
         super().__init__(service="Microsoft Graph", reason=reason)
 
 
 class GmailAPIException(ExternalServiceException):
-    """Errore Gmail API."""
     def __init__(self, reason: str = None):
         super().__init__(service="Gmail", reason=reason)
 
 
 class SubscriptionCreationException(ExternalServiceException):
-    """Errore nella creazione della subscription webhook."""
     def __init__(self, provider: str, reason: str = None):
         super().__init__(service=f"Subscription {provider}", reason=reason)
 
@@ -286,7 +245,6 @@ class SubscriptionCreationException(ExternalServiceException):
 # =============================================================================
 
 class ServiceUnavailableException(APIException):
-    """Servizio temporaneamente non disponibile."""
     def __init__(self, detail: str = "Servizio temporaneamente non disponibile"):
         super().__init__(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
@@ -300,10 +258,6 @@ class ServiceUnavailableException(APIException):
 # =============================================================================
 
 def register_exception_handlers(app):
-    """
-    Registra gli exception handlers globali sull'app FastAPI.
-    Da chiamare in main.py per configurare la gestione centralizzata degli errori.
-    """
     from fastapi.responses import JSONResponse
     from fastapi import Request
     
