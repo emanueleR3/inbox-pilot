@@ -8,6 +8,7 @@ import logging
 from fastapi import FastAPI
 import uvicorn
 from dotenv import load_dotenv
+from senders.src.handler_exception import register_exception_handlers
 
 load_dotenv()
 
@@ -26,6 +27,8 @@ app = FastAPI(
     description="Email sending service for notifications and responses",
     version="1.0.0"
 )
+
+register_exception_handlers(app)
 
 # Include routers
 app.include_router(notification_router)
