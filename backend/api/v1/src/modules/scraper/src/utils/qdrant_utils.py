@@ -93,7 +93,10 @@ def upload_to_qdrant(
                 "title": chunk.title,
                 "page_index": chunk.page_index,
                 "chunk_index": chunk.chunk_index,
+                "source": chunk.source,
                 "text": chunk.text,
+                "deprecated": chunk.deprecated,
+                "content_hash": chunk.content_hash
             }
             payloads.append(payload)
         
