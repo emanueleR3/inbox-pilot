@@ -27,6 +27,7 @@ from .nodes import (
     check_completion_node,
     generate_markdown_node,
     with_context_node,
+    confirm_business_and_continue_node,
     start_review_context_node,
     edit_context_node,
 )
@@ -115,6 +116,10 @@ class QuizFlow:
             if is_valid:
                 self.state = generate_plan_node(self.state)
             # If not valid, state already has clarification question
+        
+        elif self.state["phase"] == QuizPhases.CONFIRMING_BUSINESS:
+            # User is confirming/correcting the business field extracted from scraping
+            self.state = confirm_business_and_continue_node(self.state, user_answer)
             
         elif self.state["phase"] == QuizPhases.COLLECTING:
             # User is answering collection questions

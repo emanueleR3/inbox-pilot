@@ -85,6 +85,11 @@ async def start_quiz(service_id: str, session_id: str) -> dict:
     # Start the quiz flow
     state = flow.start()
     
+    # Persist informations_plan on start (especially important for Qdrant flow)
+    current_plan: List[str] = [item.get("name") for item in state.get("bullet_list", []) if item.get("name")]
+    if current_plan:
+        await persist_informations_plan(state["service_id"], current_plan)
+    
     # Build response
     return _build_response(state)
 

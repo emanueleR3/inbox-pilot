@@ -2,7 +2,7 @@
 ### Base URL for automations service
 
 @baseUrl = http://localhost:8010
-@serviceId = INSERIRE
+@serviceId = e1f2d6e5-02e5-440e-a6a3-25b6e1e6bdfc
 
 # NOTE:
 # 1) Esegui “Start Quiz” e copia il session_id nella variabile @sessionId.
@@ -23,7 +23,7 @@ Content-Type: application/json
 ### Submit Answer (Collecting)
 ### ============================================================================
 
-@sessionId = ee3e1fea-4b63-4cd6-a293-d70763bd3259
+@sessionId = 924b1322-09a4-47f0-8567-6c9a663f8b89
 
 ### 1) Business description (generates plan)
 POST {{baseUrl}}/internal-quiz/answer
@@ -31,7 +31,7 @@ Content-Type: application/json
 
 {
     "session_id": "{{sessionId}}",
-    "answer": "è preferibile avere tutta la documentazione necessaria. Offriamo supporto post consulenza, in modo da garantire un'assistenza completa"
+    "answer": "Non proprio, siamo incentrati su automazioni AI e automazione sel customer service"
 }
 
 ### 2) Remove a point
