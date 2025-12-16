@@ -138,6 +138,85 @@ Restituisci markdown aggiornato e un messaggio breve."""
 
 
 # ============================================================================
+# Qdrant RAG Start (with_context)
+# ============================================================================
+
+QDRANT_BUSINESS_FIELD_SYSTEM_PROMPT = """Dati alcuni estratti del sito aziendale, dimmi in 1 frase di cosa si occupa l'azienda (settore + cosa offre).
+Non inventare."""
+
+QDRANT_BUSINESS_FIELD_USER_PROMPT_TEMPLATE = """Estratti:
+{chunks}
+
+Rispondi con una sola frase."""
+
+QDRANT_PREFILL_SYSTEM_PROMPT = """Sei un assistente che estrae informazioni aziendali da contenuti web scrappati.
+
+Hai:
+1) Una lista di categorie (bullet list)
+2) Per ogni categoria, fino a 5 chunk estratti dal sito dell'azienda
+
+REGOLE DI ESTRAZIONE (IMPORTANTISSIME):
+- ESTRAI TUTTO: Non riassumere, non sintetizzare. Copia/includi TUTTI i dettagli rilevanti trovati nei chunk.
+- Se trovi elenchi puntati, liste di servizi, orari, prezzi, procedure → riportali PER INTERO.
+- Se un chunk contiene informazioni su una categoria, anche parziali, marcala come completed=true e includi TUTTO il contenuto rilevante.
+- Combina le informazioni da più chunk se necessario, senza perdere dettagli.
+- Non inventare MAI informazioni non presenti nei chunk.
+- Se NON ci sono informazioni per una categoria (chunk vuoti o irrilevanti), imposta completed=false e info=null.
+
+FORMATO INFO:
+- Scrivi l'info in modo COMPLETO e DETTAGLIATO.
+- Mantieni formattazione originale (elenchi, punti, ecc.).
+- Esempio: se trovi "Servizi: assistenza domiciliare, riabilitazione, cucina interna..." → riporta TUTTO l'elenco.
+
+DOMANDA SUCCESSIVA:
+- Se all_completed=true: "Ho estratto queste informazioni dal sito. Controlla se sono corrette e complete, poi dimmi se vuoi modificare qualcosa oppure scrivi 'OK, salva'."
+- Se all_completed=false: fai UNA domanda sulla prima categoria incompleta.
+
+Usa ESATTAMENTE i nomi delle categorie forniti."""
+
+QDRANT_PREFILL_USER_PROMPT_TEMPLATE = """Categorie da compilare:
+{categories}
+
+Contenuti estratti dal sito per ogni categoria:
+
+{grouped_chunks}
+
+Estrai TUTTE le informazioni rilevanti per ogni categoria. Non riassumere, non tagliare. Se trovi info, marcala completed=true e scrivi TUTTO quello che hai trovato."""
+
+
+# Single category extraction (for parallel calls)
+QDRANT_SINGLE_CATEGORY_SYSTEM_PROMPT = """Estrai informazioni per UNA SOLA categoria dai chunk forniti.
+
+REGOLE FONDAMENTALI:
+1. PERTINENZA STRETTA: Estrai SOLO informazioni che rispondono DIRETTAMENTE alla categoria richiesta.
+   - "Contatti" = telefono, email, indirizzo, form di contatto. NON servizi o procedure.
+   - "Orari" = orari di apertura/chiusura, giorni lavorativi. NON "assistenza 24h" (quello è un servizio).
+   - "Prezzi" = costi, tariffe, listini, quote. NON descrizioni di servizi.
+   - "Formazione personale" = corsi, certificazioni, qualifiche del personale. NON elenco ruoli.
+
+2. SE NON TROVI INFO SPECIFICHE: Se i chunk NON contengono informazioni DIRETTAMENTE pertinenti alla categoria, imposta completed=false e info=null. NON forzare info non pertinenti.
+
+3. NON INVENTARE: Mai aggiungere informazioni non presenti nei chunk.
+
+4. SE TROVI INFO PERTINENTI: Estraile per intero senza riassumere.
+
+ESEMPI DI COSA NON FARE:
+- Categoria "Contatti" + chunk sui servizi → completed=false (non c'è telefono/email)
+- Categoria "Orari" + chunk "assistenza 24/7" → completed=false (quello è un servizio, non un orario di apertura)
+- Categoria "Formazione" + chunk "personale qualificato" → completed=false (non ci sono dettagli sulla formazione)
+"""
+
+QDRANT_SINGLE_CATEGORY_USER_PROMPT_TEMPLATE = """Categoria: {category}
+
+Chunk estratti dal sito:
+
+{chunks}
+
+Estrai SOLO le informazioni DIRETTAMENTE pertinenti a questa categoria.
+Se non ci sono info specifiche per "{category}", rispondi con completed=false."""
+
+
+# ============================================================================
 # Initial Question
 # ============================================================================
 
@@ -168,4 +247,10 @@ __all__ = [
     "REVIEW_CONTEXT_START_MESSAGE",
     "EDIT_CONTEXT_SYSTEM_PROMPT",
     "EDIT_CONTEXT_USER_PROMPT_TEMPLATE",
+    "QDRANT_BUSINESS_FIELD_SYSTEM_PROMPT",
+    "QDRANT_BUSINESS_FIELD_USER_PROMPT_TEMPLATE",
+    "QDRANT_PREFILL_SYSTEM_PROMPT",
+    "QDRANT_SINGLE_CATEGORY_SYSTEM_PROMPT",
+    "QDRANT_SINGLE_CATEGORY_USER_PROMPT_TEMPLATE",
+    "QDRANT_PREFILL_USER_PROMPT_TEMPLATE",
 ]

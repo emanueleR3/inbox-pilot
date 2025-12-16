@@ -2,7 +2,7 @@
 ### Base URL: http://localhost:8000/scraper
 
 @baseUrl = http://localhost:8000/scraper
-@serviceId = 29cd9df9-7607-4728-a1b0-db7678f9e3da
+@email = business@example.com
 
 ### ==============================================
 ### Start Scraping Job
@@ -13,8 +13,8 @@ POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
-    "service_id": "{{serviceId}}",
-    "website_url": "https://www.example.com"
+    "email": "{{email}}",
+    "website_url": "https://www.villaimmacolata.eu"
 }
 
 ### Start scraping - With max_pages limit
@@ -22,7 +22,7 @@ POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
-    "service_id": "{{serviceId}}",
+    "email": "{{email}}",
     "website_url": "https://example.com",
     "max_pages": 50
 }
@@ -32,7 +32,7 @@ POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
-    "service_id": "{{serviceId}}",
+    "email": "{{email}}",
     "website_url": "https://www.example.com",
     "max_pages": 100
 }
@@ -42,33 +42,33 @@ Content-Type: application/json
 ### ==============================================
 
 ### Check scraping job status
-GET {{baseUrl}}/status/{{serviceId}}
+GET {{baseUrl}}/status/{{email}}
 
-### Check status with different service_id
-GET {{baseUrl}}/status/987fcdeb-51a2-3e4d-b567-890123456789
+### Check status with different email
+GET {{baseUrl}}/status/other@example.com
 
 ### ==============================================
 ### Get Collection Info
 ### ==============================================
 
 ### Get collection information
-GET {{baseUrl}}/collection/{{serviceId}}
+GET {{baseUrl}}/collection/{{email}}
 
 ### Get collection info for non-existent service
-GET {{baseUrl}}/collection/00000000-0000-0000-0000-000000000000
+GET {{baseUrl}}/collection/unknown@example.com
 
 ### ==============================================
 ### Delete Collection
 ### ==============================================
 
 ### Delete the collection for a service
-DELETE {{baseUrl}}/collection/{{serviceId}}
+DELETE {{baseUrl}}/collection/{{email}}
 
 ### ==============================================
 ### Error Cases
 ### ==============================================
 
-### Start scraping - Missing service_id
+### Start scraping - Missing email
 POST {{baseUrl}}/start
 Content-Type: application/json
 
@@ -81,7 +81,7 @@ POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
-    "service_id": "{{serviceId}}"
+    "email": "{{email}}"
 }
 
 ### Start scraping - Invalid max_pages (exceeds limit)
@@ -89,7 +89,7 @@ POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
-    "service_id": "{{serviceId}}",
+    "email": "{{email}}",
     "website_url": "https://example.com",
     "max_pages": 1000
 }
@@ -99,7 +99,7 @@ POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
-    "service_id": "{{serviceId}}",
+    "email": "{{email}}",
     "website_url": "https://example.com",
     "max_pages": -1
 }
@@ -114,16 +114,16 @@ POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
-    "service_id": "{{serviceId}}",
+    "email": "{{email}}",
     "website_url": "https://www.example.com",
     "max_pages": 50
 }
 
 ### Step 2: Check status (repeat until completed)
-GET {{baseUrl}}/status/{{serviceId}}
+GET {{baseUrl}}/status/{{email}}
 
 ### Step 3: Get collection info
-GET {{baseUrl}}/collection/{{serviceId}}
+GET {{baseUrl}}/collection/{{email}}
 
 ### Step 4: (Optional) Delete collection
-DELETE {{baseUrl}}/collection/{{serviceId}}
+DELETE {{baseUrl}}/collection/{{email}}

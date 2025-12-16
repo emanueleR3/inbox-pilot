@@ -57,6 +57,31 @@ class ContextEditResponse(BaseModel):
     is_confirmed: bool = Field(default=False, description="True if user confirmed the context is ready to be saved")
 
 
+class BusinessFromContextResponse(BaseModel):
+    """Extract business field/summary from scraped site chunks."""
+    business_field: str = Field(description="Short description of what the company does")
+
+
+class SingleCategoryPrefillResponse(BaseModel):
+    """Response for a single category extraction (used in parallel calls)."""
+    completed: bool = Field(description="True if relevant info was found in the chunks")
+    info: Optional[str] = Field(default=None, description="All extracted info for this category; null if nothing found")
+
+
+class QdrantPrefillItem(BaseModel):
+    """A bullet item prefilled from Qdrant context."""
+    name: str = Field(description="Category name (must match input category)")
+    completed: bool = Field(description="True if info found in chunks")
+    info: Optional[str] = Field(default=None, description="Info found; null if not found")
+
+
+class QdrantPrefillResponse(BaseModel):
+    """Prefill bullet list from Qdrant chunks and decide next question."""
+    bullet_list: List[QdrantPrefillItem] = Field(description="Prefilled bullet list")
+    answer: str = Field(description="Next question or review message")
+    all_completed: bool = Field(default=False, description="True if all items completed")
+
+
 __all__ = [
     "BulletListItem",
     "ValidationResponse",
@@ -65,4 +90,8 @@ __all__ = [
     "NewBulletItem",
     "CollectResponse",
     "ContextEditResponse",
+    "BusinessFromContextResponse",
+    "SingleCategoryPrefillResponse",
+    "QdrantPrefillItem",
+    "QdrantPrefillResponse",
 ]

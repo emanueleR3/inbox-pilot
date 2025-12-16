@@ -45,6 +45,7 @@ class NodeNames:
 class QuizPhases:
     """Quiz phase constants."""
     INITIAL_QUESTION = "initial_question"
+    CONFIRMING_BUSINESS = "confirming_business"  # User confirms business field from Qdrant
     PLANNING = "planning"
     COLLECTING = "collecting"
     REVIEWING = "reviewing"

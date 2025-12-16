@@ -4,7 +4,8 @@ Core workflow nodes for the quiz system.
 
 import os
 import re
-from typing import List, Tuple, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Tuple, Optional, Dict
 from dotenv import load_dotenv
 
 from .config import get_llm, QuizPhases
@@ -17,6 +18,9 @@ from automations.quiz.models.llm_response import (
     NewBulletItem,
     ValidationResponse,
     ContextEditResponse,
+    BusinessFromContextResponse,
+    SingleCategoryPrefillResponse,
+    QdrantPrefillResponse,
 )
 from automations.quiz.prompts import (
     VALIDATE_BUSINESS_SYSTEM_PROMPT,
@@ -32,7 +36,15 @@ from automations.quiz.prompts import (
     EDIT_CONTEXT_USER_PROMPT_TEMPLATE,
     INITIAL_QUESTION,
     WITH_CONTEXT_TODO_MESSAGE,
+    QDRANT_BUSINESS_FIELD_SYSTEM_PROMPT,
+    QDRANT_BUSINESS_FIELD_USER_PROMPT_TEMPLATE,
+    QDRANT_PREFILL_SYSTEM_PROMPT,
+    QDRANT_PREFILL_USER_PROMPT_TEMPLATE,
+    QDRANT_SINGLE_CATEGORY_SYSTEM_PROMPT,
+    QDRANT_SINGLE_CATEGORY_USER_PROMPT_TEMPLATE,
 )
+
+from automations.quiz.qdrant_rag import embed_texts, qdrant_search, format_top_chunks
 
 load_dotenv()
 
@@ -675,23 +687,361 @@ def with_context_node(state: QuizState) -> QuizState:
     Returns:
         Updated state
     """
-    # TODO: Implement this case
-    # This should:
-    # 1. Query the qdrant collection to get context about the company
-    # 2. Use the context to generate more targeted questions
-    # 3. Pre-fill some information from the scraped content
-    # 4. Ask only clarifying questions for missing information
-    
     print(f"🔮 [WITH_CONTEXT] User has qdrant collection: {state['qdrant_collection_name']}")
-    print(f"   ⚠️ TODO: Implement RAG-based quiz flow")
+
+    collection_name = state.get("qdrant_collection_name")
+    if not collection_name:
+        # Safety fallback: if collection is missing, behave like no-context flow.
+        state["has_qdrant_collection"] = False
+        return initial_question_node(state)
+
+    def _normalize_category_name(name: str) -> str:
+        return re.sub(r"\s+", " ", (name or "").strip())
+
+    def _business_sells_products(desc: str) -> bool:
+        d = (desc or "").lower()
+        product_signals = [
+            "e-commerce",
+            "ecommerce",
+            "shop",
+            "store",
+            "negozio",
+            "vendita",
+            "vendiamo",
+            "prodotti",
+            "articoli",
+            "catalogo",
+            "ordini",
+            "spedizione",
+            "spedizioni",
+            "consegna",
+            "consegne",
+            "merce",
+            "magazzino",
+            "carrello",
+        ]
+        return any(k in d for k in product_signals)
+
+    def _should_keep_category(name: str, desc: str) -> bool:
+        n = (name or "").strip().lower()
+        if any(k in n for k in ["reso", "resi", "garanzia", "garanzie", "rimborso", "rimborsi"]):
+            return _business_sells_products(desc)
+        return True
+
+    # 1) Retrieve generic chunks and infer business field
+    try:
+        seed_query = (
+            "Descrizione azienda, servizi offerti, prodotti, settori, come funziona, contatti e orari"
+        )
+        seed_vec = embed_texts([seed_query])[0]
+        seed_results = qdrant_search(collection_name=collection_name, vector=seed_vec, limit=10)
+        seed_chunks = format_top_chunks(seed_results, max_chunks=10)
+    except Exception as e:
+        state["error"] = f"Qdrant search failed: {e}"
+        return initial_question_node(state)
+
+    try:
+        llm = get_llm(temperature=0.1)
+        structured_llm = llm.with_structured_output(BusinessFromContextResponse, method="function_calling")
+        user_prompt = QDRANT_BUSINESS_FIELD_USER_PROMPT_TEMPLATE.format(
+            chunks="\n\n".join([f"- {c}" for c in seed_chunks])
+        )
+        business_resp: BusinessFromContextResponse = structured_llm.invoke([
+            {"role": "system", "content": QDRANT_BUSINESS_FIELD_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ])
+        business_field = (business_resp.business_field or "").strip()
+    except Exception as e:
+        state["error"] = f"Business extraction failed: {e}"
+        return initial_question_node(state)
+
+    if not business_field:
+        # If the model returned empty, fall back to letting the user describe it.
+        return initial_question_node(state)
+
+    state["business_field"] = business_field
+
+    # STEP 1 COMPLETE: Ask user to confirm the business field
+    # User will respond, then we continue with plan generation + RAG in confirm_business_and_continue_node
+    confirmation_message = (
+        f"Ho visto che vi occupate di: **{business_field}**\n\n"
+        "È corretto? Puoi:\n"
+        "- Rispondere **sì** per confermare\n"
+        "- Rispondere **no** per descrivere tu l'attività\n"
+        "- Aggiungere dettagli o correzioni"
+    )
     
-    # For now, mark as done and return empty
-    state["is_done"] = True
-    state["phase"] = QuizPhases.COMPLETED
-    state["current_response"] = WITH_CONTEXT_TODO_MESSAGE
-    state["final_markdown"] = ""
+    state["phase"] = QuizPhases.CONFIRMING_BUSINESS
+    state["current_response"] = confirmation_message
+    state["messages"].append({"role": "assistant", "content": confirmation_message})
+    state["turn_count"] = 1
     
     return state
+
+
+def confirm_business_and_continue_node(state: QuizState, user_response: str) -> QuizState:
+    """
+    Process user's response to business field confirmation and continue with RAG retrieval.
+    
+    Args:
+        state: Current quiz state
+        user_response: User's response (yes/no/additions)
+        
+    Returns:
+        Updated state
+    """
+    print(f"🔄 [CONFIRM_BUSINESS] Processing user response...")
+    
+    normalized = (user_response or "").strip().lower()
+
+    # Robust intent detection: do NOT treat "no" inside "non" as a rejection.
+    # - Reject only if the message *starts* with an explicit negative.
+    # - If the message contains an explicit "sì/ok/confermo", we treat it as confirmation
+    #   even if it contains "non" in the business description.
+    positive_re = re.compile(r"\b(sì|si|yes|ok|corretto|esatto|confermo|giusto)\b", re.IGNORECASE)
+    negative_start_re = re.compile(
+        r"^\s*(no\b|sbagliat[oa]\b|errat[oa]\b|non\s+confermo\b|non\s+è\s+corretto\b|non\s+corretto\b|non\s+esatto\b|non\s+giusto\b)",
+        re.IGNORECASE,
+    )
+
+    is_affirmative = bool(positive_re.search(normalized))
+    is_negative = bool(negative_start_re.search(normalized))
+
+    # If user explicitly rejects, fall back to manual description
+    if is_negative and not is_affirmative:
+        print("   ❌ User rejected - falling back to manual description")
+        state["business_field"] = None
+        return initial_question_node(state)
+
+    # Check if user wants to add/correct info
+    is_simple_yes = normalized in ["sì", "si", "yes", "ok", "corretto", "esatto", "confermo", "giusto"]
+    
+    if not is_simple_yes:
+        # User provided additional info - update business field
+        current_business = state.get("business_field") or ""
+        state["business_field"] = f"{current_business}. {user_response}"
+        print(f"   ✏️ Updated business field with additions: {state['business_field'][:100]}...")
+    else:
+        print(f"   ✅ User confirmed business field")
+    
+    # Now continue with plan generation and RAG retrieval
+    collection_name = state.get("qdrant_collection_name")
+    business_field = state["business_field"]
+    
+    def _normalize_category_name(name: str) -> str:
+        return re.sub(r"\s+", " ", (name or "").strip())
+
+    def _business_sells_products(desc: str) -> bool:
+        d = (desc or "").lower()
+        product_signals = [
+            "e-commerce", "ecommerce", "shop", "store", "negozio", "vendita",
+            "vendiamo", "prodotti", "articoli", "catalogo", "ordini",
+            "spedizione", "spedizioni", "consegna", "consegne", "merce", "magazzino", "carrello",
+        ]
+        return any(k in d for k in product_signals)
+
+    def _should_keep_category(name: str, desc: str) -> bool:
+        n = (name or "").strip().lower()
+        if any(k in n for k in ["reso", "resi", "garanzia", "garanzie", "rimborso", "rimborsi"]):
+            return _business_sells_products(desc)
+        return True
+
+    # Generate plan (categories)
+    try:
+        llm_plan = get_llm(temperature=0.2)
+        structured_plan = llm_plan.with_structured_output(PlanResponse, method="function_calling")
+        plan_prompt = GENERATE_PLAN_USER_PROMPT_TEMPLATE.format(business_description=business_field)
+        plan_resp: PlanResponse = structured_plan.invoke([
+            {"role": "system", "content": GENERATE_PLAN_SYSTEM_PROMPT},
+            {"role": "user", "content": plan_prompt},
+        ])
+
+        seen = set()
+        bullet_list: List[BulletItem] = []
+        for item in plan_resp.bullet_list:
+            name = _normalize_category_name(item.name)
+            if not name:
+                continue
+            key = name.lower()
+            if key in seen:
+                continue
+            if not _should_keep_category(name, business_field):
+                continue
+            seen.add(key)
+            bullet_list.append({"name": name, "completed": False, "info": None})
+
+        state["bullet_list"] = bullet_list
+    except Exception as e:
+        state["error"] = f"Plan generation failed: {e}"
+        return initial_question_node(state)
+
+    if not state["bullet_list"]:
+        return initial_question_node(state)
+
+    categories = [it["name"] for it in state["bullet_list"]]
+    
+    # IMPROVED RAG: Build better queries with category-specific keywords
+    def _build_category_query(cat: str, business: str) -> str:
+        """Build a more specific query for each category with keyword hints."""
+        cat_lower = cat.lower()
+        
+        # Category-specific keyword boosting
+        keyword_map = {
+            "contatti": "telefono email indirizzo numero cellulare pec form contatto",
+            "orari": "orario apertura chiusura lunedì martedì mercoledì giovedì venerdì sabato domenica ore",
+            "prezzi": "prezzo costo tariffa euro listino preventivo quota pagamento",
+            "tariffe": "prezzo costo tariffa euro listino preventivo quota pagamento",
+            "formazione": "formazione corso certificazione diploma laurea qualifica addestramento",
+            "testimonianze": "recensione opinione testimonianza feedback commento cliente soddisfatto",
+            "referenze": "recensione opinione testimonianza feedback commento cliente soddisfatto",
+        }
+        
+        # Find matching keywords
+        extra_keywords = ""
+        for key, keywords in keyword_map.items():
+            if key in cat_lower:
+                extra_keywords = keywords
+                break
+        
+        if extra_keywords:
+            return f"{cat} {extra_keywords}"
+        else:
+            return f"{business} {cat}"
+    
+    category_queries = [_build_category_query(cat, business_field) for cat in categories]
+    
+    try:
+        vectors = embed_texts(category_queries)
+        chunks_by_category: Dict[str, List[str]] = {}
+        for cat, vec in zip(categories, vectors):
+            results = qdrant_search(collection_name=collection_name, vector=vec, limit=5)
+            chunks_by_category[cat] = format_top_chunks(results, max_chunks=5)
+    except Exception as e:
+        state["error"] = f"Category retrieval failed: {e}"
+        state["phase"] = QuizPhases.COLLECTING
+        state["is_done"] = False
+        state["current_response"] = (
+            f"Perfetto! Iniziamo a raccogliere le informazioni.\n\n"
+            f"Partiamo da: **{categories[0]}**.\n\n"
+            "Per aiutarmi, includi se puoi:\n"
+            "- Dettagli specifici\n"
+            "- Varianti / opzioni\n"
+            "- Condizioni e requisiti\n"
+            "- Esempi pratici"
+        )
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        state["turn_count"] += 1
+        return state
+
+    # PARALLEL LLM calls for extraction
+    chunk_labels = ["PRIMO CHUNK", "SECONDO CHUNK", "TERZO CHUNK", "QUARTO CHUNK", "QUINTO CHUNK"]
+
+    def _format_chunks_for_category(cat: str) -> str:
+        cat_chunks = chunks_by_category.get(cat) or []
+        if not cat_chunks:
+            return "(nessun estratto rilevante)"
+        lines = []
+        for idx, chunk_text in enumerate(cat_chunks):
+            label = chunk_labels[idx] if idx < len(chunk_labels) else f"CHUNK {idx + 1}"
+            lines.append(f"{label}: {chunk_text}")
+            lines.append("")
+        return "\n".join(lines).strip()
+
+    def _extract_single_category(cat: str) -> Tuple[str, bool, Optional[str]]:
+        try:
+            llm = get_llm(temperature=0.1)
+            structured_llm = llm.with_structured_output(SingleCategoryPrefillResponse, method="function_calling")
+            chunks_text = _format_chunks_for_category(cat)
+            user_prompt = QDRANT_SINGLE_CATEGORY_USER_PROMPT_TEMPLATE.format(
+                category=cat,
+                chunks=chunks_text,
+            )
+            resp: SingleCategoryPrefillResponse = structured_llm.invoke([
+                {"role": "system", "content": QDRANT_SINGLE_CATEGORY_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ])
+            info = (resp.info.strip() if isinstance(resp.info, str) and resp.info.strip() else None)
+            return (cat, bool(resp.completed), info)
+        except Exception as e:
+            print(f"   ⚠️ Error extracting category '{cat}': {e}")
+            return (cat, False, None)
+
+    print(f"   🚀 Starting parallel extraction for {len(categories)} categories...")
+    results_map: Dict[str, Tuple[bool, Optional[str]]] = {}
+
+    try:
+        with ThreadPoolExecutor(max_workers=min(len(categories), 10)) as executor:
+            futures = {executor.submit(_extract_single_category, cat): cat for cat in categories}
+            for future in as_completed(futures):
+                cat_name, completed, info = future.result()
+                results_map[cat_name] = (completed, info)
+                status = "✅" if completed else "❌"
+                print(f"   {status} {cat_name}: {'extracted' if info else 'no info'}")
+    except Exception as e:
+        state["error"] = f"Parallel extraction failed: {e}"
+        first_cat = categories[0]
+        state["phase"] = QuizPhases.COLLECTING
+        state["is_done"] = False
+        state["current_response"] = (
+            f"Perfetto! Iniziamo a raccogliere le informazioni.\n\n"
+            f"Partiamo da: **{first_cat}**.\n\n"
+            "Per aiutarmi, includi se puoi:\n"
+            "- Dettagli specifici\n"
+            "- Varianti / opzioni\n"
+            "- Condizioni e requisiti\n"
+            "- Esempi pratici"
+        )
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        state["turn_count"] += 1
+        return state
+
+    # Build updated bullet list from parallel results
+    updated: List[BulletItem] = []
+    for it in state["bullet_list"]:
+        cat_name = it["name"]
+        if cat_name in results_map:
+            completed, info = results_map[cat_name]
+            updated.append({
+                "name": cat_name,
+                "completed": completed,
+                "info": info,
+            })
+        else:
+            updated.append(it)
+    state["bullet_list"] = updated
+
+    # Determine completion and generate appropriate response
+    all_completed = bool(updated) and all(i.get("completed") for i in updated)
+    first_incomplete = next((i["name"] for i in updated if not i.get("completed")), None)
+
+    if all_completed:
+        proposed_answer = (
+            "Ho estratto queste informazioni dal sito. Controlla se sono corrette e complete, "
+            "poi dimmi se vuoi modificare qualcosa oppure scrivi 'OK, salva'."
+        )
+        state["messages"].append({"role": "assistant", "content": proposed_answer})
+        state["turn_count"] += 1
+        state["is_done"] = True
+        state["phase"] = QuizPhases.COMPLETED
+        state = generate_markdown_node(state)
+        state = start_review_context_node(state)
+        return state
+    else:
+        proposed_answer = (
+            f"Ho recuperato alcune informazioni dal sito.\n\n"
+            f"Per completare il profilo, mi servono dettagli su: **{first_incomplete}**.\n\n"
+            "Per aiutarmi, includi se puoi:\n"
+            "- Dettagli specifici\n"
+            "- Varianti / opzioni\n"
+            "- Condizioni e requisiti\n"
+            "- Esempi pratici"
+        )
+        state["phase"] = QuizPhases.COLLECTING
+        state["is_done"] = False
+        state["current_response"] = proposed_answer
+        state["messages"].append({"role": "assistant", "content": proposed_answer})
+        state["turn_count"] += 1
+        return state
 
 
 def start_review_context_node(state: QuizState) -> QuizState:
