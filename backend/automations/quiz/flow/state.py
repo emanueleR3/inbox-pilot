@@ -15,7 +15,7 @@ class BulletItem(TypedDict):
 class QuizState(TypedDict):
     """Shared state across all nodes in the quiz workflow."""
     # Session identifiers
-    service_id: str
+    email: str
     session_id: str
     
     # Scraping context
@@ -54,7 +54,7 @@ class QuizState(TypedDict):
 
 
 def create_initial_state(
-    service_id: str,
+    email: str,
     session_id: str,
     has_qdrant_collection: bool = False,
     qdrant_collection_name: Optional[str] = None,
@@ -62,7 +62,7 @@ def create_initial_state(
 ) -> QuizState:
     """Create initial state with default values."""
     return {
-        "service_id": service_id,
+        "email": email,
         "session_id": session_id,
         "has_qdrant_collection": has_qdrant_collection,
         "qdrant_collection_name": qdrant_collection_name,

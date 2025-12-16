@@ -2,7 +2,7 @@
 ### Base URL for automations service
 
 @baseUrl = http://localhost:8010
-@serviceId = e1f2d6e5-02e5-440e-a6a3-25b6e1e6bdfc
+@email = business@example.com
 
 # NOTE:
 # 1) Esegui “Start Quiz” e copia il session_id nella variabile @sessionId.
@@ -16,14 +16,14 @@ POST {{baseUrl}}/internal-quiz/start
 Content-Type: application/json
 
 {
-    "service_id": "{{serviceId}}"
+    "email": "{{email}}"
 }
 
 ### ============================================================================
 ### Submit Answer (Collecting)
 ### ============================================================================
 
-@sessionId = 924b1322-09a4-47f0-8567-6c9a663f8b89
+@sessionId = 53aefe4e-d196-43e1-8cc2-b90890c396b5
 
 ### 1) Business description (generates plan)
 POST {{baseUrl}}/internal-quiz/answer
@@ -31,7 +31,7 @@ Content-Type: application/json
 
 {
     "session_id": "{{sessionId}}",
-    "answer": "Non proprio, siamo incentrati su automazioni AI e automazione sel customer service"
+    "answer": "Sì, siamo principalmente un RSA, che offre assistenza agli anziani. Forniamo anche servizio SAD"
 }
 
 ### 2) Remove a point

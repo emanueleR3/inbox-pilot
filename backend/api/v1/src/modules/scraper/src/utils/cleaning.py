@@ -2,6 +2,7 @@
 
 import os
 from typing import List
+import hashlib
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
@@ -71,16 +72,20 @@ def clean_chunks_batch(llm, chunks: List[Chunk]) -> List[Chunk]:
     # Batch call to model
     responses: List[CleanedChunkResponse] = llm.batch(messages_list)
 
-    # Update chunks with cleaned text
+    # Update chunks with cleaned text (preserve metadata)
     cleaned_chunks = []
     for chunk, resp in zip(chunks, responses):
+        cleaned_text = (resp.cleaned_text or "").strip()
         cleaned_chunk = Chunk(
             id=chunk.id,
             url=chunk.url,
             title=chunk.title,
             page_index=chunk.page_index,
             chunk_index=chunk.chunk_index,
-            text=resp.cleaned_text.strip()
+            text=cleaned_text,
+            deprecated=chunk.deprecated,
+            source=chunk.source,
+            content_hash=hashlib.sha256(cleaned_text.encode("utf-8")).hexdigest() if cleaned_text else "",
         )
         cleaned_chunks.append(cleaned_chunk)
 

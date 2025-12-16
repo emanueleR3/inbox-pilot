@@ -41,17 +41,17 @@ class QuizFlow:
     between each step. No need for a complex graph structure.
     """
     
-    def __init__(self, service_id: str, session_id: str, has_qdrant: bool = False, qdrant_collection: Optional[str] = None):
+    def __init__(self, email: str, session_id: str, has_qdrant: bool = False, qdrant_collection: Optional[str] = None):
         """
         Initialize quiz flow.
         
         Args:
-            service_id: The service ID
+            email: The email (unique key in subscription_services)
             session_id: The session ID
             has_qdrant: Whether user has a qdrant collection (did scraping)
             qdrant_collection: The qdrant collection name if exists
         """
-        self.service_id = service_id
+        self.email = email
         self.session_id = session_id
         self.state: Optional[QuizState] = None
         self.has_qdrant = has_qdrant
@@ -66,7 +66,7 @@ class QuizFlow:
         """
         # Create initial state
         self.state = create_initial_state(
-            service_id=self.service_id,
+            email=self.email,
             session_id=self.session_id,
             has_qdrant_collection=self.has_qdrant,
             qdrant_collection_name=self.qdrant_collection,
