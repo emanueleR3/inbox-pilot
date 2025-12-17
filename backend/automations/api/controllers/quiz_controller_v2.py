@@ -26,7 +26,7 @@ class QuizControllerV2:
         Start a new quiz session.
         
         Args:
-            email: The email to start the quiz for
+            email: The email (unique) to start the quiz for
             
         Returns:
             Dictionary with session info and initial question
@@ -53,6 +53,7 @@ class QuizControllerV2:
                 "max_turns": result["max_turns"],
                 "has_context": result["has_qdrant_collection"],
                 "done": result["is_done"],
+                "email": result.get("email"),
             }
             
         except Exception as e:

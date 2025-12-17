@@ -12,7 +12,7 @@ controller = ScraperController()
 
 class StartScrapingRequest(BaseModel):
     """Request model for starting a scraping job."""
-    email: str = Field(..., description="The email for the subscription service")
+    email: str = Field(..., description="The email (unique) for the subscription service")
     website_url: str = Field(..., description="The URL of the website to scrape")
     max_pages: Optional[int] = Field(100, description="Maximum number of pages to scrape", ge=1, le=500)
 
@@ -69,8 +69,8 @@ class DeleteCollectionResponse(BaseModel):
                 "application/json": {
                     "example": {
                         "message": "Scraping job started",
-                        "email": "123e4567-e89b-12d3-a456-426614174000",
-                        "collection_name": "collection_123e4567-e89b-12d3-a456-426614174000",
+                        "email": "user@example.com",
+                        "collection_name": "collection_user_example_com",
                         "status": "processing"
                     }
                 }
@@ -115,7 +115,7 @@ async def start_scraping(
                     "example": {
                         "status": "completed",
                         "website_url": "https://example.com",
-                        "collection_name": "collection_123e4567-e89b-12d3-a456-426614174000",
+                        "collection_name": "collection_user_example_com_aaaaaaaaaaaa",
                         "progress": {
                             "step": "completed",
                             "pages_scraped": 50,
@@ -152,10 +152,10 @@ def get_scraping_status(email: str):
             "content": {
                 "application/json": {
                     "example": {
-                        "collection_name": "collection_123e4567-e89b-12d3-a456-426614174000",
+                        "collection_name": "collection_user_example_com_aaaaaaaaaaaa",
                         "exists": True,
                         "info": {
-                            "name": "collection_123e4567-e89b-12d3-a456-426614174000",
+                            "name": "collection_user_example_com_aaaaaaaaaaaa",
                             "points_count": 150,
                             "vectors_count": 150,
                             "status": "green"
@@ -187,8 +187,8 @@ def get_collection_status(email: str):
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Collection collection_123e4567-e89b-12d3-a456-426614174000 deleted successfully",
-                        "collection_name": "collection_123e4567-e89b-12d3-a456-426614174000"
+                        "message": "Collection collection_user_example_com_aaaaaaaaaaaa deleted successfully",
+                        "collection_name": "collection_user_example_com_aaaaaaaaaaaa"
                     }
                 }
             }

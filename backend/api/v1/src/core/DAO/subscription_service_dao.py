@@ -686,6 +686,24 @@ class SubscriptionServiceDAO:
             print(f"Error updating qdrant_collection: {e}")
             return False
 
+    def update_qdrant_collection_by_email(self, email: str, collection_name: str) -> bool:
+        """Update qdrant_collection for a subscription service identified by email."""
+        try:
+            data = {"qdrant_collection": collection_name}
+            response = (
+                self.supabase.table("subscription_services")
+                .update(data)
+                .eq("email", email)
+                .execute()
+            )
+            if not response.data:
+                print(f"No record updated for email: {email}")
+                return False
+            return True
+        except Exception as e:
+            print(f"Error updating qdrant_collection by email: {e}")
+            return False
+
     def get_qdrant_collection(self, service_id: str) -> str | None:
         """
         Get the qdrant_collection name for a subscription service.
@@ -712,7 +730,23 @@ class SubscriptionServiceDAO:
             print(f"Error getting qdrant_collection: {e}")
             return None
 
-    def get_service_by_email(self, email: str) -> dict | None:
+    def get_qdrant_collection_by_email(self, email: str) -> str | None:
+        """Get qdrant_collection for a subscription service identified by email."""
+        try:
+            response = (
+                self.supabase.table("subscription_services")
+                .select("qdrant_collection")
+                .eq("email", email)
+                .execute()
+            )
+            if not response.data:
+                return None
+            return response.data[0].get("qdrant_collection")
+        except Exception as e:
+            print(f"Error getting qdrant_collection by email: {e}")
+            return None
+
+    def get_service_by_id(self, service_id: str) -> dict | None:
         """
         Get subscription service by service_id.
         
@@ -733,6 +767,22 @@ class SubscriptionServiceDAO:
             if not response.data:
                 return None
             
+            return response.data[0]
+        except Exception as e:
+            print(f"Error getting service by id: {e}")
+            return None
+
+    def get_service_by_email(self, email: str) -> dict | None:
+        """Get subscription service by unique email."""
+        try:
+            response = (
+                self.supabase.table("subscription_services")
+                .select("*")
+                .eq("email", email)
+                .execute()
+            )
+            if not response.data:
+                return None
             return response.data[0]
         except Exception as e:
             print(f"Error getting service by email: {e}")

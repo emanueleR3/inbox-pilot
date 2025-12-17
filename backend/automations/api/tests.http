@@ -190,7 +190,7 @@ POST {{baseUrl}}/internal-quiz/start
 Content-Type: application/json
 
 {
-	"service_id": "b53b25ee-d52f-49b8-aee9-585bd55ecf27"
+	"email": "test@example.com"
 }
 
 ### Submit an answer

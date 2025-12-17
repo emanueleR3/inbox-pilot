@@ -27,6 +27,7 @@ from .nodes import (
     check_completion_node,
     generate_markdown_node,
     with_context_node,
+    confirm_business_and_continue_node,
     start_review_context_node,
     edit_context_node,
 )
@@ -40,17 +41,17 @@ class QuizFlow:
     between each step. No need for a complex graph structure.
     """
     
-    def __init__(self, service_id: str, session_id: str, has_qdrant: bool = False, qdrant_collection: Optional[str] = None):
+    def __init__(self, email: str, session_id: str, has_qdrant: bool = False, qdrant_collection: Optional[str] = None):
         """
         Initialize quiz flow.
         
         Args:
-            service_id: The service ID
+            email: The email (unique key in subscription_services)
             session_id: The session ID
             has_qdrant: Whether user has a qdrant collection (did scraping)
             qdrant_collection: The qdrant collection name if exists
         """
-        self.service_id = service_id
+        self.email = email
         self.session_id = session_id
         self.state: Optional[QuizState] = None
         self.has_qdrant = has_qdrant
@@ -65,7 +66,7 @@ class QuizFlow:
         """
         # Create initial state
         self.state = create_initial_state(
-            service_id=self.service_id,
+            email=self.email,
             session_id=self.session_id,
             has_qdrant_collection=self.has_qdrant,
             qdrant_collection_name=self.qdrant_collection,
@@ -115,6 +116,10 @@ class QuizFlow:
             if is_valid:
                 self.state = generate_plan_node(self.state)
             # If not valid, state already has clarification question
+        
+        elif self.state["phase"] == QuizPhases.CONFIRMING_BUSINESS:
+            # User is confirming/correcting the business field extracted from scraping
+            self.state = confirm_business_and_continue_node(self.state, user_answer)
             
         elif self.state["phase"] == QuizPhases.COLLECTING:
             # User is answering collection questions

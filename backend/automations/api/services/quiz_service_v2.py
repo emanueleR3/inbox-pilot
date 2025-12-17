@@ -18,10 +18,10 @@ _sessions: dict[str, QuizFlow] = {}
 
 def create_session(email: str) -> str:
     """
-    Create a new quiz session for a service.
+    Create a new quiz session for a user (keyed by email).
     
     Args:
-        email: The email of the user
+        email: The unique email for the subscription service
         
     Returns:
         The session ID
@@ -64,7 +64,7 @@ async def start_quiz(email: str, session_id: str) -> dict:
     Start a new quiz for a service.
     
     Args:
-        service_id: The ID of the subscription service
+        email: The unique email for the subscription service
         session_id: The session ID
         
     Returns:
@@ -83,6 +83,11 @@ async def start_quiz(email: str, session_id: str) -> dict:
     
     # Start the quiz flow
     state = flow.start()
+    
+    # Persist informations_plan on start (especially important for Qdrant flow)
+    current_plan: List[str] = [item.get("name") for item in state.get("bullet_list", []) if item.get("name")]
+    if current_plan:
+        await persist_informations_plan(state["email"], current_plan)
     
     # Build response
     return _build_response(state)
@@ -114,7 +119,7 @@ async def submit_answer(session_id: str, user_answer: str) -> dict:
     # Persist informations_plan when generated or changed
     current_plan: List[str] = [item.get("name") for item in state.get("bullet_list", []) if item.get("name")]
     if current_plan != previous_plan:
-        await persist_informations_plan(state["service_id"], current_plan)
+        await persist_informations_plan(state["email"], current_plan)
     
     # Persist the first generated markdown as a draft (once)
     if state.get("final_markdown") and not state.get("context_draft_saved", False):
@@ -148,7 +153,7 @@ async def force_finish_quiz(session_id: str) -> dict:
 
     # Persist informations_plan on force finish as well
     current_plan: List[str] = [item.get("name") for item in state.get("bullet_list", []) if item.get("name")]
-    await persist_informations_plan(state["service_id"], current_plan)
+    await persist_informations_plan(state["email"], current_plan)
     
     # Persist draft markdown and keep session alive for review
     if state.get("final_markdown") and not state.get("context_draft_saved", False):
@@ -170,7 +175,7 @@ def _build_response(state: QuizState) -> dict:
     """
     return {
         "session_id": state["session_id"],
-        "service_id": state["service_id"],
+        "email": state["email"],
         "phase": state["phase"],
         "question": state["current_response"],
         "bullet_list": [
@@ -231,26 +236,26 @@ async def persist_quiz_result(state: QuizState) -> None:
     }
     
     supabase.table("subscription_services").update(update_data).eq(
-        "service_id", state["service_id"]
+        "email", state["email"]
     ).execute()
 
 
-async def persist_informations_plan(service_id: str, informations_plan: List[str]) -> None:
+async def persist_informations_plan(email: str, informations_plan: List[str]) -> None:
     """Persist the plan (titles only) into subscription_services.informations_plan."""
     supabase = get_supabase_client()
     supabase.table("subscription_services").update({
         "informations_plan": informations_plan,
-    }).eq("service_id", service_id).execute()
+    }).eq("email", email).execute()
 
 
-async def append_quiz_history(service_id: str, question: str, answer: str) -> None:
+async def append_quiz_history(email: str, question: str, answer: str) -> None:
     """
     Append a Q&A pair to the quiz history in the database.
     
     This is useful for incremental saving during the quiz.
     
     Args:
-        service_id: The subscription service ID
+        email: The subscription service email
         question: The question asked
         answer: The user's answer
     """
@@ -258,7 +263,7 @@ async def append_quiz_history(service_id: str, question: str, answer: str) -> No
     
     # Get current history
     result = supabase.table("subscription_services").select("quiz_q_a").eq(
-        "service_id", service_id
+        "email", email
     ).single().execute()
     
     current_history = result.data.get("quiz_q_a") or []
@@ -267,7 +272,7 @@ async def append_quiz_history(service_id: str, question: str, answer: str) -> No
     # Update with new entry
     supabase.table("subscription_services").update({
         "quiz_q_a": current_history
-    }).eq("service_id", service_id).execute()
+    }).eq("email", email).execute()
 
 
 async def check_qdrant_collection(email: str) -> tuple[bool, Optional[str]]:
@@ -275,7 +280,7 @@ async def check_qdrant_collection(email: str) -> tuple[bool, Optional[str]]:
     Check if the service has a qdrant collection (meaning scraping was done).
     
     Args:
-        email: The email of the user
+        email: The subscription service email
         
     Returns:
         Tuple of (has_collection, collection_name)
@@ -295,7 +300,7 @@ async def get_service_business_field(email: str) -> Optional[str]:
     Get the business field for a service from its related customer.
     
     Args:
-        email: The email of the user
+        email: The subscription service email
         
     Returns:
         The business field or None

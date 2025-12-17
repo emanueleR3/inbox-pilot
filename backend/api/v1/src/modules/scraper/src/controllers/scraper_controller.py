@@ -3,6 +3,8 @@
 from fastapi import HTTPException, status, BackgroundTasks
 from typing import Optional, Dict, Any
 import asyncio
+import re
+import uuid
 
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 from src.modules.scraper.src.utils.scraping import scrape_website, ScrapedPage
