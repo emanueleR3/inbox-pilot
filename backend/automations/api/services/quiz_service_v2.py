@@ -16,20 +16,19 @@ from db_client import get_supabase_client
 _sessions: dict[str, QuizFlow] = {}
 
 
-def create_session(service_id: str) -> str:
+def create_session(email: str) -> str:
     """
     Create a new quiz session for a service.
     
     Args:
-        service_id: The ID of the subscription service
+        email: The email of the user
         
     Returns:
         The session ID
     """
     session_id = str(uuid.uuid4())
-    _sessions[session_id] = QuizFlow(service_id=service_id, session_id=session_id)
+    _sessions[session_id] = QuizFlow(email=email, session_id=session_id)
     return session_id
-
 
 def get_session(session_id: str) -> Optional[QuizFlow]:
     """
@@ -60,7 +59,7 @@ def delete_session(session_id: str) -> bool:
     return False
 
 
-async def start_quiz(service_id: str, session_id: str) -> dict:
+async def start_quiz(email: str, session_id: str) -> dict:
     """
     Start a new quiz for a service.
     
@@ -76,7 +75,7 @@ async def start_quiz(service_id: str, session_id: str) -> dict:
         raise ValueError(f"Session not found: {session_id}")
     
     # Check if user has qdrant collection (did scraping)
-    has_qdrant, qdrant_collection = await check_qdrant_collection(service_id)
+    has_qdrant, qdrant_collection = await check_qdrant_collection(email)
     
     # Update flow with qdrant info
     flow.has_qdrant = has_qdrant
@@ -271,12 +270,12 @@ async def append_quiz_history(service_id: str, question: str, answer: str) -> No
     }).eq("service_id", service_id).execute()
 
 
-async def check_qdrant_collection(service_id: str) -> tuple[bool, Optional[str]]:
+async def check_qdrant_collection(email: str) -> tuple[bool, Optional[str]]:
     """
     Check if the service has a qdrant collection (meaning scraping was done).
     
     Args:
-        service_id: The subscription service ID
+        email: The email of the user
         
     Returns:
         Tuple of (has_collection, collection_name)
@@ -285,18 +284,18 @@ async def check_qdrant_collection(service_id: str) -> tuple[bool, Optional[str]]
     
     result = supabase.table("subscription_services").select(
         "qdrant_collection"
-    ).eq("service_id", service_id).single().execute()
+    ).eq("email", email).single().execute()
     
     collection_name = result.data.get("qdrant_collection")
     return (collection_name is not None, collection_name)
 
 
-async def get_service_business_field(service_id: str) -> Optional[str]:
+async def get_service_business_field(email: str) -> Optional[str]:
     """
     Get the business field for a service from its related customer.
     
     Args:
-        service_id: The subscription service ID
+        email: The email of the user
         
     Returns:
         The business field or None
@@ -306,7 +305,7 @@ async def get_service_business_field(service_id: str) -> Optional[str]:
     # Get service with customer relation
     result = supabase.table("subscription_services").select(
         "customer:customers(business_field)"
-    ).eq("service_id", service_id).single().execute()
+    ).eq("email", email).single().execute()
     
     customer = result.data.get("customer")
     if customer:

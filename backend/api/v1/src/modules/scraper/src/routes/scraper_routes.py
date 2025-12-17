@@ -12,7 +12,7 @@ controller = ScraperController()
 
 class StartScrapingRequest(BaseModel):
     """Request model for starting a scraping job."""
-    service_id: str = Field(..., description="The service_id (UUID) for the subscription service")
+    email: str = Field(..., description="The email for the subscription service")
     website_url: str = Field(..., description="The URL of the website to scrape")
     max_pages: Optional[int] = Field(100, description="Maximum number of pages to scrape", ge=1, le=500)
 
@@ -20,7 +20,7 @@ class StartScrapingRequest(BaseModel):
 class StartScrapingResponse(BaseModel):
     """Response model for starting a scraping job."""
     message: str
-    service_id: str
+    email: str
     collection_name: str
     status: str
 
@@ -69,7 +69,7 @@ class DeleteCollectionResponse(BaseModel):
                 "application/json": {
                     "example": {
                         "message": "Scraping job started",
-                        "service_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "email": "123e4567-e89b-12d3-a456-426614174000",
                         "collection_name": "collection_123e4567-e89b-12d3-a456-426614174000",
                         "status": "processing"
                     }
@@ -95,7 +95,7 @@ async def start_scraping(
     - Save the collection name to the database
     """
     return await controller.start_scraping(
-        service_id=request.service_id,
+        email=request.email,
         website_url=request.website_url,
         max_pages=request.max_pages,
         background_tasks=background_tasks
@@ -103,7 +103,7 @@ async def start_scraping(
 
 
 @router.get(
-    "/status/{service_id}",
+    "/status/{email}",
     response_model=ScrapingStatusResponse,
     summary="Get scraping job status",
     description="Get the current status and progress of a scraping job.",
@@ -132,17 +132,17 @@ async def start_scraping(
         404: {"description": "Scraping job not found"},
     }
 )
-def get_scraping_status(service_id: str):
+def get_scraping_status(email: str):
     """
     Get the status of a scraping job.
     
     Returns the current step, progress counters, and any errors.
     """
-    return controller.get_scraping_status(service_id)
+    return controller.get_scraping_status(email)
 
 
 @router.get(
-    "/collection/{service_id}",
+    "/collection/{email}",
     response_model=CollectionStatusResponse,
     summary="Get collection status",
     description="Get information about the Qdrant collection for a service.",
@@ -167,17 +167,17 @@ def get_scraping_status(service_id: str):
         400: {"description": "Invalid request"},
     }
 )
-def get_collection_status(service_id: str):
+def get_collection_status(email: str):
     """
     Get information about the Qdrant collection for a service.
     
     Returns whether the collection exists and its current stats.
     """
-    return controller.get_collection_status(service_id)
+    return controller.get_collection_status(email)
 
 
 @router.delete(
-    "/collection/{service_id}",
+    "/collection/{email}",
     response_model=DeleteCollectionResponse,
     summary="Delete collection",
     description="Delete the Qdrant collection for a service.",
@@ -197,10 +197,10 @@ def get_collection_status(service_id: str):
         500: {"description": "Failed to delete collection"}
     }
 )
-def delete_collection(service_id: str):
+def delete_collection(email: str):
     """
     Delete the Qdrant collection for a service.
     
     This will remove all scraped data for the service.
     """
-    return controller.delete_service_collection(service_id)
+    return controller.delete_service_collection(email)

@@ -32,3 +32,17 @@ class SubscriptionDAO:
             return None
 
         return SubscriptionRead(**resp.data[0])
+    
+    def setup_calendar_information(self, subscription_id: str, business_hours: dict, appointment_duration: int) -> bool:
+        result = (
+            self.supabase
+            .table("subscriptions")
+            .update({
+                "business_hours": business_hours,
+                "appointment_duration": appointment_duration
+            })
+            .eq("subscription_id", subscription_id)
+            .execute()
+        )
+
+        return bool(result.data)

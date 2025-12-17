@@ -14,7 +14,7 @@ async def start_quiz(req: dict):
     If no collection exists, starts with the initial business question.
     If collection exists, TODO: implement RAG-based flow.
     """
-    service_id = req.get("service_id")
+    service_id = req.get("email")
     return await controller.start_quiz(service_id)
 
 

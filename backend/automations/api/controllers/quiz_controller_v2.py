@@ -21,28 +21,28 @@ from api.services.quiz_service_v2 import (
 class QuizControllerV2:
     """Controller for the simplified quiz system."""
     
-    async def start_quiz(self, service_id: str) -> Dict[str, Any]:
+    async def start_quiz(self, email: str) -> Dict[str, Any]:
         """
         Start a new quiz session.
         
         Args:
-            service_id: The service ID to start the quiz for
+            email: The email to start the quiz for
             
         Returns:
             Dictionary with session info and initial question
         """
-        if not service_id:
+        if not email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Service ID è richiesto"
+                detail="Email è richiesta"
             )
         
         try:
             # Create session
-            session_id = create_session(service_id)
+            session_id = create_session(email)
             
             # Start the quiz flow
-            result = await start_quiz(service_id, session_id)
+            result = await start_quiz(email, session_id)
             
             return {
                 "session_id": result["session_id"],

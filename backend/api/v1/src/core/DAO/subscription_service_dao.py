@@ -712,7 +712,7 @@ class SubscriptionServiceDAO:
             print(f"Error getting qdrant_collection: {e}")
             return None
 
-    def get_service_by_id(self, service_id: str) -> dict | None:
+    def get_service_by_email(self, email: str) -> dict | None:
         """
         Get subscription service by service_id.
         
@@ -726,7 +726,7 @@ class SubscriptionServiceDAO:
             response = (
                 self.supabase.table("subscription_services")
                 .select("*")
-                .eq("service_id", service_id)
+                .eq("email", email).single()
                 .execute()
             )
             
@@ -735,5 +735,5 @@ class SubscriptionServiceDAO:
             
             return response.data[0]
         except Exception as e:
-            print(f"Error getting service by id: {e}")
+            print(f"Error getting service by email: {e}")
             return None
