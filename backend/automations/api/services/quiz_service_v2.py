@@ -30,7 +30,6 @@ def create_session(email: str) -> str:
     _sessions[session_id] = QuizFlow(email=email, session_id=session_id)
     return session_id
 
-
 def get_session(session_id: str) -> Optional[QuizFlow]:
     """
     Get an existing quiz session.

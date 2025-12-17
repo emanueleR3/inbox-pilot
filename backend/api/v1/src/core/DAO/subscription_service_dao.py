@@ -760,7 +760,7 @@ class SubscriptionServiceDAO:
             response = (
                 self.supabase.table("subscription_services")
                 .select("*")
-                .eq("service_id", service_id)
+                .eq("email", email).single()
                 .execute()
             )
             

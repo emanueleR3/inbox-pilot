@@ -1,8 +1,15 @@
 """Controller for Jerry chatbot API endpoints."""
-
-from fastapi import HTTPException, status
 from typing import Optional, Dict, Any, List
 from automations.api.services.jerry_service import get_jerry_service
+from automations.api.handler_exception import (
+    JerryInternalException,
+    JerryMessageRequiredException,
+    JerryThreadIdRequiredException,
+    JerryThreadNotFoundException,
+    JerryToolNameRequiredException,
+    JerryToolParamsRequiredException,
+    JerryUserIdRequiredException,
+)
 
 
 class JerryController:
@@ -23,10 +30,7 @@ class JerryController:
             Dictionary with thread_id
         """
         if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="user_id is required"
-            )
+            raise JerryUserIdRequiredException()
         
         try:
             thread_id = self.service.create_thread(user_id)
@@ -35,10 +39,7 @@ class JerryController:
                 "message": "Thread created successfully"
             }
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error creating thread: {str(e)}"
-            )
+            raise JerryInternalException("Error creating thread", e)
     
     def send_message(
         self, 
@@ -58,25 +59,16 @@ class JerryController:
             Dictionary with thread_id and response
         """
         if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="user_id is required"
-            )
+            raise JerryUserIdRequiredException()
         
         if not message:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="message is required"
-            )
+            raise JerryMessageRequiredException()
         
         try:
             result = self.service.send_message(user_id, message, thread_id)
             return result
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error sending message: {str(e)}"
-            )
+            raise JerryInternalException("Error sending message", e)
     
     def stream_message(
         self,
@@ -96,25 +88,16 @@ class JerryController:
             Chunks of the response
         """
         if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="user_id is required"
-            )
+            raise JerryUserIdRequiredException()
         
         if not message:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="message is required"
-            )
+            raise JerryMessageRequiredException()
         
         try:
             for chunk in self.service.stream_message(user_id, message, thread_id):
                 yield chunk
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error streaming message: {str(e)}"
-            )
+            raise JerryInternalException("Error streaming message", e)
     
     def get_thread_history(self, thread_id: str) -> Dict[str, Any]:
         """
@@ -127,10 +110,7 @@ class JerryController:
             Dictionary with messages list
         """
         if not thread_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="thread_id is required"
-            )
+            raise JerryThreadIdRequiredException()
         
         try:
             history = self.service.get_thread_history(thread_id)
@@ -140,10 +120,7 @@ class JerryController:
                 "count": len(history)
             }
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error retrieving thread history: {str(e)}"
-            )
+            raise JerryInternalException("Error retrieving thread history", e)
     
     def delete_thread(self, thread_id: str) -> Dict[str, Any]:
         """
@@ -156,10 +133,7 @@ class JerryController:
             Success message
         """
         if not thread_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="thread_id is required"
-            )
+            raise JerryThreadIdRequiredException()
         
         try:
             success = self.service.delete_thread(thread_id)
@@ -169,17 +143,9 @@ class JerryController:
                     "thread_id": thread_id
                 }
             else:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Thread not found or could not be deleted"
-                )
-        except HTTPException:
-            raise
+                raise JerryThreadNotFoundException()
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error deleting thread: {str(e)}"
-            )
+            raise JerryInternalException("Error deleting thread", e)
     
     def execute_tool(
         self,
@@ -201,16 +167,10 @@ class JerryController:
             Result of the tool execution
         """
         if not tool_name:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="tool_name is required"
-            )
+            raise JerryToolNameRequiredException()
         
         if not tool_params:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="tool_params is required"
-            )
+            raise JerryToolParamsRequiredException()
         
         try:
             result = self.service.execute_tool(
@@ -221,10 +181,7 @@ class JerryController:
             )
             return result
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error executing tool: {str(e)}"
-            )
+            raise JerryInternalException("Error executing tool", e)
     
     def get_available_tools(self) -> Dict[str, Any]:
         """
@@ -240,7 +197,4 @@ class JerryController:
                 "count": len(tools)
             }
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error retrieving tools: {str(e)}"
-            )
+            raise JerryInternalException("Error retrieving tools", e)

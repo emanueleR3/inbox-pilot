@@ -1,10 +1,13 @@
-"""
-Notification controller for handling HTTP requests.
-Validates input and delegates to notification service.
-"""
-
-from fastapi import HTTPException, status
 from ..services.notification_service import NotificationService
+from ..handler_exception import (
+    NotificationBodyRequiredException,
+    NotificationBoxEmailRequiredException,
+    NotificationSendFailedException,
+    NotificationSenderEmailRequiredException,
+    NotificationSubjectRequiredException,
+    NotificationTimestampRequiredException,
+    NotificationTypeRequiredException,
+)
 
 
 class NotificationController:
@@ -40,17 +43,17 @@ class NotificationController:
             
             # Validate required fields (check for None, not empty strings)
             if notification_type is None:
-                raise ValueError("Notification type is required")
+                raise NotificationTypeRequiredException()
             if sender_email is None:
-                raise ValueError("Sender email is required")
+                raise NotificationSenderEmailRequiredException()
             if box_email is None:
-                raise ValueError("Box email is required")
+                raise NotificationBoxEmailRequiredException()
             if subject is None:
-                raise ValueError("Subject is required")
+                raise NotificationSubjectRequiredException()
             if body is None:
-                raise ValueError("Body is required")
+                raise NotificationBodyRequiredException()
             if timestamp is None:
-                raise ValueError("Timestamp is required")
+                raise NotificationTimestampRequiredException()
             
             # Call service to process notification
             return self.notification_service.send_notification(
@@ -63,14 +66,5 @@ class NotificationController:
                 summary_attachment=summary_attachment,
                 overlap=overlap
             )
-            
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e)
-            )
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to send notification: {str(e)}"
-            )
+            raise NotificationSendFailedException(e)

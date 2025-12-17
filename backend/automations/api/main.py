@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 import os
 import json
 from routers import chatbot_router, quiz_router, workflows_router
+from api.handler_exception import register_exception_handlers
 
 load_dotenv()
 
@@ -41,6 +42,8 @@ async def log_requests(request: Request, call_next):
 app.include_router(chatbot_router, prefix="/jerry")
 app.include_router(quiz_router, prefix="/internal-quiz")
 app.include_router(workflows_router, prefix="/workflows")
+
+register_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,

@@ -13,6 +13,13 @@ from src.modules.microsoft.src.controllers.graph_subscription_controller import 
     create_subscription_for_user
 )
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
+from src.handler_exception import (
+    BadRequestException,
+    InvalidTokenException,
+    OAuthException,
+    SubscriptionIdRequiredException,
+    APIException
+)
 import os
 import requests
 import httpx
@@ -48,11 +55,13 @@ async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, requ
         elif provider_name.lower() == "microsoft":
             return await _microsoft_login(subscription_id, services, email, request)
         else:
-            raise HTTPException(status_code=400, detail="Unsupported provider")
+            raise BadRequestException(detail=f"Provider non supportato: {provider_name}")
             
+    except APIException:
+        raise
     except Exception as e:
         logger.error(f"Error in OAuth login: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error during OAuth login")
+        raise OAuthException(provider=provider_name, reason=str(e))
 
 
 async def _google_login(subscription_id: str, services: str, email: str, request: Request):
@@ -145,7 +154,7 @@ async def google_callback(request: Request):
         
         if not subscription_id:
             logger.error("Missing subscription_id from state, query params and cookies")
-            raise HTTPException(status_code=400, detail="Missing subscription_id from login session")
+            raise SubscriptionIdRequiredException()
         
         logger.info(f"Using subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}")
         
@@ -171,14 +180,14 @@ async def google_callback(request: Request):
             user_info = user_info_response.json()
         except requests.RequestException as e:
             logger.error(f"Failed to fetch user info: {e}")
-            raise HTTPException(status_code=400, detail="Invalid Google token")
+            raise InvalidTokenException(provider="Google")
 
         email = user_info["email"]  # Email dall'account Google autenticato
         logger.info(f"Authenticated Google user: {email}")
 
         # Verifica che abbiamo tutti i dati necessari
         if not credentials.token:
-            raise HTTPException(status_code=400, detail="Access token mancante")
+            raise InvalidTokenException(provider="Google")
         
         if not credentials.refresh_token:
             logger.warning("Refresh token mancante - potrebbe essere necessario revocare e riautorizzare")
@@ -446,7 +455,7 @@ async def microsoft_callback(request: Request):
         
         if not subscription_id:
             logger.error("Missing subscription_id from state, query params and cookies")
-            raise HTTPException(status_code=400, detail="Missing subscription_id from login session")
+            raise SubscriptionIdRequiredException()
         
         logger.info(f"Microsoft callback URL: {request.url}")
         logger.info(f"Using subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}")
@@ -458,12 +467,12 @@ async def microsoft_callback(request: Request):
         if error:
             logger.error(f"Microsoft OAuth error: {error}")
             logger.error(f"Error description: {error_description}")
-            raise HTTPException(status_code=400, detail=f"Microsoft OAuth error: {error} - {error_description}")
+            raise OAuthException(provider="Microsoft", reason=f"{error} - {error_description}")
         
         code = request.query_params.get("code")
         if not code:
             logger.error("No authorization code in callback")
-            raise HTTPException(status_code=400, detail="Missing authorization code")
+            raise BadRequestException(detail="Codice di autorizzazione mancante")
 
         logger.info(f"Authorization code received: {code[:20]}...")
 

@@ -70,7 +70,7 @@ class DeleteCollectionResponse(BaseModel):
                     "example": {
                         "message": "Scraping job started",
                         "email": "user@example.com",
-                        "collection_name": "collection_user_example_com_aaaaaaaaaaaa",
+                        "collection_name": "collection_user_example_com",
                         "status": "processing"
                     }
                 }

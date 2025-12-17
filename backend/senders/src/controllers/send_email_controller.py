@@ -1,6 +1,18 @@
-from fastapi import HTTPException, status
-from supabase_auth.errors import AuthApiError
+
 from src.services.send_email_service import SendEmailService
+from src.handler_exception import (
+    BodyRequiredException,
+    EmailRequiredException,
+    GmailSendFailedException,
+    HashedAccessTokenRequiredException,
+    MicrosoftSendFailedException,
+    SmtpEmailRequiredException,
+    SmtpPasswordRequiredException,
+    SmtpPortRequiredException,
+    SmtpSendFailedException,
+    SmtpServerRequiredException,
+    SubjectRequiredException,
+)
 
 class SendEmailController:
     def __init__(self):
@@ -14,13 +26,13 @@ class SendEmailController:
             hashed_access_token = req.get("hashed_access_token")
 
             if not email:
-                raise ValueError("Email is required")
+                raise EmailRequiredException()
             if not subject:
-                raise ValueError("Subject is required")
+                raise SubjectRequiredException()
             if not body:
-                raise ValueError("Body is required")
+                raise BodyRequiredException()
             if not hashed_access_token:
-                raise ValueError("Hashed access token is required")
+                raise HashedAccessTokenRequiredException()
 
             
             thread_id = req.get("original_thread_id")
@@ -28,12 +40,9 @@ class SendEmailController:
             attachments = req.get("attachments")  # Optional list of attachments
             
             return self.send_email_service.send_email_gmail(email, subject, body, hashed_access_token, thread_id, message_id, attachments)
-            
+
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to send gmail email: {str(e)}"
-            )
+            raise GmailSendFailedException(e)
         
     def send_email_microsoft(self, req: dict):
         try:
@@ -43,24 +52,20 @@ class SendEmailController:
             hashed_access_token = req.get("hashed_access_token")
 
             if not email:
-                raise ValueError("Email is required")
+                raise EmailRequiredException()
             if not subject:
-                raise ValueError("Subject is required")
+                raise SubjectRequiredException()
             if not body:
-                raise ValueError("Body is required")
+                raise BodyRequiredException()
             if not hashed_access_token:
-                raise ValueError("Hashed access token is required")
+                raise HashedAccessTokenRequiredException()
 
             reply_to_id = req.get("message_id")
             attachments = req.get("attachments")  # Optional list of attachments
 
             return self.send_email_service.send_email_microsoft(email, subject, body, hashed_access_token, reply_to_id, attachments)
-            
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to send microsoft email: {str(e)}"
-            )
+            raise MicrosoftSendFailedException(e)
         
     def send_email_smtp(self, req: dict):
         try:
@@ -74,25 +79,25 @@ class SendEmailController:
 
             if not email:
                 print("[DEBUG-SENDER-CONTROLLER] Email is required")   
-                raise ValueError("Email is required")
+                raise EmailRequiredException()
             if not subject:
                 print("[DEBUG-SENDER-CONTROLLER] Subject is required")
-                raise ValueError("Subject is required")
+                raise SubjectRequiredException()
             if not body:
                 print("[DEBUG-SENDER-CONTROLLER] Body is required")
-                raise ValueError("Body is required")
+                raise BodyRequiredException()
             if not smtp_port:
                 print("[DEBUG-SENDER-CONTROLLER] Smtp port is required")
-                raise ValueError("Smtp port is required")
+                raise SmtpPortRequiredException()
             if not smtp_server:
                 print("[DEBUG-SENDER-CONTROLLER] Smtp server is required")
-                raise ValueError("Smtp server is required")
+                raise SmtpServerRequiredException()
             if not smtp_email:
                 print("[DEBUG-SENDER-CONTROLLER] Smtp email is required")
-                raise ValueError("Smtp email is required")
+                raise SmtpEmailRequiredException()
             if not password:
                 print("[DEBUG-SENDER-CONTROLLER] Smtp password is required")
-                raise ValueError("Smtp password is required")
+                raise SmtpPasswordRequiredException()
 
             reply_to_id = req.get("reply_to_id")
             message_id = req.get("message_id")
@@ -103,9 +108,5 @@ class SendEmailController:
             return self.send_email_service.send_email_smtp(
                 email, subject, body, smtp_port, smtp_server, smtp_email, password, reply_to_id, message_id, attachments
             )
-            
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to send smtp email: {str(e)}"
-            )
+            raise SmtpSendFailedException(e)

@@ -1,8 +1,13 @@
-from fastapi import Request, HTTPException, status
-from fastapi.responses import RedirectResponse, JSONResponse
-from src.core.logger import setup_logger
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 from src.modules.auth.src.utils.custom_provider import test_imap_connection, test_imap_login, test_smtp_connection, test_smtp_login
+from src.handler_exception import (
+    MissingFieldException,
+    InvalidPortException,
+    InvalidEmailException,
+    DatabaseException,
+    APIException
+)
+
 
 class CustomProviderController:
 
@@ -27,34 +32,19 @@ class CustomProviderController:
             missing_fields.append("password")
 
         if missing_fields:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Campi obbligatori mancanti: {', '.join(missing_fields)}"
-            )
+            raise MissingFieldException(fields=missing_fields)
 
         if imap_port and not isinstance(imap_port, int):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="La porta IMAP deve essere un numero intero"
-            )
+            raise InvalidPortException(port_type="porta IMAP")
         if smtp_port and not isinstance(smtp_port, int):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="La porta SMTP deve essere un numero intero"
-            )
+            raise InvalidPortException(port_type="porta SMTP")
 
         if "@" not in email:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Formato email non valido"
-            )
+            raise InvalidEmailException(email=email)
 
         test_imap_connection(server_imap, imap_port)
-
         test_imap_login(server_imap, imap_port, email, password)
-
         test_smtp_connection(server_smtp, smtp_port)
-
         test_smtp_login(server_smtp, smtp_port, email, password)
 
         try:
@@ -64,12 +54,9 @@ class CustomProviderController:
             )
             return res
 
-        except HTTPException:
+        except APIException:
             raise
         except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Errore interno durante il salvataggio delle credenziali"
-            )
+            raise DatabaseException(operation="salvataggio credenziali custom provider")
 
 

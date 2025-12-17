@@ -239,7 +239,7 @@ async def start_quiz(
     req: dict = Body(
             ...,
             example={
-                "service_id": "id12345"
+                "email": "user@example.it"
             },
             description="Parametri da inviare per iniziare un quiz",
         ),
