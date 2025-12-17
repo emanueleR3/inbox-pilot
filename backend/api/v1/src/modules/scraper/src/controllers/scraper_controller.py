@@ -29,8 +29,17 @@ class ScraperController:
     def __init__(self):
         self.subscription_service_dao = SubscriptionServiceDAO()
     
+    def _normalize_email_key(self, email: str) -> str:
+        return (email or "").strip().lower()
+
     def _generate_collection_name(self, email: str) -> str:
-        return f"collection_{email}"
+        """Generate a stable, Qdrant-safe collection name from email."""
+        normalized = self._normalize_email_key(email)
+        safe = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
+        # deterministic suffix to avoid collisions and keep name short
+        suffix = uuid.uuid5(uuid.NAMESPACE_DNS, normalized).hex[:12]
+        safe_prefix = safe[:32] if safe else "user"
+        return f"collection_{safe_prefix}_{suffix}"
     
     async def start_scraping(
         self, 
@@ -43,7 +52,7 @@ class ScraperController:
         Start the scraping process for a website.
         
         Args:
-            email: The email for the subscription service
+            service_id: The service_id for the subscription service
             website_url: The URL of the website to scrape
             max_pages: Maximum number of pages to scrape
             background_tasks: FastAPI BackgroundTasks for async processing
@@ -51,7 +60,8 @@ class ScraperController:
         Returns:
             Dictionary with job information
         """
-        if not email:
+        email_key = self._normalize_email_key(email)
+        if not email_key:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="email is required"
@@ -64,17 +74,17 @@ class ScraperController:
             )
         
         # Verify service exists
-        service = self.subscription_service_dao.get_service_by_email(email)
+        service = self.subscription_service_dao.get_service_by_email(email_key)
         if not service:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Service with email {email} not found"
+                detail=f"Service with email {email_key} not found"
             )
         
-        collection_name = self._generate_collection_name(email)
+        collection_name = self._generate_collection_name(email_key)
         
         # Initialize job status
-        scraping_jobs[email] = {
+        scraping_jobs[email_key] = {
             "status": "started",
             "website_url": website_url,
             "collection_name": collection_name,
@@ -94,26 +104,26 @@ class ScraperController:
             # Run in background
             background_tasks.add_task(
                 self._run_scraping_pipeline,
-                email,
+                email_key,
                 website_url,
                 collection_name,
                 max_pages
             )
             return {
                 "message": "Scraping job started",
-                "email": email,
+                "email": email_key,
                 "collection_name": collection_name,
                 "status": "processing"
             }
         else:
             # Run synchronously
             await self._run_scraping_pipeline(
-                email,
+                email_key,
                 website_url,
                 collection_name,
                 max_pages
             )
-            return scraping_jobs.get(email, {})
+            return scraping_jobs.get(email_key, {})
     
     async def _run_scraping_pipeline(
         self,
@@ -129,6 +139,7 @@ class ScraperController:
             # Step 1: Scrape website
             scraping_jobs[email]["progress"]["step"] = "scraping"
             scraping_jobs[email]["progress"]["current_url"] = website_url
+            print(f"[{email}] Starting scraping for {website_url}")
             
             # Define progress callback to update status in real-time
             def update_scraping_progress(pages_scraped: int, current_url: str):
@@ -209,10 +220,7 @@ class ScraperController:
             scraping_jobs[email]["progress"]["step"] = "updating_database"
             print(f"[{email}] Updating database with collection name...")
             
-            success = self.subscription_service_dao.update_qdrant_collection(
-                email, 
-                collection_name
-            )
+            success = self.subscription_service_dao.update_qdrant_collection_by_email(email, collection_name)
             
             if not success:
                 print(f"[{email}] Warning: Failed to update database with collection name")
@@ -226,7 +234,7 @@ class ScraperController:
             scraping_jobs[email]["status"] = "failed"
             scraping_jobs[email]["error"] = str(e)
             print(f"[{email}] Scraping pipeline failed: {e}")
-    
+
     def get_scraping_status(self, email: str) -> Dict[str, Any]:
         """
         Get the status of a scraping job.
@@ -237,19 +245,20 @@ class ScraperController:
         Returns:
             Dictionary with job status
         """
-        if not email:
+        email_key = self._normalize_email_key(email)
+        if not email_key:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="email is required"
             )
         
-        if email not in scraping_jobs:
+        if email_key not in scraping_jobs:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No scraping job found for email {email}"
+                detail=f"No scraping job found for email {email_key}"
             )
         
-        return scraping_jobs[email]
+        return scraping_jobs[email_key]
     
     def get_collection_status(self, email: str) -> Dict[str, Any]:
         """
@@ -261,18 +270,19 @@ class ScraperController:
         Returns:
             Dictionary with collection information
         """
-        if not email:
+        email_key = self._normalize_email_key(email)
+        if not email_key:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="email is required"
             )
         
         # Get collection name from database
-        collection_name = self.subscription_service_dao.get_qdrant_collection(email)
+        collection_name = self.subscription_service_dao.get_qdrant_collection_by_email(email_key)
         
         if not collection_name:
             # Try generating the name
-            collection_name = self._generate_collection_name(email)
+            collection_name = self._generate_collection_name(email_key)
         
         # Check if collection exists
         if not collection_exists(collection_name):
@@ -301,13 +311,14 @@ class ScraperController:
         Returns:
             Dictionary with deletion status
         """
-        if not email:
+        email_key = self._normalize_email_key(email)
+        if not email_key:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="email is required"
             )
         
-        collection_name = self._generate_collection_name(email)
+        collection_name = self._generate_collection_name(email_key)
         
         if not collection_exists(collection_name):
             raise HTTPException(
@@ -319,7 +330,7 @@ class ScraperController:
         
         if success:
             # Clear the collection name from database
-            self.subscription_service_dao.update_qdrant_collection(email, None)
+            self.subscription_service_dao.update_qdrant_collection_by_email(email_key, None)
             
             return {
                 "message": f"Collection {collection_name} deleted successfully",

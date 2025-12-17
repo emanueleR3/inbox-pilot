@@ -2,7 +2,7 @@
 ### Base URL: http://localhost:8000/scraper
 
 @baseUrl = http://localhost:8000/scraper
-@email = business@example.com
+@email = INSERIRE
 
 ### ==============================================
 ### Start Scraping Job
@@ -14,7 +14,7 @@ Content-Type: application/json
 
 {
     "email": "{{email}}",
-    "website_url": "https://www.villaimmacolata.eu"
+    "website_url": "INSERIRE"
 }
 
 ### Start scraping - With max_pages limit
