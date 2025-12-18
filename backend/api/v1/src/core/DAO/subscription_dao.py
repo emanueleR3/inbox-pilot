@@ -6,18 +6,6 @@ from src.core.database import get_supabase_client
 class SubscriptionDAO:
     def __init__(self):
         self.supabase = get_supabase_client()
-
-    def create_subscription(self, subscription_data: dict):
-            sub = Subscription.model_validate(subscription_data)
-
-            sub_dict = sub.model_dump(mode="json")
-
-            result = self.supabase.table("subscriptions").insert(sub_dict).execute()
-
-            if not result.data:
-                raise ValueError("Nessun dato restituito da Supabase dopo l'inserimento")
-
-            return SubscriptionRead.model_validate(result.data[0])
     
     def get_subscription_by_id(self, subscription_id: str) -> SubscriptionRead:
         resp = (

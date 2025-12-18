@@ -39,26 +39,6 @@ class SubscriptionController:
         except Exception as e:
             raise DatabaseException(operation=f"recupero sottoscrizioni: {str(e)}")
     
-    def create_subscription(self, payload: dict):
-        """Crea una nuova sottoscrizione"""
-        # Validazione campi obbligatori
-        required_fields = ["name", "city", "address", "current_period_end"]
-        missing_fields = [field for field in required_fields if not payload.get(field)]
-        
-        if missing_fields:
-            raise MissingFieldException(fields=missing_fields)
-        
-        try:
-            subscription = self.subscription_dao.create_subscription(payload)
-            return subscription
-        
-        except ValueError as e:
-            raise BadRequestException(detail=str(e))
-        except APIException:
-            raise
-        except Exception as e:
-            raise DatabaseException(operation=f"creazione sottoscrizione: {str(e)}")
-    
     def update_subscription(self, subscription_id: str, payload: dict):
         """Aggiorna una sottoscrizione esistente"""
         if not subscription_id:
