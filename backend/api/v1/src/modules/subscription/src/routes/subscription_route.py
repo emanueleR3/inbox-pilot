@@ -3,14 +3,14 @@ from src.core.dependecy import get_current_user
 from src.modules.subscription.src.controllers.subscription_controller import SubscriptionController
 
 router = APIRouter(
-    dependencies=[Depends(get_current_user)],
+    #dependencies=[Depends(get_current_user)],
     tags=["Subscription"],
 )
 controller = SubscriptionController()
 
 
 @router.get(
-    "/subscriptions",
+    "/all-subscriptions",
     summary="Recupera tutte le sottoscrizioni",
     description="Restituisce l'elenco completo di tutte le sottoscrizioni presenti nel sistema.",
     responses={
@@ -49,7 +49,7 @@ def get_all_subscriptions():
 
 
 @router.get(
-    "/subscriptions/{subscription_id}",
+    "/{subscription_id}",
     summary="Recupera una sottoscrizione per ID",
     description="Restituisce tutti i dettagli della sottoscrizione identificata dall'ID specificato.",
     responses={
@@ -88,7 +88,7 @@ def get_subscription_by_id(subscription_id: str):
 
 
 @router.patch(
-    "/subscriptions/{subscription_id}",
+    "/{subscription_id}",
     summary="Aggiorna una sottoscrizione esistente",
     description="""
     Aggiorna parzialmente una sottoscrizione esistente. 
