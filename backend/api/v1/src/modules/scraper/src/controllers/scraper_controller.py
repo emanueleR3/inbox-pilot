@@ -59,7 +59,7 @@ class ScraperController:
         return Path(os.getenv("SCRAPINGS_DIR", "/app/scrapings"))
 
     def _scrapings_filename(self, email: str) -> str:
-        clean_mail = (email or "").strip().lower().replace(".", "_").replace("@", "at")
+        clean_mail = (email or "").strip().lower().replace(".", "_").replace("@", "_at_")
         return f"scraper_{clean_mail}.json"
 
     def _write_scrapings_json(self, email: str, pages: list[dict]) -> str:

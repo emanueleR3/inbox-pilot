@@ -756,6 +756,66 @@ def get_email_service_data(email: str) -> Optional[Dict]:
         return None
 
 
+def get_scraping_data(email: str) -> Optional[Dict]:
+    """
+    Get scraping_collection_path and qdrant_collection for an email.
+    
+    Args:
+        email: Email address to look up
+        
+    Returns:
+        Dict with scraping_collection_path and qdrant_collection, or None if not found
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select(
+            "scraping_collection_path, qdrant_collection"
+        ).eq("email", email).execute()
+        
+        if response.data:
+            return response.data[0]
+        else:
+            print(f"⚠️ [DB_CLIENT] No scraping data found for email: {email}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving scraping data: {e}")
+        return None
+
+
+def update_scraping_paths(email: str, new_json_path: str, new_collection_name: str) -> bool:
+    """
+    Update scraping_collection_path and qdrant_collection in DB.
+    
+    Args:
+        email: Email address to update
+        new_json_path: New path to the updated JSON file
+        new_collection_name: New Qdrant collection name
+        
+    Returns:
+        bool: True if update successful, False otherwise
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").update({
+            "scraping_collection_path": new_json_path,
+            "qdrant_collection": new_collection_name
+        }).eq("email", email).execute()
+        
+        if response.data:
+            print(f"✅ [DB_CLIENT] Updated scraping paths for email: {email}")
+            return True
+        else:
+            print(f"❌ [DB_CLIENT] Failed to update scraping paths for email: {email}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error updating scraping paths: {e}")
+        return False
+
+
 if __name__ == "__main__":
     # Test del modulo
     import asyncio

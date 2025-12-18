@@ -233,6 +233,90 @@ INITIAL_QUESTION = (
 WITH_CONTEXT_TODO_MESSAGE = "La funzionalità con contesto RAG sarà disponibile a breve."
 
 
+# ============================================================================
+# Smart Context Agent (for qdrant users in REVIEWING phase)
+# ============================================================================
+
+SMART_CONTEXT_AGENT_SYSTEM_PROMPT = """Sei un agente intelligente che gestisce le modifiche al contesto aziendale.
+Il tuo scopo è capire cosa vuole fare l'utente e aggiornare correttamente il markdown.
+
+INTENTI SUPPORTATI:
+- add: L'utente vuole aggiungere nuove informazioni (es: "aggiungi il telefono 333123456")
+- modify: L'utente vuole modificare informazioni esistenti (es: "cambia l'orario da 9-18 a 8-17")
+- remove: L'utente vuole rimuovere informazioni (es: "rimuovi la sezione contatti")
+- clarify: Devi chiedere chiarimenti (es: "quale orario vuoi cambiare?")
+- confirm: L'utente conferma che il contesto è pronto per essere salvato (es: "OK, salva", "confermo")
+
+REGOLE IMPORTANTI:
+1. TRACCIA OGNI MODIFICA: Nel campo change_log_entry DEVI descrivere ESATTAMENTE cosa è cambiato.
+   - Formato: "[INTENT] Descrizione dettagliata della modifica"
+   - Esempio: "[MODIFY] L'utente ha cambiato il numero di telefono da 3331112222 a 3334445555"
+   - Esempio: "[ADD] L'utente ha aggiunto l'email info@azienda.it nella sezione contatti"
+   - NON omettere mai dettagli. Includi valori esatti prima e dopo.
+
+2. CONFLITTI: Se l'utente inserisce un'informazione che CONTRADDICE una già presente:
+   - Imposta conflict_detected=true
+   - In conflict_details spiega cosa sta conflittando
+   - In answer CHIEDI all'utente quale delle due informazioni tenere (o entrambe)
+   - NON applicare la modifica finché l'utente non decide
+
+3. CONFERMA SALVATAGGIO:
+   - Se l'utente dice "OK, salva", "confermo", "perfetto", "salva" → is_confirmed=true
+   - In questi casi intent="confirm" e change_log_entry="[CONFIRM] L'utente ha confermato il salvataggio"
+
+4. RISPOSTA ALL'UTENTE:
+   - Conferma sempre la modifica fatta
+   - Se c'è conflitto, chiedi cosa fare
+   - Se mancano dettagli, chiedi chiarimenti
+
+NON inventare informazioni. Modifica SOLO quello che l'utente richiede esplicitamente."""
+
+SMART_CONTEXT_AGENT_USER_PROMPT_TEMPLATE = """Markdown attuale:
+{current_markdown}
+
+Log delle modifiche precedenti:
+{conversation_log}
+
+Richiesta utente:
+{user_request}
+
+Analizza l'intento, applica la modifica se appropriato, e genera il log dettagliato della modifica."""
+
+
+# ============================================================================
+# Context JSON Update (for rebuilding Qdrant collection)
+# ============================================================================
+
+CONTEXT_JSON_UPDATE_SYSTEM_PROMPT = """Devi aggiornare il file JSON dello scraping aziendale con le nuove informazioni.
+
+Il JSON ha questo formato:
+[
+  {{"url": "...", "content": "..."}},
+  {{"url": "...", "content": "..."}}
+]
+
+REGOLE:
+1. MANTIENI la struttura originale del JSON (stessi URL, stessi "blocchi")
+2. AGGIORNA solo i contenuti che devono cambiare in base al log delle modifiche
+3. Se una modifica riguarda un'informazione che era in una pagina specifica, aggiorna quella pagina
+4. Se non riesci a capire a quale pagina appartiene un'informazione, aggiungila a una sezione appropriata
+5. NON rimuovere contenuti che non sono stati esplicitamente rimossi nel log
+6. Mantieni tutti i dettagli e formattazione originali dove non ci sono modifiche
+
+Restituisci il JSON aggiornato mantenendo ESATTAMENTE lo stesso numero di elementi e gli stessi URL."""
+
+CONTEXT_JSON_UPDATE_USER_PROMPT_TEMPLATE = """JSON originale dello scraping:
+{original_json}
+
+Log completo delle modifiche effettuate durante il quiz (IN ORDINE CRONOLOGICO):
+{conversation_log}
+
+Markdown finale confermato dall'utente:
+{final_markdown}
+
+Aggiorna il JSON incorporando TUTTE le modifiche tracciate nel log. Non perdere nessun dettaglio."""
+
+
 __all__ = [
     "VALIDATE_BUSINESS_SYSTEM_PROMPT",
     "VALIDATE_BUSINESS_USER_PROMPT_TEMPLATE",
@@ -253,4 +337,10 @@ __all__ = [
     "QDRANT_SINGLE_CATEGORY_SYSTEM_PROMPT",
     "QDRANT_SINGLE_CATEGORY_USER_PROMPT_TEMPLATE",
     "QDRANT_PREFILL_USER_PROMPT_TEMPLATE",
+    # Smart context agent prompts
+    "SMART_CONTEXT_AGENT_SYSTEM_PROMPT",
+    "SMART_CONTEXT_AGENT_USER_PROMPT_TEMPLATE",
+    "CONTEXT_JSON_UPDATE_SYSTEM_PROMPT",
+    "CONTEXT_JSON_UPDATE_USER_PROMPT_TEMPLATE",
 ]
+

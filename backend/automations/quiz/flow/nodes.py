@@ -21,6 +21,7 @@ from automations.quiz.models.llm_response import (
     BusinessFromContextResponse,
     SingleCategoryPrefillResponse,
     QdrantPrefillResponse,
+    SmartContextEditResponse,
 )
 from automations.quiz.prompts import (
     VALIDATE_BUSINESS_SYSTEM_PROMPT,
@@ -42,6 +43,8 @@ from automations.quiz.prompts import (
     QDRANT_PREFILL_USER_PROMPT_TEMPLATE,
     QDRANT_SINGLE_CATEGORY_SYSTEM_PROMPT,
     QDRANT_SINGLE_CATEGORY_USER_PROMPT_TEMPLATE,
+    SMART_CONTEXT_AGENT_SYSTEM_PROMPT,
+    SMART_CONTEXT_AGENT_USER_PROMPT_TEMPLATE,
 )
 
 from automations.quiz.qdrant_rag import embed_texts, qdrant_search, format_top_chunks
@@ -1081,8 +1084,142 @@ def _looks_like_full_markdown(text: str) -> bool:
     return t.startswith("#") or ("\n## " in t) or ("\n### " in t)
 
 
+def smart_context_edit_node(state: QuizState, user_message: str) -> QuizState:
+    """
+    Smart agent for editing context when user has qdrant_collection.
+    
+    This agent:
+    - Detects intent (add/modify/remove/confirm/clarify)
+    - Tracks ALL changes in conversation_log with full detail
+    - Handles conflicts by asking user which info to keep
+    - Sets pending_context_save flag when user confirms
+    
+    Args:
+        state: Current quiz state
+        user_message: User's message
+        
+    Returns:
+        Updated state with tracked changes
+    """
+    from datetime import datetime
+    
+    print(f"🧠 [SMART_CONTEXT_EDIT] Processing with smart agent...")
+    
+    # Max turns check
+    if state["turn_count"] >= state["max_turns"]:
+        state["context_confirmed"] = True
+        state["is_done"] = True
+        state["phase"] = QuizPhases.COMPLETED
+        state["pending_context_save"] = True
+        log_entry = f"[{datetime.now().isoformat()}] [MAX_TURNS] Raggiunto limite massimo di modifiche"
+        state["conversation_log"].append(log_entry)
+        state["current_response"] = "Ho raggiunto il numero massimo di modifiche. Ho salvato l'ultima versione disponibile."
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        return state
+
+    # Fast path: explicit confirmation
+    if _is_confirmation_message(user_message):
+        state["context_confirmed"] = True
+        state["is_done"] = True
+        state["phase"] = QuizPhases.COMPLETED
+        state["pending_context_save"] = True
+        log_entry = f"[{datetime.now().isoformat()}] [CONFIRM] L'utente ha confermato il salvataggio del contesto"
+        state["conversation_log"].append(log_entry)
+        state["current_response"] = "Perfetto. Ho salvato il contesto aziendale definitivo."
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        return state
+
+    # Fast path: user pasted full markdown replacement
+    if _looks_like_full_markdown(user_message):
+        old_markdown = state.get("final_markdown") or ""
+        state["final_markdown"] = user_message.strip()
+        log_entry = f"[{datetime.now().isoformat()}] [REPLACE] L'utente ha sostituito l'intero markdown. Lunghezza precedente: {len(old_markdown)} caratteri, nuova lunghezza: {len(user_message)} caratteri"
+        state["conversation_log"].append(log_entry)
+        state["current_response"] = (
+            "Ricevuto. Ho aggiornato il testo con la tua versione. "
+            "Se è tutto corretto scrivi: \"OK, salva\"."
+        )
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        state["turn_count"] += 1
+        return state
+
+    # Use LLM for smart intent detection and change tracking
+    llm = get_llm(temperature=0.2)
+    structured_llm = llm.with_structured_output(SmartContextEditResponse, method="function_calling")
+
+    current_markdown = state.get("final_markdown") or ""
+    conversation_log_text = "\n".join(state.get("conversation_log", [])) or "(Nessuna modifica precedente)"
+    
+    user_prompt = SMART_CONTEXT_AGENT_USER_PROMPT_TEMPLATE.format(
+        current_markdown=current_markdown,
+        conversation_log=conversation_log_text,
+        user_request=user_message,
+    )
+
+    try:
+        response: SmartContextEditResponse = structured_llm.invoke([
+            {"role": "system", "content": SMART_CONTEXT_AGENT_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ])
+
+        print(f"   Intent: {response.intent}")
+        print(f"   Conflict: {response.conflict_detected}")
+        print(f"   Log entry: {response.change_log_entry[:100]}...")
+
+        # Track the change in conversation_log
+        timestamp = datetime.now().isoformat()
+        log_entry = f"[{timestamp}] {response.change_log_entry}"
+        state["conversation_log"].append(log_entry)
+
+        # Apply the update (unless conflict detected)
+        if response.conflict_detected:
+            # Don't update markdown, ask user to resolve conflict
+            state["current_response"] = response.answer
+            print(f"   ⚠️ Conflict detected: {response.conflict_details}")
+        else:
+            # Apply the markdown update
+            state["final_markdown"] = (response.updated_markdown or current_markdown).strip()
+            state["current_response"] = response.answer
+
+        # Check if user confirmed
+        if response.is_confirmed:
+            state["context_confirmed"] = True
+            state["is_done"] = True
+            state["phase"] = QuizPhases.COMPLETED
+            state["pending_context_save"] = True
+
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        state["turn_count"] += 1
+        return state
+
+    except Exception as e:
+        print(f"   ❌ Error in smart context edit: {e}")
+        state["error"] = str(e)
+        state["current_response"] = "Non sono riuscito ad applicare la modifica. Puoi riprovare in modo più specifico?"
+        state["messages"].append({"role": "assistant", "content": state["current_response"]})
+        state["turn_count"] += 1
+        return state
+
+
 def edit_context_node(state: QuizState, user_message: str) -> QuizState:
-    """Apply user edits to the markdown context until they confirm it can be saved."""
+    """
+    Apply user edits to the markdown context until they confirm it can be saved.
+    
+    For users with qdrant_collection (who did scraping), uses the smart context agent
+    that tracks all changes in detail for later JSON update.
+    
+    Args:
+        state: Current quiz state
+        user_message: User's message
+        
+    Returns:
+        Updated state
+    """
+    # Use smart agent for users with qdrant collection
+    if state.get("has_qdrant_collection"):
+        return smart_context_edit_node(state, user_message)
+    
+    # Original logic for users without qdrant collection
     # Max 30 user turns in this review chat
     if state["turn_count"] >= state["max_turns"]:
         state["context_confirmed"] = True
@@ -1144,3 +1281,4 @@ def edit_context_node(state: QuizState, user_message: str) -> QuizState:
         state["messages"].append({"role": "assistant", "content": state["current_response"]})
         state["turn_count"] += 1
         return state
+
