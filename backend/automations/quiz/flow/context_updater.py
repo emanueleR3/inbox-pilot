@@ -54,17 +54,33 @@ def read_scraping_json(json_path: str) -> Optional[List[Dict]]:
         List of dicts with url and content, or None if error
     """
     try:
-        # Handle both absolute paths and relative paths
-        if json_path.startswith("/"):
-            full_path = json_path
-        else:
-            full_path = os.path.join(SCRAPINGS_DIR, json_path)
+        # Get the host path prefix from environment (for path conversion)
+        SCRAPINGS_DB_DIR = os.getenv("SCRAPINGS_DB_DIR", "/home/deploy/corretto/data/scrapings")
         
-        # Also try with the base name if path doesn't exist
-        if not os.path.exists(full_path):
-            # Try just the filename in SCRAPINGS_DIR
+        # Convert host path to container path
+        # DB stores: /home/deploy/corretto/data/scrapings/scraper_xxx.json
+        # Container needs: /app/scrapings/scraper_xxx.json
+        if json_path.startswith(SCRAPINGS_DB_DIR):
+            # Replace host path prefix with container path prefix
+            relative_path = json_path[len(SCRAPINGS_DB_DIR):].lstrip("/")
+            full_path = os.path.join(SCRAPINGS_DIR, relative_path)
+            print(f"📂 [CONTEXT_UPDATER] Converted host path to container path: {full_path}")
+        elif json_path.startswith("/"):
+            # Absolute path but not host path - try to extract basename
             basename = os.path.basename(json_path)
             full_path = os.path.join(SCRAPINGS_DIR, basename)
+            print(f"📂 [CONTEXT_UPDATER] Using basename from absolute path: {full_path}")
+        else:
+            # Relative path - use as-is in SCRAPINGS_DIR
+            full_path = os.path.join(SCRAPINGS_DIR, json_path)
+        
+        # Fallback: try just the filename if path doesn't exist
+        if not os.path.exists(full_path):
+            basename = os.path.basename(json_path)
+            fallback_path = os.path.join(SCRAPINGS_DIR, basename)
+            print(f"⚠️ [CONTEXT_UPDATER] Path not found, trying fallback: {fallback_path}")
+            if os.path.exists(fallback_path):
+                full_path = fallback_path
         
         print(f"📂 [CONTEXT_UPDATER] Reading JSON from: {full_path}")
         
@@ -76,6 +92,14 @@ def read_scraping_json(json_path: str) -> Optional[List[Dict]]:
         
     except FileNotFoundError:
         print(f"❌ [CONTEXT_UPDATER] JSON file not found: {json_path}")
+        print(f"   Tried path: {full_path}")
+        print(f"   SCRAPINGS_DIR: {SCRAPINGS_DIR}")
+        # List directory contents for debugging
+        try:
+            files = os.listdir(SCRAPINGS_DIR)
+            print(f"   Available files in SCRAPINGS_DIR: {files}")
+        except Exception:
+            print(f"   Could not list SCRAPINGS_DIR")
         return None
     except json.JSONDecodeError as e:
         print(f"❌ [CONTEXT_UPDATER] Invalid JSON: {e}")
