@@ -49,7 +49,8 @@ class ScraperController:
         return f"collection_{safe_prefix}_{suffix}"
 
     def _scrapings_dir(self) -> Path:
-        return Path(os.getenv("SCRAPINGS_DIR", "/data/scrapings"))
+        # Keep the default aligned with the Kubernetes deployment volumeMount.
+        return Path(os.getenv("SCRAPINGS_DIR", "/app/scrapings"))
 
     def _scrapings_filename(self, email: str) -> str:
         clean_mail = (email or "").strip().lower().replace(".", "_").replace("@", "at")
