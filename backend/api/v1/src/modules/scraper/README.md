@@ -209,7 +209,7 @@ Collections are named deterministically from the service email.
 | OPENAI_API_KEY | OpenAI API key for embeddings and cleaning | Required |
 | QDRANT_URL | Qdrant server URL | http://localhost:6333 |
 | QDRANT_API_KEY | Qdrant API key (optional) | None |
-| SCRAPINGS_DIR | Directory where JSON export is written | /data/scrapings |
+| SCRAPINGS_DIR | Directory where JSON export is written | /app/scrapings |
 | LANGCHAIN_TRACING_V2 | Enable LangSmith tracing | true |
 | LANGCHAIN_API_KEY | LangSmith API key | - |
 | LANGCHAIN_PROJECT | LangSmith project name | corretto_scraper |
