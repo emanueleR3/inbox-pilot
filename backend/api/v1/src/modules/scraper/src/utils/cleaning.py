@@ -1,7 +1,7 @@
 """Text cleaning utilities using LLM for improving chunk quality."""
 
 import os
-from typing import List
+from typing import List, Dict, Callable, Optional
 import hashlib
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -145,3 +145,62 @@ def clean_all_chunks(
 
     print(f"Cleaning completed. Total chunks cleaned: {count}")
     return all_cleaned
+
+
+def clean_pages_batch(llm, pages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Clean a batch of scraped pages (url/title/content) using LLM."""
+    if not pages:
+        return []
+
+    messages_list = []
+    for page in pages:
+        messages_list.append([
+            {"role": "system", "content": CLEANING_SYSTEM_PROMPT},
+            {"role": "user", "content": build_user_prompt((page.get("content") or "").strip())},
+        ])
+
+    responses: List[CleanedChunkResponse] = llm.batch(messages_list)
+
+    cleaned_pages: List[Dict[str, str]] = []
+    for page, resp in zip(pages, responses):
+        cleaned_pages.append({
+            "url": page.get("url", ""),
+            "title": page.get("title", ""),
+            "content": (resp.cleaned_text or "").strip(),
+        })
+
+    return cleaned_pages
+
+
+def clean_all_pages(
+    pages: List[Dict[str, str]],
+    batch_size: int = CLEANING_BATCH_SIZE,
+    progress_callback: Optional[Callable[[int], None]] = None,
+) -> List[Dict[str, str]]:
+    """Clean all pages using LLM in batches (best-effort)."""
+    llm = init_llm()
+    cleaned: List[Dict[str, str]] = []
+
+    count = 0
+    batch: List[Dict[str, str]] = []
+
+    for page in pages or []:
+        content = (page.get("content") or "").strip()
+        if not content:
+            continue
+
+        batch.append(page)
+        if len(batch) >= batch_size:
+            cleaned.extend(clean_pages_batch(llm, batch))
+            count += len(batch)
+            batch = []
+            if progress_callback:
+                progress_callback(count)
+
+    if batch:
+        cleaned.extend(clean_pages_batch(llm, batch))
+        count += len(batch)
+        if progress_callback:
+            progress_callback(count)
+
+    return cleaned

@@ -704,6 +704,24 @@ class SubscriptionServiceDAO:
             print(f"Error updating qdrant_collection by email: {e}")
             return False
 
+    def update_scraping_collection_path_by_email(self, email: str, scraping_collection_path: str | None) -> bool:
+        """Update scraping_collection_path for a subscription service identified by email."""
+        try:
+            data = {"scraping_collection_path": scraping_collection_path}
+            response = (
+                self.supabase.table("subscription_services")
+                .update(data)
+                .eq("email", email)
+                .execute()
+            )
+            if not response.data:
+                print(f"No record updated for email: {email}")
+                return False
+            return True
+        except Exception as e:
+            print(f"Error updating scraping_collection_path by email: {e}")
+            return False
+
     def get_qdrant_collection(self, service_id: str) -> str | None:
         """
         Get the qdrant_collection name for a subscription service.

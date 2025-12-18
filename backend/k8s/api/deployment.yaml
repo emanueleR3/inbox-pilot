@@ -33,6 +33,12 @@ spec:
           envFrom:
             - secretRef:
                 name: corretto-secrets
+          env:
+            - name: SCRAPINGS_DIR
+              value: /app/scrapings
+          volumeMounts:
+            - name: scrapings
+              mountPath: /app/scrapings
           resources:
             requests:
               memory: "256Mi"
@@ -56,5 +62,10 @@ spec:
           #   periodSeconds: 10
           #   timeoutSeconds: 5
           #   failureThreshold: 3
+      volumes:
+        - name: scrapings
+          hostPath:
+            path: /home/deploy/corretto/data/scrapings
+            type: DirectoryOrCreate
       imagePullSecrets:
         - name: ghcr-secret
