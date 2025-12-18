@@ -38,6 +38,8 @@ spec:
               value: http://qdrant:6333
             - name: SCRAPINGS_DIR
               value: /app/scrapings
+            - name: SCRAPINGS_DB_DIR
+              value: /home/deploy/corretto/data/scrapings
           volumeMounts:
             - name: scrapings
               mountPath: /app/scrapings
