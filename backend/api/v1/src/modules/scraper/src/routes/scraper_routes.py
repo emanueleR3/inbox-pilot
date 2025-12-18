@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 from src.modules.scraper.src.controllers.scraper_controller import ScraperController
 
@@ -13,8 +13,21 @@ controller = ScraperController()
 class StartScrapingRequest(BaseModel):
     """Request model for starting a scraping job."""
     email: str = Field(..., description="The email (unique) for the subscription service")
-    website_url: str = Field(..., description="The URL of the website to scrape")
-    max_pages: Optional[int] = Field(100, description="Maximum number of pages to scrape", ge=1, le=500)
+    website_url: str = Field(..., description="The root URL of the website")
+    urls: List[str] = Field(..., description="Selected URLs of the website to scrape", min_length=1)
+
+
+class DiscoverUrlsRequest(BaseModel):
+    """Request model for discovering URLs of a website before scraping."""
+    website_url: str = Field(..., description="The root URL of the website")
+    max_urls: Optional[int] = Field(200, description="Maximum number of URLs to return", ge=1, le=2000)
+
+
+class DiscoverUrlsResponse(BaseModel):
+    """Response model for discovered URLs."""
+    website_url: str
+    urls: List[str]
+    count: int
 
 
 class StartScrapingResponse(BaseModel):
@@ -48,17 +61,35 @@ class DeleteCollectionResponse(BaseModel):
 
 
 @router.post(
+    "/research",
+    response_model=DiscoverUrlsResponse,
+    summary="Discover website URLs",
+    description="""
+    Discover indexable URLs of the provided website.
+
+    This is meant to let the user select which URLs to scrape before starting the pipeline.
+    """,
+)
+async def research_urls(request: DiscoverUrlsRequest):
+    return await controller.discover_urls(
+        website_url=request.website_url,
+        max_urls=request.max_urls or 200,
+    )
+
+
+@router.post(
     "/start",
     response_model=StartScrapingResponse,
     summary="Start a website scraping job",
     description="""
     Start a new scraping job for a website. The scraping process follows these steps:
-    1. Scrape all pages from the website (respecting max_pages limit)
-    2. Chunk the content into smaller pieces
-    3. Clean the chunks using LLM to remove noise
-    4. Generate embeddings for each chunk
-    5. Upload embeddings to Qdrant vector database
-    6. Store the collection name in the database
+    1. Scrape only the selected URLs
+    2. Clean page content with LLM (once)
+    3. Export cleaned pages to JSON on the server
+    4. Chunk the cleaned content
+    5. Generate embeddings for each chunk
+    6. Upload embeddings to Qdrant vector database
+    7. Store the collection name in the database
     
     The job runs in the background and you can check the status using the /status endpoint.
     """,
@@ -97,7 +128,7 @@ async def start_scraping(
     return await controller.start_scraping(
         email=request.email,
         website_url=request.website_url,
-        max_pages=request.max_pages,
+        urls=request.urls,
         background_tasks=background_tasks
     )
 

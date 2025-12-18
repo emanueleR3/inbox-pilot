@@ -37,7 +37,7 @@ def get_scopes_for_services(services="all"):
     Restituisce gli scope Microsoft in base ai servizi richiesti.
     
     Args:
-        services (str): "all" per tutti i permessi, "calendar" per solo calendar
+        services (str): "all" (mail+calendar), "calendar" (solo calendar), "mail" (solo mail)
     """
     if services == "calendar":
         return [
@@ -47,6 +47,16 @@ def get_scopes_for_services(services="all"):
             "offline_access",
             "User.Read",
             "Calendars.ReadWrite"
+        ]
+    elif services == "mail":
+        return [
+            "openid",
+            "profile",
+            "email",
+            "offline_access",
+            "User.Read",
+            "Mail.Send",
+            "Mail.ReadWrite"
         ]
     else:  # services == "all" o qualsiasi altro valore
         # Parse dalla variabile d'ambiente se presente
@@ -123,7 +133,7 @@ def create_microsoft_auth_url(custom_state: str = None, services="all"):
     
     Args:
         custom_state (str): Stato personalizzato (contiene subscription_id e services)
-        services (str): "all" per tutti i permessi, "calendar" per solo calendar
+        services (str): "all" (mail+calendar), "calendar" (solo calendar), "mail" (solo mail)
     """
     from src.core.logger import setup_logger
     logger = setup_logger()

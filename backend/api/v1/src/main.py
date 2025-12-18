@@ -13,6 +13,7 @@ from src.modules.subscription_service.src.routes import router as subscription_s
 from src.modules.jerry.src.routes import router as jerry_router
 from src.modules.metric.src.routes import router as metric_router
 from src.modules.scraper.src.routes import router as scraper_router
+
 # from src.services.mail.src.routes.gmail_routes import router as gmail_router
 
 logger = setup_logger()

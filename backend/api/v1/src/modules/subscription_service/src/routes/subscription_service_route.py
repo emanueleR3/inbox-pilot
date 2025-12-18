@@ -465,6 +465,172 @@ async def list_sessions():
     return await forward_get("/sessions")
 
 @router.get(
+    "/information/{email}",
+    summary="Recupera il campo information di un servizio",
+    description="""
+    Restituisce il contenuto del campo `information` per il servizio specificato tramite email.
+    
+    Il campo `information` contiene un documento testuale in formato Markdown che descrive in modo dettagliato
+    il profilo aziendale completo, includendo:
+    - Contesto aziendale e storia
+    - Mission e Vision
+    - Valori aziendali
+    - Servizi offerti (dettaglio completo)
+    - Tipologie di clienti
+    - Metodologie di lavoro
+    - Organizzazione interna
+    - Piani di supporto
+    - Settori di attività
+    - KPI aziendali
+    - Sicurezza e conformità
+    - Progetti tipici
+    - Dati legali e contatti
+    
+    Questo documento è utilizzato dai sistemi AI per comprendere il contesto aziendale completo
+    e fornire risposte accurate e personalizzate alle richieste dei clienti.
+    """,
+    responses={
+        200: {
+            "description": "Information recuperato con successo",
+            "content": {
+                "application/json": {
+                    "example": "# 📌 Contesto Aziendale Esteso\n**SoftWave Solutions S.r.l. – Profilo Aziendale Completo**\n\n---\n\n# 🏢 1. Chi Siamo\n**SoftWave Solutions S.r.l.** è una software house italiana con sede principale a Milano...\n\n# 🎯 2. Mission\nSupportare aziende nella loro evoluzione digitale...\n\n# 🛠️ 5. Servizi Offerti\n## 5.1 Sviluppo Software\n### 🔹 Web Development\n- Applicazioni web enterprise\n- Piattaforme SaaS multi-tenant...\n\n[Il documento completo contiene tutte le sezioni del profilo aziendale]"
+                }
+            }
+        },
+        400: {
+            "description": "Parametri mancanti",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Campi richiesti mancanti: email"}
+                }
+            }
+        },
+        404: {
+            "description": "Informazioni non trovate",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Informazioni non trovate per email=xxx"}
+                }
+            }
+        },
+        500: {"description": "Errore interno del server"}
+    }
+)
+def get_information(email: str):
+    information = controller.get_information(email)
+    return information
+
+
+@router.patch(
+    "/information/{email}",
+    summary="Aggiorna il campo information di un servizio",
+    description="""
+    Aggiorna il campo `information` per il servizio specificato tramite email.
+    
+    Il campo `information` deve contenere un documento testuale completo in formato Markdown
+    che descrive il profilo aziendale esteso.
+    
+    **Struttura Raccomandata del Documento:**
+    - Contesto Aziendale (Chi Siamo, Storia, Fondazione)
+    - Mission & Vision
+    - Valori Aziendali
+    - Servizi Offerti (con dettagli tecnici completi)
+    - Tipologie di Clienti e Settori
+    - Metodologie di Lavoro (Agile, DevOps, ecc.)
+    - Organizzazione Interna (Team, Reparti)
+    - Piani di Supporto e SLA
+    - KPI Aziendali
+    - Sicurezza e Conformità (GDPR, ISO, ecc.)
+    - Progetti Tipici Realizzati
+    - Dati Legali (Ragione Sociale, P.IVA, Sede, ecc.)
+    - Contatti e Canali Social
+    
+    ** Nota Importante:** 
+    L'aggiornamento sostituisce completamente il contenuto esistente del campo information.
+    Assicurati di inviare il documento completo aggiornato.
+    
+    **Utilizzo:** 
+    Questo documento viene utilizzato dai sistemi AI per comprendere il contesto aziendale
+    e fornire risposte accurate, personalizzate e contestualizzate alle richieste dei clienti.
+    """,
+    responses={
+        200: {
+            "description": "Information aggiornato con successo",
+            "content": {
+                "application/json": {
+                    "example": "# 📌 Contesto Aziendale Esteso\n**SoftWave Solutions S.r.l. – Profilo Aziendale Completo (Aggiornato)**\n\n---\n\n# 🏢 1. Chi Siamo\n**SoftWave Solutions S.r.l.** è una software house italiana...\n\n# 🎯 2. Mission\nSupportare aziende nella loro evoluzione digitale...\n\n# 🛠️ 5. Servizi Offerti\n## 5.1 Sviluppo Software\n### 🔹 Web Development\n- Applicazioni web enterprise\n- Piattaforme SaaS...\n\n[Documento completo aggiornato]"
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_params": {
+                            "value": {"detail": "Campi richiesti mancanti: email"}
+                        },
+                        "no_data": {
+                            "value": {"detail": "Nessun dato da aggiornare"}
+                        },
+                        "invalid_format": {
+                            "value": {"detail": "Information deve essere un testo (string)"}
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Servizio non trovato",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Servizio non trovato per email=xxx"}
+                }
+            }
+        },
+        500: {"description": "Errore interno del server"}
+    }
+)
+def update_information(
+    subscription_id: str,
+    email: str,
+    payload: str = Body(
+        ...,
+        example="""# 📌 Contesto Aziendale Esteso e Ultra-Dettagliato
+            **SoftWave Solutions S.r.l. – Profilo Aziendale Completo (Versione Estesa)**
+
+            ---
+
+            # 🏢 1. Chi Siamo
+            **SoftWave Solutions S.r.l.** è una software house italiana con sede principale a Milano, attiva dal 2012 nello sviluppo di soluzioni digitali personalizzate ad alte prestazioni.
+
+            # 🎯 2. Mission
+            Supportare aziende di ogni dimensione nella loro evoluzione digitale attraverso:
+            - Soluzioni software sicure, scalabili e altamente personalizzate
+            - Approccio consulenziale che unisce tecnologia e comprensione dei processi aziendali
+
+            # 🛠️ 5. Servizi Offerti (Dettaglio Esteso)
+            ## 5.1 Sviluppo Software
+            ### 🔹 Web Development
+            - Applicazioni web enterprise
+            - Piattaforme SaaS multi-tenant
+            - Dashboard di Business Intelligence
+
+            # 📞 15. Contatti
+            - **Telefono:** +39 02 1234567
+            - **Email Generale:** info@softwavesolutions.it
+            - **Supporto Tecnico:** support@softwavesolutions.it
+
+            [...resto del documento...]""",
+        description="Documento testuale completo in formato Markdown con il profilo aziendale esteso.",
+    )
+):
+    updated_info = controller.update_information(email, payload)
+    return updated_info
+
+
+@router.get(
     "/get_subscription_service/{subscription_id}/{email}",
     summary="Recupera i servizi associati a una sottoscrizione",
     description=(
@@ -580,3 +746,64 @@ async def list_sessions():
 )
 async def get_services_by_subscription(subscription_id: str, email: str):
     return controller.get_services_by_subscription(subscription_id, email)
+
+@router.post(
+    "/setup-calendar-information",
+    summary="Setup informazioni calendario utente",
+    description="""
+    Configura le informazioni del calendario per l'utente autenticato.
+    """,
+    responses={
+        200: {
+            "description": "Informazioni calendario configurate con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Informazioni calendario configurate correttamente",
+                        "result": True
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "value": {"detail": "Campi richiesti mancanti o non validi"}
+                        },
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore interno nel servizio di autenticazione"}
+                }
+            }
+        }
+    }
+)
+def setup_calendar_information (
+    payload: dict = Body(
+        ...,
+        example={
+            "subscription_id": "sub-12345",
+            "business_hours": {
+                "0": ["09:00-17:00"],
+                "1": ["09:00-17:00"],
+                "2": ["09:00-17:00"],
+                "3": ["09:00-17:00"],
+                "4": ["09:00-17:00"],
+            },
+            "appointment_duration": 30
+        },
+        description="Informazioni del calendario da configurare per l'utente.",
+    ),
+    #current_user=Depends(get_current_user),
+):
+    result = controller.setup_calendar_information(payload)
+    return {"message": "Informazioni calendario configurate correttamente", "result": result}

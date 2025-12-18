@@ -24,7 +24,7 @@ def delete_calendar_event(event_id: str) -> str:
 def propose_new_slots(email: str, favourite_day: Optional[str] = None, not_available_dates: Optional[List[str]] = None) -> List[str]:
     supabase: Client = db.get_supabase_client()
     
-    response_sub_ser = supabase.table("subscription_services").select("subscription_id, calendar_provider, hash_token").where("email", email).execute()
+    response_sub_ser = supabase.table("subscription_services").select("subscription_id, calendar_provider, hash_token, business_hours, appointment_duration").where("email", email).execute()
 
     if not response_sub_ser.data:
         print("No subscription service data found.")
@@ -34,16 +34,8 @@ def propose_new_slots(email: str, favourite_day: Optional[str] = None, not_avail
     calendar_provider = data.get("calendar_provider")
     hash_token = data.get("hash_token")
     subscription_id = data.get("subscription_id")
-
-    response_sub = supabase.table("subscriptions").select("business_hours, working_days, appointament_duration").where("subscription_id", subscription_id).execute()
-
-    if not response_sub.data:
-        print("No subscription data found.")
-        return []
-    
-    business_hours = response_sub.data[0].get("business_hours") 
-    working_days = response_sub.data[0].get("working_days") 
-    appointment_duration = response_sub.data[0].get("appointament_duration") # in minutes
+    business_hours = data.get("business_hours")
+    appointment_duration = data.get("appointment_duration") # in minutes 
     
     if not hash_token:
         print("No hash token found.")
@@ -85,8 +77,7 @@ def propose_new_slots(email: str, favourite_day: Optional[str] = None, not_avail
         start_time, 
         end_time, 
         busy_slots, 
-        business_hours, 
-        working_days, 
+        business_hours,  
         appointment_duration, 
         not_available_dates
     )

@@ -5,14 +5,48 @@ Web scraping module for extracting content from websites, processing it through 
 
 ## Pipeline Flow
 
-1. **Scrape** → Crawl website, extract text content
-2. **Chunk** → Split content into smaller pieces with overlap
-3. **Clean** → LLM cleans noise from chunks
-4. **Embed** → Generate OpenAI embeddings
-5. **Upload** → Store in Qdrant vector database
-6. **Save** → Update `qdrant_collection` field in database
+1. **Research** → Discover website URLs (user selects what to scrape)
+2. **Scrape** → Fetch only the selected URLs, extract text content
+3. **Page Clean** → LLM cleans page content once (before chunking)
+4. **Export JSON** → Save cleaned pages to a JSON file on the server
+5. **Chunk** → Split cleaned content into smaller pieces with overlap
+6. **Embed** → Generate OpenAI embeddings
+7. **Upload** → Store in Qdrant vector database
+8. **Save** → Update DB fields `qdrant_collection` and `scraping_collection_path`
 
 ## API Endpoints
+
+### POST /scraper/research
+
+Discover indexable URLs of the provided website.
+Use this endpoint to let the user pick which URLs to scrape.
+
+**Request Body:**
+```json
+{
+    "website_url": "https://example.com",
+    "max_urls": 200
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| website_url | string | Yes | Root URL of the website |
+| max_urls | integer | No | Max URLs returned (default: 200) |
+
+**Response (200):**
+```json
+{
+    "website_url": "https://example.com",
+    "urls": [
+        "https://example.com",
+        "https://example.com/about"
+    ],
+    "count": 2
+}
+```
+
+---
 
 ### POST /scraper/start
 
@@ -21,24 +55,27 @@ Start a new website scraping job. The job runs in the background.
 **Request Body:**
 ```json
 {
-    "service_id": "123e4567-e89b-12d3-a456-426614174000",
-    "website_url": "https://example.com",
-    "max_pages": 100
+        "email": "user@example.com",
+        "website_url": "https://example.com",
+        "urls": [
+            "https://example.com",
+            "https://example.com/about"
+        ]
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| service_id | string (UUID) | Yes | The service_id for the subscription service |
-| website_url | string | Yes | The URL of the website to scrape |
-| max_pages | integer | No | Maximum pages to scrape (default: 100, max: 500) |
+| email | string | Yes | Unique email of the subscription service |
+| website_url | string | Yes | Root URL of the website |
+| urls | string[] | Yes | Selected URLs to scrape (must be non-empty) |
 
 **Response (200):**
 ```json
 {
     "message": "Scraping job started",
-    "service_id": "123e4567-e89b-12d3-a456-426614174000",
-    "collection_name": "collection_123e4567-e89b-12d3-a456-426614174000",
+    "email": "user@example.com",
+    "collection_name": "collection_user_example_com_aaaaaaaaaaaa",
     "status": "processing"
 }
 ```
@@ -50,26 +87,26 @@ Start a new website scraping job. The job runs in the background.
 
 ---
 
-### GET /scraper/status/{service_id}
+### GET /scraper/status/{email}
 
 Get the current status and progress of a scraping job.
 
 **Path Parameters:**
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| service_id | string (UUID) | The service_id for the subscription service |
+| email | string | Unique email of the subscription service |
 
 **Response (200):**
 ```json
 {
     "status": "completed",
     "website_url": "https://example.com",
-    "collection_name": "collection_123e4567-e89b-12d3-a456-426614174000",
+    "collection_name": "collection_user_example_com_aaaaaaaaaaaa",
     "progress": {
         "step": "completed",
         "pages_scraped": 50,
+        "pages_cleaned": 50,
         "chunks_created": 150,
-        "chunks_cleaned": 150,
         "chunks_embedded": 150,
         "chunks_uploaded": 150
     },
@@ -80,8 +117,9 @@ Get the current status and progress of a scraping job.
 **Progress Steps:**
 - `initializing` - Job is starting
 - `scraping` - Crawling website pages
+- `page_cleaning` - Cleaning page content with LLM
+- `exporting_json` - Saving the JSON export to server storage
 - `chunking` - Splitting content into chunks
-- `cleaning` - LLM cleaning chunks
 - `embedding` - Generating embeddings
 - `uploading` - Uploading to Qdrant
 - `updating_database` - Saving collection name
@@ -99,22 +137,22 @@ Get the current status and progress of a scraping job.
 
 ---
 
-### GET /scraper/collection/{service_id}
+### GET /scraper/collection/{email}
 
 Get information about the Qdrant collection for a service.
 
 **Path Parameters:**
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| service_id | string (UUID) | The service_id for the subscription service |
+| email | string | Unique email of the subscription service |
 
 **Response (200) - Collection exists:**
 ```json
 {
-    "collection_name": "collection_123e4567-e89b-12d3-a456-426614174000",
+    "collection_name": "collection_user_example_com_aaaaaaaaaaaa",
     "exists": true,
     "info": {
-        "name": "collection_123e4567-e89b-12d3-a456-426614174000",
+        "name": "collection_user_example_com_aaaaaaaaaaaa",
         "points_count": 150,
         "vectors_count": 150,
         "status": "green"
@@ -136,14 +174,14 @@ Get information about the Qdrant collection for a service.
 
 ---
 
-### DELETE /scraper/collection/{service_id}
+### DELETE /scraper/collection/{email}
 
 Delete the Qdrant collection for a service. This removes all scraped data.
 
 **Path Parameters:**
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| service_id | string (UUID) | The service_id for the subscription service |
+| email | string | Unique email of the subscription service |
 
 **Response (200):**
 ```json
@@ -162,9 +200,7 @@ Delete the Qdrant collection for a service. This removes all scraped data.
 
 ## Collection Naming Convention
 
-Collections are named using the pattern: `collection_{service_id}`
-
-Example: `collection_123e4567-e89b-12d3-a456-426614174000`
+Collections are named deterministically from the service email.
 
 ## Environment Variables
 
@@ -173,10 +209,14 @@ Example: `collection_123e4567-e89b-12d3-a456-426614174000`
 | OPENAI_API_KEY | OpenAI API key for embeddings and cleaning | Required |
 | QDRANT_URL | Qdrant server URL | http://localhost:6333 |
 | QDRANT_API_KEY | Qdrant API key (optional) | None |
+| SCRAPINGS_DIR | Directory where JSON export is written | /app/scrapings |
 | LANGCHAIN_TRACING_V2 | Enable LangSmith tracing | true |
 | LANGCHAIN_API_KEY | LangSmith API key | - |
 | LANGCHAIN_PROJECT | LangSmith project name | corretto_scraper |
 
 ## Database
 
-The module updates the `qdrant_collection` field in the `subscription_services` table when a scraping job completes successfully.
+The module updates these fields in the `subscription_services` table (identified by unique `email`):
+
+- `qdrant_collection`: Qdrant collection name
+- `scraping_collection_path`: path of the JSON export file saved on server

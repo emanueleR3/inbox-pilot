@@ -704,6 +704,24 @@ class SubscriptionServiceDAO:
             print(f"Error updating qdrant_collection by email: {e}")
             return False
 
+    def update_scraping_collection_path_by_email(self, email: str, scraping_collection_path: str | None) -> bool:
+        """Update scraping_collection_path for a subscription service identified by email."""
+        try:
+            data = {"scraping_collection_path": scraping_collection_path}
+            response = (
+                self.supabase.table("subscription_services")
+                .update(data)
+                .eq("email", email)
+                .execute()
+            )
+            if not response.data:
+                print(f"No record updated for email: {email}")
+                return False
+            return True
+        except Exception as e:
+            print(f"Error updating scraping_collection_path by email: {e}")
+            return False
+
     def get_qdrant_collection(self, service_id: str) -> str | None:
         """
         Get the qdrant_collection name for a subscription service.
@@ -760,4 +778,54 @@ class SubscriptionServiceDAO:
             return response.data[0]
         except Exception as e:
             print(f"Error getting service by email: {e}")
+            return None
+        
+    def setup_calendar_information(self, email: str, business_hours: dict, appointment_duration: int) -> bool:
+        result = (
+            self.supabase
+            .table("subscription_services")
+            .update({
+                "business_hours": business_hours,
+                "appointment_duration": appointment_duration
+            })
+            .eq("email", email)
+            .execute()
+        )
+
+        return bool(result.data)
+    
+    def get_information(self, email: str) -> str | None:
+        try:
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .select("information")
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return None
+            
+            return resp.data[0].get("information")
+        except Exception as e:
+            print(f"Errore nel recupero di information: {e}")
+            return None
+    
+    def update_information(self, email: str, information: str) -> str | None:
+        try:
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .update({"information": information})
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return None
+            
+            return resp.data[0].get("information")
+        except Exception as e:
+            print(f"Errore nell'aggiornamento di information: {e}")
             return None

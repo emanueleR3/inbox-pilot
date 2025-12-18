@@ -1,12 +1,16 @@
 """Web scraping utilities for extracting content from websites."""
 
+from __future__ import annotations
+
 import re
 import hashlib
 import requests
+import time
+from collections import deque
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, urldefrag
 from dataclasses import dataclass
-from typing import List, Set, Tuple
+from typing import List, Set, Tuple, Optional, Callable
 
 from src.modules.scraper.src.models.keyword_filters import (
     URL_BLOCKLIST,
@@ -17,6 +21,108 @@ from src.modules.scraper.src.models.keyword_filters import (
     HTML_BLACKLIST_SELECTORS,
     BLOCK_TAGS
 )
+
+
+def _is_same_domain(url: str, root_domain: str) -> bool:
+    try:
+        return urlparse(url).netloc == root_domain
+    except Exception:
+        return False
+
+
+def discover_website_urls(start_url: str, max_urls: int = 200) -> List[str]:
+    """Discover indexable URLs on a website (BFS crawl of hyperlinks).
+
+    This is meant for the pre-scrape selection step: it returns URLs only,
+    without extracting/cleaning page content.
+    """
+    start_url = normalize_url(start_url)
+    if not start_url:
+        return []
+
+    root_domain = urlparse(start_url).netloc
+    if not root_domain:
+        return []
+
+    visited: Set[str] = set()
+    queue = deque([start_url])
+    discovered: List[str] = []
+
+    started_at = time.monotonic()
+    # Hard stop to avoid hanging requests (best-effort discovery)
+    max_seconds = 20
+
+    while queue and len(discovered) < max_urls:
+        if (time.monotonic() - started_at) > max_seconds:
+            break
+
+        url = normalize_url(queue.popleft())
+        if not url or url in visited:
+            continue
+        visited.add(url)
+
+        if not _is_same_domain(url, root_domain):
+            continue
+
+        if not should_index_url(url):
+            continue
+
+        try:
+            resp = session.get(url, timeout=5)
+            ct = (resp.headers.get("Content-Type") or "").lower()
+            if "text/html" not in ct:
+                continue
+
+            html = resp.text or ""
+            soup = BeautifulSoup(html, "html.parser")
+
+            discovered.append(url)
+
+            # Extract links for further discovery
+            for a in soup.find_all("a", href=True):
+                href = a.get("href")
+                if not href:
+                    continue
+                candidate = normalize_url(urljoin(url, href))
+                if not candidate:
+                    continue
+                if not _is_same_domain(candidate, root_domain):
+                    continue
+                if candidate in visited:
+                    continue
+                if not should_index_url(candidate):
+                    continue
+                queue.append(candidate)
+        except Exception:
+            # Best-effort discovery: skip failures
+            continue
+
+    return discovered
+
+
+def scrape_selected_urls(
+    urls: List[str],
+    progress_callback: Optional[Callable[[int, str], None]] = None,
+) -> List[ScrapedPage]:
+    """Scrape only the provided URLs (no crawling beyond them)."""
+    visited: Set[str] = set()
+    seen_content_hashes: Set[str] = set()
+    all_pages: List[ScrapedPage] = []
+
+    processed = 0
+    for raw_url in urls or []:
+        url = normalize_url(raw_url)
+        if not url:
+            continue
+
+        pages, _childs = crawl_page(url, visited, seen_content_hashes)
+        all_pages.extend(pages)
+
+        processed += 1
+        if progress_callback:
+            progress_callback(processed, url)
+
+    return all_pages
 
 # HTTP Session configuration
 session = requests.Session()

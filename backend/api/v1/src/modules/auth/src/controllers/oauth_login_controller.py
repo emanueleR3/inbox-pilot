@@ -36,7 +36,7 @@ subscription_service_dao = SubscriptionServiceDAO()
 
 class OAuthLoginRequest(BaseModel):
     subscription_id: str
-    services: str  # "all" o "calendar"
+    services: str  # "all" (mail+calendar), "calendar" (solo calendar), "mail" (solo mail)
     email: Optional[str] = None  # Email opzionale per services="calendar"
 
 
@@ -207,9 +207,9 @@ async def google_callback(request: Request):
 
         logger.info(f"Saving credentials for {db_email} with subscription_id: {subscription_id}")
 
-        # Crea la watch Gmail SOLO se services è "all"
+        # Crea la watch Gmail SOLO se services include la mail ("all" o "mail")
         history_id = None
-        if services == "all":
+        if services in ("all", "mail"):
             try:
 
                 logger.info(f"Creating Gmail watch for {email} (services: {services})")  # Usa sempre l'email autenticata per la watch
@@ -508,9 +508,9 @@ async def microsoft_callback(request: Request):
 
         logger.info(f"Saving Microsoft credentials for {db_email} with subscription_id: {subscription_id}") 
 
-        # Crea la subscription per ricevere notifiche email SOLO se services è "all"
+        # Crea la subscription per ricevere notifiche email SOLO se services include la mail ("all" o "mail")
         subscription = None
-        if services == "all":
+        if services in ("all", "mail"):
             try:
                 logger.info(f"Creating Microsoft Graph subscription for {email} (services: {services})")
                 subscription = await create_subscription_for_user(access_token, user_id)
