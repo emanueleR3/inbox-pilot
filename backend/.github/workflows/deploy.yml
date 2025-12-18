@@ -140,15 +140,16 @@ jobs:
           if [ "${{ steps.changes.outputs.api_changed }}" = "true" ]; then
             echo "Updating API..."
             kubectl -n $NAMESPACE set image deployment/api api=ghcr.io/${REPO_LOWER}/api:${SHA_TAG}
+            # Ensure Deployment spec (env, mounts, etc.) is kept in sync.
+            kubectl apply -f k8s/api/
           else
             echo "API unchanged, skipping"
           fi
 
-          # Apply K8s manifests if they changed (env vars, mounts, services, etc.)
+          # Apply other K8s manifests if they changed (services, storage, etc.)
           if [ "${{ steps.changes.outputs.k8s_changed }}" = "true" ]; then
             echo "K8s manifests changed, applying..."
             # Apply only the affected service manifests to avoid unintended changes.
-            kubectl apply -f k8s/api/
             kubectl apply -f k8s/qdrant/
           else
             echo "K8s manifests unchanged, skipping apply"
