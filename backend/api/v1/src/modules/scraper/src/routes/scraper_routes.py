@@ -60,6 +60,29 @@ class DeleteCollectionResponse(BaseModel):
     collection_name: str
 
 
+class DebugResponse(BaseModel):
+    """Response model for debug snapshot."""
+    pod: dict
+    env: dict
+    scrapings_dir: dict
+    scrapings_file: Optional[dict] = None
+    qdrant: dict
+
+
+@router.get(
+    "/debug",
+    response_model=DebugResponse,
+    summary="Temporary debug snapshot",
+    description="""
+    Temporary diagnostic endpoint to debug Qdrant connectivity and SCRAPINGS_DIR mounts.
+
+    Disabled by default. Enable it temporarily by setting SCRAPER_DEBUG=true in the API deployment.
+    """,
+)
+def debug_scraper(email: Optional[str] = Query(None, description="Optional email to check expected JSON export file")):
+    return controller.debug_snapshot(email=email)
+
+
 @router.post(
     "/research",
     response_model=DiscoverUrlsResponse,
