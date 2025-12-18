@@ -7,7 +7,11 @@ import re
 import uuid
 import os
 import json
+import socket
+import traceback
+from urllib.parse import urlparse
 from pathlib import Path
+from dotenv import load_dotenv
 
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 from src.modules.scraper.src.utils.scraping import (
@@ -25,6 +29,7 @@ from src.modules.scraper.src.utils.qdrant_utils import (
     get_collection_info
 )
 
+load_dotenv()
 
 # In-memory storage for scraping job status
 scraping_jobs: Dict[str, Dict[str, Any]] = {}
@@ -76,6 +81,123 @@ class ScraperController:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         tmp_path.replace(out_path)
         return str(out_path)
+
+    def debug_snapshot(self, email: Optional[str] = None) -> Dict[str, Any]:
+        """Temporary diagnostic snapshot for mount + Qdrant connectivity."""
+        debug_enabled = os.getenv("SCRAPER_DEBUG", "").strip().lower() in {"1", "true", "yes"}
+        if not debug_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Debug endpoint disabled. Set SCRAPER_DEBUG=true to enable temporarily.",
+            )
+
+        out_dir = self._scrapings_dir()
+        result: Dict[str, Any] = {
+            "pod": {
+                "hostname": os.getenv("HOSTNAME"),
+            },
+            "env": {
+                "QDRANT_URL": os.getenv("QDRANT_URL"),
+                "SCRAPINGS_DIR": os.getenv("SCRAPINGS_DIR"),
+            },
+            "scrapings_dir": {
+                "path": str(out_dir),
+                "exists": out_dir.exists(),
+                "is_dir": out_dir.is_dir(),
+                "list": [],
+                "writable": False,
+                "write_error": None,
+            },
+            "scrapings_file": None,
+            "qdrant": {
+                "url": os.getenv("QDRANT_URL"),
+                "parsed": None,
+                "dns": None,
+                "tcp_connect": None,
+                "client_get_collections": None,
+            },
+        }
+
+        # Filesystem checks
+        try:
+            if out_dir.exists() and out_dir.is_dir():
+                result["scrapings_dir"]["list"] = sorted([p.name for p in out_dir.iterdir()])[:50]
+            # writability test
+            test_path = out_dir / ".__writetest__"
+            test_path.write_text("ok", encoding="utf-8")
+            test_path.unlink(missing_ok=True)
+            result["scrapings_dir"]["writable"] = True
+        except Exception as e:
+            result["scrapings_dir"]["write_error"] = f"{type(e).__name__}: {e}"
+
+        if email:
+            expected = out_dir / self._scrapings_filename(email)
+            file_info: Dict[str, Any] = {
+                "email": self._normalize_email_key(email),
+                "expected_path": str(expected),
+                "exists": expected.exists(),
+                "size": None,
+            }
+            try:
+                if expected.exists():
+                    file_info["size"] = expected.stat().st_size
+            except Exception as e:
+                file_info["size"] = f"error: {type(e).__name__}: {e}"
+            result["scrapings_file"] = file_info
+
+        # Qdrant connectivity checks
+        qurl = os.getenv("QDRANT_URL", "").strip()
+        try:
+            parsed = urlparse(qurl)
+            host = parsed.hostname
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            result["qdrant"]["parsed"] = {
+                "scheme": parsed.scheme,
+                "host": host,
+                "port": port,
+                "path": parsed.path,
+            }
+
+            # DNS
+            dns_info = []
+            if host:
+                for fam, stype, proto, canon, sockaddr in socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP):
+                    dns_info.append({"family": fam, "socktype": stype, "proto": proto, "sockaddr": sockaddr})
+            result["qdrant"]["dns"] = dns_info[:10]
+
+            # TCP connect
+            tcp_ok = False
+            tcp_err = None
+            if host:
+                try:
+                    with socket.create_connection((host, port), timeout=2.5):
+                        tcp_ok = True
+                except Exception as e:
+                    tcp_err = f"{type(e).__name__}: {e}"
+            result["qdrant"]["tcp_connect"] = {"ok": tcp_ok, "error": tcp_err}
+
+            # Qdrant client check (collections)
+            try:
+                from src.modules.scraper.src.utils.qdrant_utils import get_qdrant_client
+
+                client = get_qdrant_client()
+                cols = client.get_collections()
+                result["qdrant"]["client_get_collections"] = {
+                    "ok": True,
+                    "count": len(cols.collections),
+                    "names": [c.name for c in cols.collections][:25],
+                }
+            except Exception as e:
+                result["qdrant"]["client_get_collections"] = {
+                    "ok": False,
+                    "error": f"{type(e).__name__}: {e}",
+                }
+        except Exception as e:
+            result["qdrant"]["parsed"] = None
+            result["qdrant"]["dns"] = None
+            result["qdrant"]["tcp_connect"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+        return result
 
     async def discover_urls(self, website_url: str, max_urls: int = 200) -> Dict[str, Any]:
         """Discover website URLs for the pre-scrape selection step."""
@@ -199,6 +321,8 @@ class ScraperController:
         Run the complete scraping pipeline: scrape -> chunk -> clean -> embed -> upload.
         """
         try:
+            # DEBUG header: print runtime env that can explain "connection refused" / missing files
+            print(f"[{email}] DEBUG env: QDRANT_URL={os.getenv('QDRANT_URL')} SCRAPINGS_DIR={os.getenv('SCRAPINGS_DIR')}")
             # Step 1: Scrape selected URLs
             scraping_jobs[email]["progress"]["step"] = "scraping"
             scraping_jobs[email]["progress"]["current_url"] = website_url
@@ -250,6 +374,11 @@ class ScraperController:
                 lambda: self._write_scrapings_json(email, pages_for_chunking),
             )
             scraping_jobs[email]["export"]["scrapings_json_path"] = export_path
+            try:
+                p = Path(export_path)
+                print(f"[{email}] Exported JSON path={export_path} exists={p.exists()} size={p.stat().st_size if p.exists() else None}")
+            except Exception as e:
+                print(f"[{email}] Warning: cannot stat exported JSON: {type(e).__name__}: {e}")
 
             # Persist JSON export path on DB (unique by email)
             try:
@@ -311,6 +440,7 @@ class ScraperController:
             scraping_jobs[email]["status"] = "failed"
             scraping_jobs[email]["error"] = str(e)
             print(f"[{email}] Scraping pipeline failed: {e}")
+            print(f"[{email}] Traceback:\n{traceback.format_exc()}")
 
     def get_scraping_status(self, email: str) -> Dict[str, Any]:
         """
