@@ -2,39 +2,40 @@
 ### Base URL: http://localhost:8000/scraper
 
 @baseUrl = http://localhost:8000/scraper
-@email = INSERIRE
+@email = business@example.com
+@websiteUrl = https://www.villaimmacolata.eu
+@maxUrls = 50
 
 ### ==============================================
-### Start Scraping Job
+### Discover URLs (User Selection)
 ### ==============================================
 
-### Start scraping - Basic request
-POST {{baseUrl}}/start
+### Discover URLs for a website (research)
+# @name researchUrls
+POST {{baseUrl}}/research
 Content-Type: application/json
 
 {
-    "email": "{{email}}",
-    "website_url": "INSERIRE"
+    "website_url": "{{websiteUrl}}",
+    "max_urls": {{maxUrls}}
 }
 
-### Start scraping - With max_pages limit
+### ==============================================
+### Start Scraping Job (Selected URLs)
+### ==============================================
+
+### Start scraping - Basic request (selected URLs)
 POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
     "email": "{{email}}",
-    "website_url": "https://example.com",
-    "max_pages": 50
-}
-
-### Start scraping - Real website example
-POST {{baseUrl}}/start
-Content-Type: application/json
-
-{
-    "email": "{{email}}",
-    "website_url": "https://www.example.com",
-    "max_pages": 100
+    "website_url": "{{websiteUrl}}",
+    "urls": [
+        "https://www.villaimmacolata.eu",
+        "https://www.villaimmacolata.eu/rsa",
+        "https://www.villaimmacolata.eu/sad-servizi-assistenziali-domiciliari"
+    ]
 }
 
 ### ==============================================
@@ -73,7 +74,8 @@ POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
-    "website_url": "https://example.com"
+    "website_url": "{{websiteUrl}}",
+    "urls": ["INSERIRE_URL_1"]
 }
 
 ### Start scraping - Missing website_url
@@ -81,49 +83,70 @@ POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
-    "email": "{{email}}"
+    "email": "{{email}}",
+    "urls": ["INSERIRE_URL_1"]
 }
 
-### Start scraping - Invalid max_pages (exceeds limit)
+### Start scraping - Missing urls
 POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
     "email": "{{email}}",
-    "website_url": "https://example.com",
-    "max_pages": 1000
+    "website_url": "{{websiteUrl}}"
 }
 
-### Start scraping - Invalid max_pages (negative)
+### Start scraping - Empty urls array
 POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
     "email": "{{email}}",
-    "website_url": "https://example.com",
-    "max_pages": -1
+    "website_url": "{{websiteUrl}}",
+    "urls": []
+}
+
+### Research - Missing website_url
+POST {{baseUrl}}/research
+Content-Type: application/json
+
+{
+    "max_urls": 50
 }
 
 ### ==============================================
 ### Full Workflow Test
 ### ==============================================
 
-### Step 1: Start scraping
-# @name startScraping
+### Step 1: Research URLs
+# @name wfResearch
+POST {{baseUrl}}/research
+Content-Type: application/json
+
+{
+    "website_url": "{{websiteUrl}}",
+    "max_urls": {{maxUrls}}
+}
+
+### Step 2: Start scraping (paste selected URLs from wfResearch response)
+# @name wfStartScraping
 POST {{baseUrl}}/start
 Content-Type: application/json
 
 {
     "email": "{{email}}",
-    "website_url": "https://www.example.com",
-    "max_pages": 50
+    "website_url": "{{websiteUrl}}",
+    "urls": [
+        "INSERIRE_URL_1",
+        "INSERIRE_URL_2"
+    ]
 }
 
-### Step 2: Check status (repeat until completed)
+### Step 3: Check status (repeat until completed)
 GET {{baseUrl}}/status/{{email}}
 
-### Step 3: Get collection info
+### Step 4: Get collection info
 GET {{baseUrl}}/collection/{{email}}
 
-### Step 4: (Optional) Delete collection
+### Step 5: (Optional) Delete collection
 DELETE {{baseUrl}}/collection/{{email}}
