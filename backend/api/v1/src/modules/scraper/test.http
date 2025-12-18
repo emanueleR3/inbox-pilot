@@ -2,8 +2,8 @@
 ### Base URL: http://localhost:8000/scraper
 
 @baseUrl = http://localhost:8000/scraper
-@email = business@example.com
-@websiteUrl = https://www.villaimmacolata.eu
+@email = INSERIRE
+@websiteUrl = INSERIRE
 @maxUrls = 50
 
 ### ==============================================
@@ -32,9 +32,8 @@ Content-Type: application/json
     "email": "{{email}}",
     "website_url": "{{websiteUrl}}",
     "urls": [
-        "https://www.villaimmacolata.eu",
-        "https://www.villaimmacolata.eu/rsa",
-        "https://www.villaimmacolata.eu/sad-servizi-assistenziali-domiciliari"
+        "INSERIRE_URL_1",
+        "INSERIRE_URL_2"
     ]
 }
 
