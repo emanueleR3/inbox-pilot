@@ -72,7 +72,7 @@ class SubscriptionServiceController:
             raise SubscriptionIdRequiredException()
 
         try:
-            updated = self.subscription_dao.setup_calendar_information(
+            updated = self.subscription_service_dao.setup_calendar_information(
                 email=email,
                 business_hours=business_hours,
                 appointment_duration=appointment_duration,
@@ -85,9 +85,25 @@ class SubscriptionServiceController:
             raise
         except Exception as e:
             raise DatabaseException(operation=f"setup informazioni calendario: {str(e)}")
+        
+    def get_calendar_information(self, payload: dict):
+        email = payload.get("email")
+
+        if not email:
+            raise MissingFieldException(fields=["email"])
+
+        try:
+            information = self.subscription_service_dao.get_calendar_information(email)
+            if information is None:
+                raise NotFoundException(detail=f"Informazioni calendario non trovate per email={email}")
+            return information
+
+        except APIException:
+            raise
+        except Exception as e:
+            raise DatabaseException(operation=f"recupero informazioni calendario: {str(e)}")
     
     def get_information(self, email: str):
-        """Recupera il campo information per un servizio"""
         if not email:
             raise MissingFieldException(fields=["email"])
         

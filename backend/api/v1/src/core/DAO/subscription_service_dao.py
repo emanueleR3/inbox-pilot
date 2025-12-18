@@ -794,6 +794,27 @@ class SubscriptionServiceDAO:
 
         return bool(result.data)
     
+    def get_calendar_information(self, email: str) -> dict | None:
+        try:
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .select("business_hours, appointment_duration")
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return None
+            
+            return {
+                "business_hours": resp.data[0].get("business_hours"),
+                "appointment_duration": resp.data[0].get("appointment_duration")
+            }
+        except Exception as e:
+            print(f"Errore nel recupero delle informazioni del calendario: {e}")
+            return None
+    
     def get_information(self, email: str) -> str | None:
         try:
             resp = (

@@ -791,7 +791,7 @@ def setup_calendar_information (
     payload: dict = Body(
         ...,
         example={
-            "subscription_id": "sub-12345",
+            "email": "user@example.com",
             "business_hours": {
                 "0": ["09:00-17:00"],
                 "1": ["09:00-17:00"],
@@ -803,7 +803,64 @@ def setup_calendar_information (
         },
         description="Informazioni del calendario da configurare per l'utente.",
     ),
-    #current_user=Depends(get_current_user),
 ):
     result = controller.setup_calendar_information(payload)
     return {"message": "Informazioni calendario configurate correttamente", "result": result}
+
+@router.get(
+    "/get-calendar-information",
+    summary="get informazioni calendario utente",
+    description="""
+    Ottiene le informazioni del calendario per l'utente autenticato.
+    """,
+    responses={
+        200: {
+            "description": "Informazioni calendario configurate con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Informazioni calendario configurate correttamente",
+                        "result": """
+                            "business_hours": {
+                                "0": ["09:00-17:00"],
+                                "1": ["09:00-17:00"],
+                                "2": ["09:00-17:00"],
+                                "3": ["09:00-17:00"],
+                                "4": ["09:00-17:00"],
+                            },
+                            "appointment_duration": 30
+                        """
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "value": {"detail": "Campi richiesti mancanti o non validi"}
+                        },
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore interno nel servizio di autenticazione"}
+                }
+            }
+        }
+    }
+)
+def get_calendar_information (
+    payload: dict = Body(
+        ...,
+        description="Ottenere le informazioni del calendario da configurare per l'utente.",
+    ),
+):
+    result = controller.get_calendar_information(payload)
+    return {"message": "Informazioni calendario", "result": result}
