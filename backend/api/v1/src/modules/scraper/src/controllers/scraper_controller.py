@@ -83,6 +83,17 @@ class ScraperController:
         tmp_path.replace(out_path)
         return str(out_path)
 
+    def _scrapings_db_path(self, email: str, container_path: str) -> str:
+        """Return the path to store in DB.
+
+        By default we store the container path.
+        If SCRAPINGS_DB_DIR is set, we store a host-visible path (string only).
+        """
+        db_dir = (os.getenv("SCRAPINGS_DB_DIR") or "").strip()
+        if not db_dir:
+            return container_path
+        return str(Path(db_dir) / self._scrapings_filename(email))
+
     def debug_snapshot(self, email: Optional[str] = None) -> Dict[str, Any]:
         """Temporary diagnostic snapshot for mount + Qdrant connectivity."""
         debug_enabled = os.getenv("SCRAPER_DEBUG", "").strip().lower() in {"1", "true", "yes"}
@@ -388,7 +399,8 @@ class ScraperController:
 
             # Persist JSON export path on DB (unique by email)
             try:
-                ok = self.subscription_service_dao.update_scraping_collection_path_by_email(email, export_path)
+                db_path = self._scrapings_db_path(email, export_path)
+                ok = self.subscription_service_dao.update_scraping_collection_path_by_email(email, db_path)
                 if not ok:
                     print(f"[{email}] Warning: Failed to update scraping_collection_path")
             except Exception as e:

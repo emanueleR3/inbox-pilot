@@ -210,6 +210,7 @@ Collections are named deterministically from the service email.
 | QDRANT_URL | Qdrant server URL | http://localhost:6333 |
 | QDRANT_API_KEY | Qdrant API key (optional) | None |
 | SCRAPINGS_DIR | Directory where JSON export is written | /app/scrapings |
+| SCRAPINGS_DB_DIR | Optional: path string saved in DB for scraping_collection_path | (defaults to SCRAPINGS_DIR) |
 | LANGCHAIN_TRACING_V2 | Enable LangSmith tracing | true |
 | LANGCHAIN_API_KEY | LangSmith API key | - |
 | LANGCHAIN_PROJECT | LangSmith project name | corretto_scraper |
