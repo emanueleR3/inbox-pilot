@@ -26,7 +26,8 @@ from src.modules.scraper.src.utils.qdrant_utils import (
     upload_to_qdrant,
     delete_collection,
     collection_exists,
-    get_collection_info
+    get_collection_info,
+    QDRANT_URL as EFFECTIVE_QDRANT_URL,
 )
 
 load_dotenv()
@@ -111,6 +112,7 @@ class ScraperController:
             "scrapings_file": None,
             "qdrant": {
                 "url": os.getenv("QDRANT_URL"),
+                "effective_url": EFFECTIVE_QDRANT_URL,
                 "parsed": None,
                 "dns": None,
                 "tcp_connect": None,
@@ -322,7 +324,11 @@ class ScraperController:
         """
         try:
             # DEBUG header: print runtime env that can explain "connection refused" / missing files
-            print(f"[{email}] DEBUG env: QDRANT_URL={os.getenv('QDRANT_URL')} SCRAPINGS_DIR={os.getenv('SCRAPINGS_DIR')}")
+            print(
+                f"[{email}] DEBUG env: QDRANT_URL={os.getenv('QDRANT_URL')} "
+                f"(effective={EFFECTIVE_QDRANT_URL}) SCRAPINGS_DIR={os.getenv('SCRAPINGS_DIR')} "
+                f"(effective={self._scrapings_dir()})"
+            )
             # Step 1: Scrape selected URLs
             scraping_jobs[email]["progress"]["step"] = "scraping"
             scraping_jobs[email]["progress"]["current_url"] = website_url

@@ -2,7 +2,7 @@ name: CI/CD Deploy to k3s
 
 on:
   push:
-    branches: [ main, test-workflow, k8s, backend ]
+    branches: [ main, test-workflow, k8s, backend, quiz-rag ]
 
 permissions:
   contents: read
@@ -37,6 +37,13 @@ jobs:
               echo "${module}_changed=false" >> $GITHUB_OUTPUT
             fi
           done
+
+          # Track Kubernetes manifest changes
+          if echo "$CHANGED_FILES" | grep -q "^k8s/"; then
+            echo "k8s_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "k8s_changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -135,6 +142,16 @@ jobs:
             kubectl -n $NAMESPACE set image deployment/api api=ghcr.io/${REPO_LOWER}/api:${SHA_TAG}
           else
             echo "API unchanged, skipping"
+          fi
+
+          # Apply K8s manifests if they changed (env vars, mounts, services, etc.)
+          if [ "${{ steps.changes.outputs.k8s_changed }}" = "true" ]; then
+            echo "K8s manifests changed, applying..."
+            # Apply only the affected service manifests to avoid unintended changes.
+            kubectl apply -f k8s/api/
+            kubectl apply -f k8s/qdrant/
+          else
+            echo "K8s manifests unchanged, skipping apply"
           fi
 
           # broker worker
