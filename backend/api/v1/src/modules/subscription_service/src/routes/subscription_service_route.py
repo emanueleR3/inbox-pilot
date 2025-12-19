@@ -201,13 +201,14 @@ def update_configuration(
                 "application/json": {
                     "example": {
                         "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
-                        "question": {
-                            "id": "1",
-                            "text": "Quali servizi o prodotti offre la tua azienda?",
-                            "helper_text": "Indica una lista dei principali servizi o prodotti che fornite ai vostri clienti.",
-                            "order": 1
-                        },
-                        "max_questions": 5
+                        "question": "Ciao! Vorrei conoscerti meglio per configurare al meglio il servizio. Puoi descrivermi brevemente di cosa si occupa la tua attività?",
+                        "bullet_list": [],
+                        "phase": "initial_question",
+                        "turn_count": 1,
+                        "max_turns": 30,
+                        "has_context": False,
+                        "done": False,
+                        "email": "user@example.it"
                     }
                 }
             },
@@ -216,12 +217,7 @@ def update_configuration(
             "description": "Richiesta non valida",
             "content": {
                 "application/json": {
-                    "examples": {
-                        "missing_service_id": {
-                            "summary": "Service ID mancante",
-                            "value": {"detail": "Service ID richiesto"}
-                        }
-                    }
+                    "example": {"detail": "Email è richiesta"}
                 }
             },
         },
@@ -257,25 +253,55 @@ async def start_quiz(
             "content": {
                 "application/json": {
                     "examples": {
-                        "next_question": {
-                            "summary": "Quiz ancora in corso",
+                        "collecting": {
+                            "summary": "Quiz in fase di raccolta informazioni",
                             "value": {
                                 "done": False,
-                                "next_question": {
-                                    "id": "Q3",
-                                    "text": "Qual è il pubblico target principale della vostra azienda?",
-                                    "helper_text": "Questa informazione ci aiuterà a capire come adattare il tono e il contenuto delle risposte alle email.",
-                                    "order": 3
-                                },
-                                "total_answers": 1
+                                "question": "Grazie! Ora parliamo degli orari di apertura. Quali sono i vostri orari?",
+                                "bullet_list": [
+                                    {"name": "Servizi offerti", "completed": True, "info": "Consulenza legale, assistenza contrattuale"},
+                                    {"name": "Orari di apertura", "completed": False, "info": None},
+                                    {"name": "Contatti", "completed": False, "info": None}
+                                ],
+                                "phase": "collecting",
+                                "turn_count": 3,
+                                "max_turns": 30,
+                                "extracted_markdown": None,
+                                "error": None,
+                                "conversation_log": []
                             },
                         },
-                        "quiz_completed": {
+                        "reviewing": {
+                            "summary": "Quiz in fase di revisione",
+                            "value": {
+                                "done": False,
+                                "question": "Ecco il profilo aziendale che ho generato. Puoi modificarlo o confermare con 'OK, salva'.",
+                                "bullet_list": [
+                                    {"name": "Servizi offerti", "completed": True, "info": "..."},
+                                    {"name": "Orari di apertura", "completed": True, "info": "..."}
+                                ],
+                                "phase": "reviewing",
+                                "turn_count": 8,
+                                "max_turns": 30,
+                                "extracted_markdown": "# Profilo Aziendale\n\n## Servizi\n...",
+                                "error": None,
+                                "conversation_log": []
+                            },
+                        },
+                        "completed": {
                             "summary": "Quiz completato",
                             "value": {
                                 "done": True,
-                                "extracted_markdown": "```markdown\n# Profilo Aziendale\n...```",
-                                "total_answers": 5
+                                "question": "Perfetto. Ho salvato il contesto aziendale definitivo.",
+                                "bullet_list": [],
+                                "phase": "completed",
+                                "turn_count": 10,
+                                "max_turns": 30,
+                                "extracted_markdown": "# Profilo Aziendale\n\n## Servizi\n...",
+                                "error": None,
+                                "conversation_log": [
+                                    "[2024-01-01T12:00:00] [MODIFY] L'utente ha cambiato l'orario da 9-18 a 8-17"
+                                ]
                             },
                         },
                     }
@@ -286,16 +312,7 @@ async def start_quiz(
             "description": "Richiesta non valida",
             "content": {
                 "application/json": {
-                    "examples": {
-                        "missing_session": {
-                            "summary": "Session ID mancante",
-                            "value": {"detail": "Session ID e risposta sono obbligatori"}
-                        },
-                        "no_questions": {
-                            "summary": "Quiz non ancora avviato",
-                            "value": {"detail": "Nessuna domanda da rispondere. Avvia prima il quiz."}
-                        },
-                    }
+                    "example": {"detail": "Session ID e risposta sono obbligatori"}
                 }
             },
         },
@@ -321,10 +338,10 @@ async def submit_answer(
     req: dict = Body(
             ...,
             example={
-                "session_id": "id12345",
-	            "value": "answer"
+                "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+	            "answer": "Siamo uno studio legale specializzato in diritto civile"
             },
-            description="Parametri per inviare una risposta",
+            description="Parametri per inviare una risposta. Supporta sia 'answer' che 'value' come campo.",
         ),
 ):
     return await forward_post("/answer", req)
@@ -333,24 +350,30 @@ async def submit_answer(
 @router.get(
     "/quiz/{session_id}/state",
     summary="Recupera lo stato corrente della sessione",
-    description="Restituisce tutte le domande e risposte attuali associate alla sessione del quiz.",
+    description="Restituisce tutte le informazioni sulla sessione del quiz incluso lo storico messaggi.",
     responses={
         200: {
             "description": "Stato della sessione recuperato con successo",
             "content": {
                 "application/json": {
                     "example": {
-                        "session_id": "e16b55d3-240d-44c8-8d6b-101ccbf78120",
-                        "questions": [
-                            {
-                                "id": "1",
-                                "text": "Quali sono i principali servizi o prodotti offerti dalla vostra azienda?",
-                                "helper_text": "Questa informazione ci aiuterà a comprendere meglio come rappresentare le vostre offerte nelle comunicazioni.",
-                                "order": 1
-                            }
+                        "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                        "service_id": "srv_12345",
+                        "phase": "collecting",
+                        "turn_count": 5,
+                        "max_turns": 30,
+                        "business_field": "Studio legale",
+                        "bullet_list": [
+                            {"name": "Servizi offerti", "completed": True, "info": "Consulenza legale"},
+                            {"name": "Orari", "completed": False, "info": None}
                         ],
-                        "answers": ["IDK, maybe Rome?"],
-                        "total": 1
+                        "messages": [
+                            {"role": "assistant", "content": "Ciao! Descrivi la tua attività."},
+                            {"role": "user", "content": "Siamo uno studio legale."}
+                        ],
+                        "is_done": False,
+                        "has_context": False,
+                        "final_markdown": None
                     }
                 }
             },
@@ -359,7 +382,7 @@ async def submit_answer(
             "description": "Session ID mancante",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Session ID richiesto"}
+                    "example": {"detail": "Session ID è richiesto"}
                 }
             },
         },
@@ -388,14 +411,19 @@ async def get_state(session_id: str):
 @router.post(
     "/quiz/finish",
     summary="Termina la sessione di quiz",
-    description="Completa la sessione di quiz e restituisce il profilo aziendale generato in formato markdown.",
+    description="Completa forzatamente la sessione di quiz e restituisce il profilo aziendale generato in formato markdown.",
     responses={
         200: {
             "description": "Quiz completato con successo",
             "content": {
                 "application/json": {
                     "example": {
-                        "extracted_markdown": "```markdown\n# Profilo Aziendale\n...```"
+                        "done": True,
+                        "extracted_markdown": "# Profilo Aziendale\n\n## Servizi\nConsulenza legale...",
+                        "bullet_list": [
+                            {"name": "Servizi", "completed": True, "info": "..."}
+                        ],
+                        "error": None
                     }
                 }
             },
@@ -404,7 +432,7 @@ async def get_state(session_id: str):
             "description": "Session ID mancante",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Session ID richiesto"}
+                    "example": {"detail": "Session ID è richiesto"}
                 }
             },
         },
@@ -430,9 +458,9 @@ async def finish_quiz(
     req: dict = Body(
             ...,
             example={
-                "session_id": "id12345",
+                "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
             },
-            description="Parametri forzare la risposta ad un quiz",
+            description="Parametri per forzare la conclusione di un quiz",
         ),
 ):
     return await forward_post("/finish", req)
@@ -447,7 +475,7 @@ async def finish_quiz(
             "description": "Elenco delle sessioni recuperato con successo",
             "content": {
                 "application/json": {
-                    "example": ["sess_1", "sess_2", "sess_3"]
+                    "example": ["b6b3405a-e42f-42e3-9b29-0d5419481aba", "c7c4516b-f53g-53f4-0c3a-1e6520592bcb"]
                 }
             },
         },

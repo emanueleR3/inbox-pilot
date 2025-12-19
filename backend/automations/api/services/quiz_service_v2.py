@@ -127,9 +127,29 @@ async def submit_answer(session_id: str, user_answer: str) -> dict:
         await persist_quiz_result(state)
         state["context_draft_saved"] = True
 
-    # If user confirmed, persist final version and close session
+    # If user confirmed, persist final version
     if state.get("context_confirmed"):
         await persist_quiz_result(state)
+        
+        # If pending_context_save (qdrant user), update JSON and rebuild collection
+        if state.get("pending_context_save") and state.get("has_qdrant_collection"):
+            try:
+                from quiz.flow.context_updater import finalize_context_update
+                
+                conversation_log = state.get("conversation_log", [])
+                final_markdown = state.get("final_markdown", "")
+                email = state["email"]
+                
+                print(f"🔄 [QUIZ_SERVICE] Triggering context update for {email}...")
+                success = finalize_context_update(email, conversation_log, final_markdown)
+                
+                if success:
+                    print(f"✅ [QUIZ_SERVICE] Context update completed for {email}")
+                else:
+                    print(f"⚠️ [QUIZ_SERVICE] Context update failed for {email}")
+            except Exception as e:
+                print(f"❌ [QUIZ_SERVICE] Error in context update: {e}")
+        
         delete_session(session_id)
     
     return _build_response(state)
@@ -192,7 +212,8 @@ def _build_response(state: QuizState) -> dict:
         "max_turns": state["max_turns"],
         "final_markdown": state.get("final_markdown"),
         "error": state.get("error"),
-        "has_qdrant_collection": state.get("has_qdrant_collection", False)
+        "has_qdrant_collection": state.get("has_qdrant_collection", False),
+        "conversation_log": state.get("conversation_log", []),
     }
 
 

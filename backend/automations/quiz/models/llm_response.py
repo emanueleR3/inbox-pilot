@@ -82,6 +82,28 @@ class QdrantPrefillResponse(BaseModel):
     all_completed: bool = Field(default=False, description="True if all items completed")
 
 
+class SmartContextEditResponse(BaseModel):
+    """Response from smart context edit agent with intent detection and change tracking."""
+    intent: str = Field(description="Detected intent: 'add' | 'modify' | 'remove' | 'clarify' | 'confirm'")
+    conflict_detected: bool = Field(default=False, description="True if new info conflicts with existing")
+    conflict_details: Optional[str] = Field(default=None, description="What is conflicting, if any")
+    change_log_entry: str = Field(description="Detailed log entry for this change, e.g. 'User changed phone 3331112222 to 3334445555'")
+    updated_markdown: str = Field(description="Updated markdown after applying the change")
+    answer: str = Field(description="Response to user (confirm change, ask for clarification, etc.)")
+    is_confirmed: bool = Field(default=False, description="True if user confirmed 'OK, salva'")
+
+
+class ContextJsonUpdateItem(BaseModel):
+    """Single item in the updated JSON structure."""
+    url: str = Field(description="Source URL for this content")
+    content: str = Field(description="Updated content for this page")
+
+
+class ContextJsonUpdateResponse(BaseModel):
+    """Response for updating the scraped JSON with new context."""
+    updated_json: List[ContextJsonUpdateItem] = Field(description="Updated JSON array with url and content fields")
+
+
 __all__ = [
     "BulletListItem",
     "ValidationResponse",
@@ -94,4 +116,8 @@ __all__ = [
     "SingleCategoryPrefillResponse",
     "QdrantPrefillItem",
     "QdrantPrefillResponse",
+    "SmartContextEditResponse",
+    "ContextJsonUpdateItem",
+    "ContextJsonUpdateResponse",
 ]
+

@@ -48,6 +48,13 @@ class QuizState(TypedDict):
     context_draft_saved: bool
     context_confirmed: bool
     
+    # Detailed log of all modifications (for auditing)
+    # Format: "[timestamp] Intent: ADD/MODIFY/REMOVE - User said X, changed Y to Z"
+    conversation_log: List[str]
+    
+    # Flag to trigger context update on save (for qdrant users)
+    pending_context_save: bool
+    
     # Status flags
     is_done: bool
     error: Optional[str]
@@ -77,6 +84,8 @@ def create_initial_state(
 
         "context_draft_saved": False,
         "context_confirmed": False,
+        "conversation_log": [],
+        "pending_context_save": False,
         "is_done": False,
         "error": None,
     }
