@@ -13,8 +13,7 @@ from src.modules.subscription_service.src.routes import router as subscription_s
 from src.modules.jerry.src.routes import router as jerry_router
 from src.modules.metric.src.routes import router as metric_router
 from src.modules.scraper.src.routes import router as scraper_router
-
-# from src.services.mail.src.routes.gmail_routes import router as gmail_router
+from src.modules.subscription.src.routes import router as subscription_router
 
 logger = setup_logger()
 app = FastAPI(title="AI Mail Automation API", version="1.0.0")
@@ -36,6 +35,7 @@ app.include_router(subscription_service_router, prefix="/subscriptionServiceRout
 app.include_router(jerry_router, prefix="/jerry")
 app.include_router(metric_router, prefix="/metric")
 app.include_router(scraper_router, prefix="/scraper")
+app.include_router(subscription_router, prefix="/subscription")
 
 @app.get("/health")
 async def health_check():

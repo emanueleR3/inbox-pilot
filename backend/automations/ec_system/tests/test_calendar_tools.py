@@ -42,7 +42,7 @@ def get_service_config(email: str):
     
     # Query subscription_services table (no opening_hrs, working_days, appointment_duration)
     response = supabase.table("subscription_services").select(
-        "service_id, subscription_id, email, calendar_provider, hashed_access_token"
+        "service_id, subscription_id, email, calendar_provider, hashed_access_token", "business_hours", "appointment_duration"
     ).eq("email", email).execute()
 
     if not response.data:
@@ -68,17 +68,9 @@ def get_service_config(email: str):
         return None
 
     # Query subscriptions table for business_hours and appointment_duration
-    business_hours = None
-    appointment_duration = None
+    business_hours = data.get("business_hours")
+    appointment_duration = data.get("appointment_duration")
     subscription_id = data.get("subscription_id")
-    if subscription_id:
-        sub_resp = supabase.table("subscriptions").select(
-            "business_hours, appointment_duration"
-        ).eq("subscription_id", subscription_id).execute()
-        if sub_resp.data:
-            sub_data = sub_resp.data[0]
-            business_hours = sub_data.get("business_hours")
-            appointment_duration = sub_data.get("appointment_duration")
 
     config = {
         "service_id": data.get("service_id"),

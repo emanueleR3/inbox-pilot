@@ -764,32 +764,6 @@ class SubscriptionServiceDAO:
             print(f"Error getting qdrant_collection by email: {e}")
             return None
 
-    def get_service_by_id(self, service_id: str) -> dict | None:
-        """
-        Get subscription service by service_id.
-        
-        Args:
-            service_id: The service_id (UUID) of the subscription service
-            
-        Returns:
-            Service data dict or None if not found
-        """
-        try:
-            response = (
-                self.supabase.table("subscription_services")
-                .select("*")
-                .eq("email", email).single()
-                .execute()
-            )
-            
-            if not response.data:
-                return None
-            
-            return response.data[0]
-        except Exception as e:
-            print(f"Error getting service by id: {e}")
-            return None
-
     def get_service_by_email(self, email: str) -> dict | None:
         """Get subscription service by unique email."""
         try:
@@ -804,6 +778,41 @@ class SubscriptionServiceDAO:
             return response.data[0]
         except Exception as e:
             print(f"Error getting service by email: {e}")
+            return None
+        
+    def setup_calendar_information(self, email: str, business_hours: dict, appointment_duration: int) -> bool:
+        result = (
+            self.supabase
+            .table("subscription_services")
+            .update({
+                "business_hours": business_hours,
+                "appointment_duration": appointment_duration
+            })
+            .eq("email", email)
+            .execute()
+        )
+
+        return bool(result.data)
+    
+    def get_calendar_information(self, email: str) -> dict | None:
+        try:
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .select("business_hours, appointment_duration")
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return None
+            
+            return {
+                "business_hours": resp.data[0].get("business_hours"),
+                "appointment_duration": resp.data[0].get("appointment_duration")
+            }
+        except Exception as e:
+            print(f"Errore nel recupero delle informazioni del calendario: {e}")
             return None
 
     def update_subscription_website_by_email(self, email: str, website_url: str) -> bool:
@@ -853,3 +862,39 @@ class SubscriptionServiceDAO:
         except Exception as e:
             print(f"[DAO] Error updating subscription website: {e}")
             return False
+    
+    def get_information(self, email: str) -> str | None:
+        try:
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .select("information")
+                .eq("email", email)
+                .execute()
+            )
+
+            if not resp.data:
+                return None
+            
+            return resp.data[0].get("information")
+        except Exception as e:
+            print(f"Errore nel recupero di information: {e}")
+            return None
+    
+    def update_information(self, email: str, information: str) -> str | None:
+        try:
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .update({"information": information})
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return None
+            
+            return resp.data[0].get("information")
+        except Exception as e:
+            print(f"Errore nell'aggiornamento di information: {e}")
+            return None

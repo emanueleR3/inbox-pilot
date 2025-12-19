@@ -11,7 +11,7 @@ from src.handler_exception import (
     BadRequestException
 )
 
-router = APIRouter()
+router = APIRouter(tags=["Auth OAuth Login"])
 
 @router.post("/oauth/login/{provider_name}")
 async def oauth_login_route(provider_name: str, request: Request):
