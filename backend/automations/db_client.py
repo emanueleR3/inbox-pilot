@@ -710,6 +710,46 @@ def get_company_information_sync(box_email: str) -> Optional[str]:
         return None
 
 
+def get_qdrant_collection_sync(box_email: str) -> Optional[str]:
+    """
+    Recupera il nome della collezione Qdrant per un utente.
+    Versione sincrona per i nodi del workflow.
+    
+    Args:
+        box_email (str): Email della casella di posta
+        
+    Returns:
+        str: Nome della collezione Qdrant, None se non presente o vuoto
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Query per recuperare il campo qdrant_collection
+        response = supabase.table("subscription_services") \
+            .select("qdrant_collection") \
+            .eq("email", box_email) \
+            .eq("activated", True) \
+            .execute()
+        
+        if not response.data or len(response.data) == 0:
+            print(f"⚠️ [DB_CLIENT] No subscription found for box_email: {box_email}")
+            return None
+        
+        qdrant_collection = response.data[0].get("qdrant_collection")
+        
+        # Verifica se qdrant_collection è vuoto o None
+        if not qdrant_collection or qdrant_collection.strip() == "":
+            print(f"ℹ️ [DB_CLIENT] No qdrant_collection set for box_email: {box_email}")
+            return None
+        
+        print(f"✅ [DB_CLIENT] Qdrant collection found: {qdrant_collection}")
+        return qdrant_collection
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving qdrant_collection: {str(e)}")
+        return None
+
+
 
 def get_email_service_data(email: str) -> Optional[Dict]:
     """

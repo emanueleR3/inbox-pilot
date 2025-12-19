@@ -464,6 +464,14 @@ class ExtractorCompanyInfoResponse(BaseModel):
     )
 
 
+class OptimizedQueryResponse(BaseModel):
+    """Response model for Qdrant query optimization."""
+    optimized_query: str = Field(
+        ...,
+        description="Query ottimizzata per la ricerca semantica nel database vettoriale"
+    )
+
+
 class WriteResponse(BaseModel):
     """Response model for Writer node - email writing result."""
     written_email_body: str = Field(

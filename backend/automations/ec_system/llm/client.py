@@ -34,6 +34,7 @@ from ..models.llm_responses import (
     ReaderConfirmAppointmentResponse,
     SchedulerResponse,
     ExtractorCompanyInfoResponse,
+    OptimizedQueryResponse,
     WriteResponse,
     ReviewerResponse
 )
@@ -92,7 +93,11 @@ from ..prompts.templates import (
     GUIDELINES_SECTION_ITA,
     GUIDELINES_SECTION_ENG,
     REVIEWER_PROMPT_ITA,
-    REVIEWER_PROMPT_ENG
+    REVIEWER_PROMPT_ENG,
+    OPTIMIZE_QUERY_PROMPT_ITA,
+    OPTIMIZE_QUERY_PROMPT_ENG,
+    EXTRACTOR_FROM_CHUNKS_PROMPT_ITA,
+    EXTRACTOR_FROM_CHUNKS_PROMPT_ENG
 )
 
 # Import utils and db_client for calendar operations
@@ -2122,6 +2127,116 @@ class LLMClient:
             
         except Exception as e:
             print(f"❌ [LLM_CLIENT] Error extracting company information: {str(e)}")
+            # Return empty dict in case of error
+            return ExtractorCompanyInfoResponse(chunked_company_informations={})
+
+    def optimize_query_for_qdrant(
+        self,
+        mail_summary: str,
+        extended_summary: str,
+        language: str = "ITA"
+    ) -> OptimizedQueryResponse:
+        """
+        Ottimizza una query per la ricerca semantica in Qdrant.
+        Trasforma il riassunto email in una query ottimizzata per il retrieval.
+        
+        Args:
+            mail_summary: Riassunto della email corrente
+            extended_summary: Riassunto esteso della conversazione
+            language: Lingua (ITA o ENG)
+            
+        Returns:
+            OptimizedQueryResponse con optimized_query
+        """
+        try:
+            # Seleziona il prompt in base alla lingua
+            prompt_template = OPTIMIZE_QUERY_PROMPT_ITA if language == "ITA" else OPTIMIZE_QUERY_PROMPT_ENG
+            
+            # Costruisci il prompt
+            prompt = prompt_template.format(
+                mail_summary=mail_summary or "",
+                extended_summary=extended_summary or ""
+            )
+            
+            print(f"🔎 [LLM_CLIENT] Optimizing query for Qdrant search...")
+            print(f"   📧 Mail summary length: {len(mail_summary or '')} chars")
+            print(f"   🗣️ Language: {language}")
+            
+            # Invoca l'LLM con structured output
+            response = self.structured_completion(prompt, OptimizedQueryResponse)
+            
+            print(f"✅ [LLM_CLIENT] Query optimized successfully")
+            print(f"   🔍 Optimized query: {response.optimized_query[:100]}...")
+            
+            return response
+            
+        except Exception as e:
+            print(f"❌ [LLM_CLIENT] Error optimizing query: {str(e)}")
+            # Fallback: use original mail summary as query
+            return OptimizedQueryResponse(optimized_query=mail_summary or "")
+
+    def extract_company_info_from_chunks(
+        self,
+        extended_summary: str,
+        mail_summary: str,
+        summary_attachments: str,
+        key_entities: dict,
+        chunks: list,
+        language: str = "ITA"
+    ) -> ExtractorCompanyInfoResponse:
+        """
+        Estrae le informazioni aziendali rilevanti dai chunk Qdrant per rispondere all'email.
+        Simile a extract_company_info ma usa chunks invece di company_information.
+        
+        Args:
+            extended_summary: Riassunto esteso della conversazione
+            mail_summary: Riassunto della email corrente
+            summary_attachments: Riassunto degli allegati
+            key_entities: Entità chiave estratte dalla email
+            chunks: Lista di chunk testuali recuperati da Qdrant
+            language: Lingua (ITA o ENG)
+            
+        Returns:
+            ExtractorCompanyInfoResponse con chunked_company_informations
+        """
+        try:
+            # Seleziona il prompt in base alla lingua
+            prompt_template = EXTRACTOR_FROM_CHUNKS_PROMPT_ITA if language == "ITA" else EXTRACTOR_FROM_CHUNKS_PROMPT_ENG
+            
+            # Prepara il summary degli attachments
+            attachments_text = summary_attachments if summary_attachments else (
+                "Nessun allegato presente" if language == "ITA" else "No attachment in this email"
+            )
+            
+            # Formatta le key entities
+            key_entities_text = str(key_entities) if key_entities else "{}"
+            
+            # Formatta i chunks come testo
+            chunks_text = "\n\n---\n\n".join([f"CHUNK {i+1}:\n{chunk}" for i, chunk in enumerate(chunks)])
+            
+            # Costruisci il prompt
+            prompt = prompt_template.format(
+                extended_summary=extended_summary or "",
+                mail_summary=mail_summary or "",
+                summary_attachments=attachments_text,
+                key_entities=key_entities_text,
+                chunks=chunks_text
+            )
+            
+            print(f"🔍 [LLM_CLIENT] Extracting company info from chunks...")
+            print(f"   📦 Number of chunks: {len(chunks)}")
+            print(f"   🗣️ Language: {language}")
+            
+            # Invoca l'LLM con structured output
+            response = self.structured_completion(prompt, ExtractorCompanyInfoResponse)
+            
+            print(f"✅ [LLM_CLIENT] Company info extracted from chunks successfully")
+            print(f"   📦 Extracted categories: {len(response.chunked_company_informations)}")
+            
+            return response
+            
+        except Exception as e:
+            print(f"❌ [LLM_CLIENT] Error extracting from chunks: {str(e)}")
             # Return empty dict in case of error
             return ExtractorCompanyInfoResponse(chunked_company_informations={})
 
