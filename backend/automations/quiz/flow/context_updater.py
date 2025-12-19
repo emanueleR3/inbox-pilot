@@ -473,8 +473,9 @@ def finalize_context_update(
             return False
     
     # Step 7: Update DB with new paths
-    # Store just the filename for DB path (relative to SCRAPINGS_DIR)
-    new_json_path_for_db = os.path.basename(new_json_path)
+    # Store the full host path for DB (using SCRAPINGS_DB_DIR)
+    SCRAPINGS_DB_DIR = os.getenv("SCRAPINGS_DB_DIR", "/home/deploy/corretto/data/scrapings")
+    new_json_path_for_db = os.path.join(SCRAPINGS_DB_DIR, os.path.basename(new_json_path))
     
     if not update_scraping_paths(email, new_json_path_for_db, new_collection_name):
         print(f"❌ [CONTEXT_UPDATER] Failed to update DB paths")

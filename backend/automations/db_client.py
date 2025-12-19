@@ -787,6 +787,7 @@ def get_scraping_data(email: str) -> Optional[Dict]:
 def update_scraping_paths(email: str, new_json_path: str, new_collection_name: str) -> bool:
     """
     Update scraping_collection_path and qdrant_collection in DB.
+    Also clears the 'information' field since it's now derived from the updated JSON.
     
     Args:
         email: Email address to update
@@ -801,11 +802,13 @@ def update_scraping_paths(email: str, new_json_path: str, new_collection_name: s
         
         response = supabase.table("subscription_services").update({
             "scraping_collection_path": new_json_path,
-            "qdrant_collection": new_collection_name
+            "qdrant_collection": new_collection_name,
+            "information": None  # Clear information field, will be regenerated from new JSON
         }).eq("email", email).execute()
         
         if response.data:
             print(f"✅ [DB_CLIENT] Updated scraping paths for email: {email}")
+            print(f"   Cleared 'information' field")
             return True
         else:
             print(f"❌ [DB_CLIENT] Failed to update scraping paths for email: {email}")
