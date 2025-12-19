@@ -502,7 +502,8 @@ def create_email_classification_graph():
             "RESPONSE_TO_REQUEST",
             "INVOICE_OR_RECEIPT",
             "STATUS_NOTIFICATION",
-            "GENERAL_GREETING"
+            "GENERAL_GREETING",
+            "PRODUCT_UPDATE"  # Skip response for automatic system notifications
         }
         
         # Special handling for EVENT_FOLLOWUP - always automate but with different human_response values

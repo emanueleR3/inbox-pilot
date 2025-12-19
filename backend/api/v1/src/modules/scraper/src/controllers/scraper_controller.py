@@ -278,6 +278,14 @@ class ScraperController:
         
         collection_name = self._generate_collection_name(email_key)
         
+        # Save website URL to subscriptions table
+        try:
+            ok = self.subscription_service_dao.update_subscription_website_by_email(email_key, website_url)
+            if not ok:
+                print(f"[{email_key}] Warning: Failed to update website URL in subscriptions table")
+        except Exception as e:
+            print(f"[{email_key}] Warning: Error updating website URL: {e}")
+        
         # Initialize job status
         scraping_jobs[email_key] = {
             "status": "started",

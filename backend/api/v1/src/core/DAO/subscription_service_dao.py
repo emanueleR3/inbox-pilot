@@ -814,6 +814,54 @@ class SubscriptionServiceDAO:
         except Exception as e:
             print(f"Errore nel recupero delle informazioni del calendario: {e}")
             return None
+
+    def update_subscription_website_by_email(self, email: str, website_url: str) -> bool:
+        """
+        Update the website field in the subscriptions table for a user identified by email.
+        
+        This method first retrieves the subscription_id from subscription_services table
+        using the email, then updates the subscriptions table.
+        
+        Args:
+            email: The email address to look up
+            website_url: The website URL to save
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Step 1: Get subscription_id from subscription_services using email
+            response = (
+                self.supabase.table("subscription_services")
+                .select("subscription_id")
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not response.data or not response.data[0].get("subscription_id"):
+                print(f"[DAO] No subscription_id found for email: {email}")
+                return False
+            
+            subscription_id = response.data[0]["subscription_id"]
+            
+            # Step 2: Update subscriptions table with the website
+            update_response = (
+                self.supabase.table("subscriptions")
+                .update({"website": website_url})
+                .eq("subscription_id", subscription_id)
+                .execute()
+            )
+            
+            if not update_response.data:
+                print(f"[DAO] Failed to update website for subscription_id: {subscription_id}")
+                return False
+            
+            print(f"[DAO] Updated website to '{website_url}' for email: {email}")
+            return True
+            
+        except Exception as e:
+            print(f"[DAO] Error updating subscription website: {e}")
+            return False
     
     def get_information(self, email: str) -> str | None:
         try:
@@ -824,7 +872,7 @@ class SubscriptionServiceDAO:
                 .eq("email", email)
                 .execute()
             )
-            
+
             if not resp.data:
                 return None
             

@@ -19,8 +19,13 @@ from db_client import (
     get_user_configuration_sync, 
     get_default_configuration, 
     get_email_attachments_sync, 
-    get_company_information_sync
+    get_company_information_sync,
+    get_qdrant_collection_sync,
+    get_email_signature_sync
 ) 
+
+# Import Qdrant RAG helpers
+from quiz.qdrant_rag import embed_texts, qdrant_search, format_top_chunks
 from ec_system.utils.utils import delete_google_calendar_event, delete_microsoft_calendar_event
 from datetime import datetime
 
@@ -1635,18 +1640,89 @@ def extractor_company_info_node(state):
         # Retrieve extracted_info per ottenere box_email
         extracted_info = state.get('extracted_info', {})
         box_email = extracted_info.get('box_email', 'unknown')
-        message_id = extracted_info.get('message_id', 'unknown')
-        thread_id = extracted_info.get('thread_id', 'unknown')
-        from_email = extracted_info.get('from', 'unknown')
-        subject = extracted_info.get('subject', 'No Subject')
+        extended_summary = state.get('extended_summary', '')
+        mail_summary = state.get('mail_summary', '')
+        summary_attachments = state.get('summary_attachments', '')
+        key_entities = state.get('key_entities', {})
+        language = state.get('language', 'ITA')
         
-        print(f"   📧 Box email: {box_email}")
+        # Step 1: Check if user has qdrant_collection configured
+        qdrant_collection = get_qdrant_collection_sync(box_email)
         
-        # Step 1: Recupera company information dal database
+        if qdrant_collection:
+            # ===== QDRANT RAG FLOW =====
+            print(f"🔗 [EXTRACTOR_COMPANY_INFO] Using Qdrant RAG flow - collection: {qdrant_collection}")
+            
+            try:
+                # Step 2a: Optimize query for semantic search
+                print(f"   🔎 Optimizing query for Qdrant search...")
+                optimized_query_response = llm_client.optimize_query_for_qdrant(
+                    mail_summary=mail_summary,
+                    extended_summary=extended_summary,
+                    language=language
+                )
+                optimized_query = optimized_query_response.optimized_query
+                print(f"   ✅ Optimized query: {optimized_query[:100]}...")
+                
+                # Step 2b: Create embedding using text-embedding-3-small
+                print(f"   📊 Creating embedding for query...")
+                embeddings = embed_texts([optimized_query])
+                if not embeddings:
+                    raise ValueError("Failed to create embedding for query")
+                query_embedding = embeddings[0]
+                print(f"   ✅ Embedding created (dimension: {len(query_embedding)})")
+                
+                # Step 2c: Search Qdrant for top 10 chunks
+                print(f"   🔍 Searching Qdrant collection: {qdrant_collection}...")
+                search_results = qdrant_search(
+                    collection_name=qdrant_collection,
+                    vector=query_embedding,
+                    limit=10
+                )
+                print(f"   ✅ Retrieved {len(search_results)} results from Qdrant")
+                
+                if not search_results:
+                    print(f"⚠️ [EXTRACTOR_COMPANY_INFO] No results from Qdrant, falling back to information field")
+                    # Fallback to information field if Qdrant returns no results
+                    qdrant_collection = None  # Force fallback to standard flow
+                else:
+                    # Step 2d: Format chunks into text
+                    chunks = format_top_chunks(search_results, max_chunks=10)
+                    print(f"   📦 Formatted {len(chunks)} chunks")
+                    
+                    # Step 2e: Extract relevant company info from chunks
+                    extraction_result = llm_client.extract_company_info_from_chunks(
+                        extended_summary=extended_summary,
+                        mail_summary=mail_summary,
+                        summary_attachments=summary_attachments,
+                        key_entities=key_entities,
+                        chunks=chunks,
+                        language=language
+                    )
+                    
+                    # Update state with extracted information
+                    state['chunked_company_informations'] = extraction_result.chunked_company_informations
+                    
+                    if not extraction_result.chunked_company_informations:
+                        print(f"⚠️ [EXTRACTOR_COMPANY_INFO] No relevant info extracted from chunks, falling back")
+                        qdrant_collection = None  # Force fallback
+                    else:
+                        print(f"✅ [EXTRACTOR_COMPANY_INFO] Company info extracted from Qdrant successfully")
+                        return state
+                        
+            except Exception as qdrant_error:
+                print(f"⚠️ [EXTRACTOR_COMPANY_INFO] Qdrant RAG failed: {str(qdrant_error)}, falling back to information field")
+                qdrant_collection = None  # Force fallback to standard flow
+        
+        # ===== STANDARD INFORMATION FIELD FLOW =====
+        # Reached if qdrant_collection is None OR if Qdrant flow failed/returned no results
+        print(f"📝 [EXTRACTOR_COMPANY_INFO] Using standard information field flow")
+        
+        # Step 3: Recupera company information dal database
         company_information = get_company_information_sync(box_email)
-        print(f"   📝 Company information: {company_information}")
+        print(f"   📝 Company information length: {len(company_information) if company_information else 0} chars")
         
-        # Step 2: Gestione caso information vuota o non presente
+        # Step 4: Gestione caso information vuota o non presente
         if not company_information:
             print(f"⚠️ [EXTRACTOR_COMPANY_INFO] Company information not available - sending notification")
             
@@ -1655,14 +1731,7 @@ def extractor_company_info_node(state):
             state["status"] = "COMPANY_INFO_EXTRACTION_FAILED"
             return state
         
-        # Step 3: Estrai informazioni rilevanti tramite LLM
-        extended_summary = state.get('extended_summary', '')
-        mail_summary = state.get('mail_summary', '')
-        summary_attachments = state.get('summary_attachments', '')
-        key_entities = state.get('key_entities', {})
-        language = state.get('language', 'ITA')
-
-        # Invoca l'LLM per estrarre le informazioni rilevanti
+        # Step 5: Estrai informazioni rilevanti tramite LLM
         extraction_result = llm_client.extract_company_info(
             extended_summary=extended_summary,
             mail_summary=mail_summary,
@@ -1681,9 +1750,7 @@ def extractor_company_info_node(state):
             state["status"] = "COMPANY_INFO_EXTRACTION_FAILED"
             return state
 
-        # DEBUG
         print(f"✅ [EXTRACTOR_COMPANY_INFO] Company information extracted successfully")
-
         return state
         
     except Exception as e:
@@ -1720,10 +1787,16 @@ def writer_node(state):
         attachment_summary = state.get("summary_attachments", "")
         guidelines = state.get("guidelines", [])
         
+        # Get email signature from database
+        extracted_info = state.get('extracted_info', {})
+        box_email = extracted_info.get('box_email', '')
+        email_signature = get_email_signature_sync(box_email) if box_email else None
+        
         print(f"📋 [WRITER] Writing parameters:")
         print(f"   🏷️ Subcategory: {subcategory}")
         print(f"   🔒 Language: {language}")
         print(f"   📝 Has guidelines: {len(guidelines) if guidelines else 0}")
+        print(f"   ✒️ Has email signature: {bool(email_signature)}")
         
         # Prepare parameters based on subcategory
         if subcategory == "REQUEST_APPOINTMENT":
@@ -1849,7 +1922,8 @@ def writer_node(state):
                 chunked_company_info=chunked_company_info,
                 attachment_summary=attachment_summary,
                 guidelines=guidelines,
-                language=language
+                language=language,
+                email_signature=email_signature
             )
         
         # Update state with written email
