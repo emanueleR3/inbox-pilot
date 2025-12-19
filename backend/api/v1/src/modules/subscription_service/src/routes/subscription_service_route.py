@@ -892,3 +892,234 @@ def get_calendar_information (
 ):
     result = controller.get_calendar_information(payload)
     return {"message": "Informazioni calendario", "result": result}
+
+
+@router.get(
+    "/email-signature/{email}",
+    summary="Recupera la firma email",
+    description="Restituisce la firma email associata all'indirizzo email specificato.",
+    responses={
+        200: {
+            "description": "Firma email recuperata con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "ok",
+                        "result": "Cordiali saluti,\nMario Rossi\nCEO - Azienda Example\nTel: +39 123 456 7890"
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Email mancante",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Email richiesta"}
+                }
+            },
+        },
+        404: {
+            "description": "Firma email non trovata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Firma email non trovata per email=user@example.com"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante il recupero della firma email"}
+                }
+            },
+        },
+    },
+)
+def get_email_signature(
+    email: str,
+):
+    result = controller.get_email_signature(email)
+    return {"status": "ok", "result": result}
+
+
+@router.patch(
+    "/email-signature/{email}",
+    summary="Aggiorna la firma email",
+    description="Aggiorna la firma email per l'indirizzo email specificato.",
+    responses={
+        200: {
+            "description": "Firma email aggiornata con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "ok",
+                        "result": "Cordiali saluti,\nMario Rossi\nCEO - Azienda Example\nTel: +39 123 456 7890"
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_email": {
+                            "summary": "Email mancante",
+                            "value": {"detail": "Email richiesta"}
+                        },
+                        "missing_signature": {
+                            "summary": "Firma mancante",
+                            "value": {"detail": "Nessun dato da aggiornare"}
+                        },
+                        "invalid_type": {
+                            "summary": "Tipo non valido",
+                            "value": {"detail": "Email signature deve essere un testo (string)"}
+                        },
+                        "empty_signature": {
+                            "summary": "Firma vuota",
+                            "value": {"detail": "Email signature non può essere una stringa vuota"}
+                        }
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Servizio non trovato",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Servizio non trovato per email=user@example.com"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante l'aggiornamento della firma email"}
+                }
+            },
+        },
+    },
+)
+def update_email_signature(
+    email: str,
+    payload: str = Body(..., description="La firma email da salvare"),
+):
+    result = controller.update_email_signature(email, payload)
+    return {"status": "ok", "result": result}
+
+@router.get(
+    "/tone-of-voice/{email}",
+    summary="Recupera il tone-of-voice",
+    description="Restituisce il tone-of-voice associato all'indirizzo email specificato.",
+    responses={
+        200: {
+            "description": "Tone-of-voice recuperato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "ok",
+                        "result": "Formale e professionale"
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Email mancante",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Email richiesta"}
+                }
+            },
+        },
+        404: {
+            "description": "Firma email non trovata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Firma email non trovata per email=user@example.com"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante il recupero della firma email"}
+                }
+            },
+        },
+    },
+)
+def get_tone_of_voice(
+    email: str,
+):
+    result = controller.get_tone_of_voice(email)
+    return {"status": "ok", "result": result}
+
+
+@router.patch(
+    "/tone-of-voice/{email}",
+    summary="Aggiorna il tone-of-voice",
+    description="Aggiorna il tone-of-voice per l'indirizzo email specificato.",
+    responses={
+        200: {
+            "description": "Tone-of-voice aggiornato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "ok",
+                        "result": "Formale e professionale"
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_email": {
+                            "summary": "Email mancante",
+                            "value": {"detail": "Email richiesta"}
+                        },
+                        "missing_signature": {
+                            "summary": "Firma mancante",
+                            "value": {"detail": "Nessun dato da aggiornare"}
+                        },
+                        "invalid_type": {
+                            "summary": "Tipo non valido",
+                            "value": {"detail": "Email signature deve essere un testo (string)"}
+                        },
+                        "empty_signature": {
+                            "summary": "Firma vuota",
+                            "value": {"detail": "Email signature non può essere una stringa vuota"}
+                        }
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Servizio non trovato",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Servizio non trovato per email=user@example.com"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante l'aggiornamento della firma email"}
+                }
+            },
+        },
+    },
+)
+def update_tone_of_voice(
+    email: str,
+    payload: str = Body(..., description="Il tone-of-voice da salvare"),
+):
+    result = controller.update_tone_of_voice(email, payload)
+    return {"status": "ok", "result": result}

@@ -898,3 +898,75 @@ class SubscriptionServiceDAO:
         except Exception as e:
             print(f"Errore nell'aggiornamento di information: {e}")
             return None
+    
+    def get_email_signature(self, email: str) -> str | None:
+        try:
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .select("email_signature")
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return None
+            
+            return resp.data[0].get("email_signature")
+        except Exception as e:
+            print(f"Errore nel recupero di email_signature: {e}")
+            return None
+    
+    def update_email_signature(self, email: str, email_signature: str) -> str | None:
+        try:
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .update({"email_signature": email_signature})
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return None
+            
+            return resp.data[0].get("email_signature")
+        except Exception as e:
+            print(f"Errore nell'aggiornamento di email_signature: {e}")
+            return None
+        
+    def get_tone_of_voice(self, email: str) -> str | None:
+        try:
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .select("tone_of_voice")
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return None
+            
+            return resp.data[0].get("tone_of_voice")
+        except Exception as e:
+            print(f"Errore nel recupero di tone_of_voice: {e}")
+            return None
+    
+    def update_tone_of_voice(self, email: str, tone_of_voice: str) -> str | None:
+        try:
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .update({"tone_of_voice": tone_of_voice})
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return None
+            
+            return resp.data[0].get("tone_of_voice")
+        except Exception as e:
+            print(f"Errore nell'aggiornamento di tone_of_voice: {e}")
+            return None

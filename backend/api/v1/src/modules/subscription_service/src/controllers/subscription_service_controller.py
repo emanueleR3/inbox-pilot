@@ -119,7 +119,6 @@ class SubscriptionServiceController:
             raise DatabaseException(operation=f"recupero information: {str(e)}")
     
     def update_information(self, email: str, payload: str):
-        """Aggiorna il campo information per un servizio"""
         if not email:
             raise MissingFieldException(fields=["email"])
         
@@ -142,3 +141,81 @@ class SubscriptionServiceController:
             raise
         except Exception as e:
             raise DatabaseException(operation=f"aggiornamento information: {str(e)}")
+    
+    def get_email_signature(self, email: str):
+        if not email:
+            raise MissingFieldException(fields=["email"])
+        
+        try:
+            email_signature = self.subscription_service_dao.get_email_signature(email)
+            if email_signature is None:
+                raise NotFoundException(detail=f"Firma email non trovata per email={email}")
+            return email_signature
+        
+        except APIException:
+            raise
+        except Exception as e:
+            raise DatabaseException(operation=f"recupero email_signature: {str(e)}")
+    
+    def update_email_signature(self, email: str, payload: str):
+        if not email:
+            raise MissingFieldException(fields=["email"])
+        
+        if not payload:
+            raise BadRequestException(detail="Nessun dato da aggiornare")
+        
+        if not isinstance(payload, str):
+            raise BadRequestException(detail="Email signature deve essere un testo (string)")
+        
+        if len(payload.strip()) == 0:
+            raise BadRequestException(detail="Email signature non può essere una stringa vuota")
+        
+        try:
+            updated_signature = self.subscription_service_dao.update_email_signature(email, payload)
+            if updated_signature is None:
+                raise NotFoundException(detail=f"Servizio non trovato per email={email}")
+            return updated_signature
+        
+        except APIException:
+            raise
+        except Exception as e:
+            raise DatabaseException(operation=f"aggiornamento email_signature: {str(e)}")
+        
+    def get_tone_of_voice(self, email: str):
+        if not email:
+            raise MissingFieldException(fields=["email"])
+        
+        try:
+            tone_of_voice = self.subscription_service_dao.get_tone_of_voice(email)
+            if tone_of_voice is None:
+                raise NotFoundException(detail=f"Tone-of-voice non trovato per email={email}")
+            return tone_of_voice
+        
+        except APIException:
+            raise
+        except Exception as e:
+            raise DatabaseException(operation=f"recupero tone_of_voice: {str(e)}")
+        
+    def update_tone_of_voice(self, email: str, payload: str):
+        if not email:
+            raise MissingFieldException(fields=["email"])
+        
+        if not payload:
+            raise BadRequestException(detail="Nessun dato da aggiornare")
+        
+        if not isinstance(payload, str):
+            raise BadRequestException(detail="Tone-of-voice deve essere un testo (string)")
+        
+        if len(payload.strip()) == 0:
+            raise BadRequestException(detail="Tone-of-voice non può essere una stringa vuota")
+        
+        try:
+            updated_tone = self.subscription_service_dao.update_tone_of_voice(email, payload)
+            if updated_tone is None:
+                raise NotFoundException(detail=f"Servizio non trovato per email={email}")
+            return updated_tone
+        
+        except APIException:
+            raise
+        except Exception as e:
+            raise DatabaseException(operation=f"aggiornamento tone_of_voice: {str(e)}")
