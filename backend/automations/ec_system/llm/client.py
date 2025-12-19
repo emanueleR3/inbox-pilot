@@ -2249,6 +2249,7 @@ class LLMClient:
         attachment_summary: str,
         guidelines: list,
         language: str = "ITA",
+        email_signature: str = None,  # Email signature from database
         # Request appointment specific params
         scheduled: bool = None,
         event_code: str = None,
@@ -2271,6 +2272,7 @@ class LLMClient:
             attachment_summary: Summary of attachments
             guidelines: List of correction guidelines from reviewer (format: "part to correct : correction")
             language: Language (ITA or ENG)
+            email_signature: Email signature from database to append at the end of the email
             scheduled: Whether appointment was scheduled (for REQUEST_APPOINTMENT/CHANGE)
             event_code: Event code if appointment was scheduled
             proposed_slots: Proposed slots if appointment couldn't be scheduled
@@ -2391,6 +2393,7 @@ class LLMClient:
                         mail_summary=mail_summary or "",
                         chunked_company_info=company_info_str,
                         attachment_summary=attachment_text,
+                        email_signature=email_signature or "Cordiali saluti" if language == "ITA" else email_signature or "Best regards",
                         guidelines_section=guidelines_section
                     )
                 
@@ -2406,6 +2409,7 @@ class LLMClient:
                     mail_summary=mail_summary or "",
                     chunked_company_info=company_info_str,
                     attachment_summary=attachment_text,
+                    email_signature=email_signature or ("Cordiali saluti" if language == "ITA" else "Best regards"),
                     guidelines_section=guidelines_section
                 )
             

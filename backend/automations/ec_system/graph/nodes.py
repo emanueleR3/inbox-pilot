@@ -20,7 +20,8 @@ from db_client import (
     get_default_configuration, 
     get_email_attachments_sync, 
     get_company_information_sync,
-    get_qdrant_collection_sync
+    get_qdrant_collection_sync,
+    get_email_signature_sync
 ) 
 
 # Import Qdrant RAG helpers
@@ -1786,10 +1787,16 @@ def writer_node(state):
         attachment_summary = state.get("summary_attachments", "")
         guidelines = state.get("guidelines", [])
         
+        # Get email signature from database
+        extracted_info = state.get('extracted_info', {})
+        box_email = extracted_info.get('box_email', '')
+        email_signature = get_email_signature_sync(box_email) if box_email else None
+        
         print(f"📋 [WRITER] Writing parameters:")
         print(f"   🏷️ Subcategory: {subcategory}")
         print(f"   🔒 Language: {language}")
         print(f"   📝 Has guidelines: {len(guidelines) if guidelines else 0}")
+        print(f"   ✒️ Has email signature: {bool(email_signature)}")
         
         # Prepare parameters based on subcategory
         if subcategory == "REQUEST_APPOINTMENT":
@@ -1915,7 +1922,8 @@ def writer_node(state):
                 chunked_company_info=chunked_company_info,
                 attachment_summary=attachment_summary,
                 guidelines=guidelines,
-                language=language
+                language=language,
+                email_signature=email_signature
             )
         
         # Update state with written email

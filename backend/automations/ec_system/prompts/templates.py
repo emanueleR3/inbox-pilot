@@ -1551,14 +1551,14 @@ ISTRUZIONI CRITICHE:
 4. NON includere informazioni non rilevanti alla richiesta
 5. Se nessuna informazione aziendale è pertinente, restituisci un dizionario vuoto
 6. Organizza le informazioni estratte in un dizionario strutturato per argomento
-7. Includi SEMPRE le informazioni di contatto dell'azienda se presenti nelle informazioni aziendali
+7. NON estrarre informazioni di contatto dell'azienda - la firma email viene gestita separatamente
 
 FORMATO OUTPUT:
 Restituisci un dizionario dove:
-- Chiavi: nomi degli argomenti rilevanti (es. "orari_apertura", "servizi_offerti", "contatti")
+- Chiavi: nomi degli argomenti rilevanti (es. "orari_apertura", "servizi_offerti", "procedure")
 - Valori: testo esatto estratto dalle informazioni aziendali
 
-Estrai solo informazioni pertinenti e necessarie per rispondere alla richiesta e le informazioni di contatto dell'azienda se sono presenti nelle informazioni aziendali.
+Estrai solo informazioni pertinenti e necessarie per rispondere alla richiesta.
 """
 
 EXTRACTOR_COMPANY_INFO_PROMPT_ENG = """
@@ -1582,14 +1582,14 @@ CRITICAL INSTRUCTIONS:
 4. DO NOT include information not relevant to the request
 5. If no company information is pertinent, return an empty dictionary
 6. Organize extracted information in a structured dictionary by topic
-7. ALWAYS include company contact information if present in company information
+7. DO NOT extract company contact information - email signature is handled separately
 
 OUTPUT FORMAT:
 Return a dictionary where:
-- Keys: names of relevant topics (e.g., "opening_hours", "services_offered", "contacts")
+- Keys: names of relevant topics (e.g., "opening_hours", "services_offered", "procedures")
 - Values: exact text extracted from company information
 
-Extract only pertinent and necessary information to answer the request and include company contact information if present in company information.
+Extract only pertinent and necessary information to answer the request.
 """
 
 # ============================================
@@ -1982,6 +1982,9 @@ CONTESTO EMAIL:
 - INFORMAZIONI AZIENDALI RILEVANTI: {chunked_company_info}
 - RIASSUNTO ALLEGATI: {attachment_summary}
 
+FIRMA EMAIL DA USARE:
+{email_signature}
+
 {guidelines_section}
 
 ISTRUZIONI CRITICHE:
@@ -1993,15 +1996,17 @@ ISTRUZIONI CRITICHE:
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
 - Tono professionale ma cordiale e accessibile, non troppo formale o pesante
-- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
+- NON usare MAI emoji, asterischi (*), cancelletti (#) o altri simboli di formattazione markdown
+- NON usare MAI formattazione grassetto (**testo**) o corsivo (*testo*)
+- Per gli elenchi, usa i trattini
 - NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
 - La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
-- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
-- Usa un formato pulito e leggibile senza formattazione speciale
+- NON generare informazioni di contatto - usa la FIRMA EMAIL fornita sopra alla fine dell'email
+- Usa un formato pulito e leggibile, tutto in TESTO SEMPLICE senza formattazione speciale
 
 OUTPUT RICHIESTO:
-1. **written_email_body**: Il corpo della risposta email (senza oggetto)
-2. **modifications_summary**: Se hai applicato delle linee guida di correzione, descrivi brevemente in forma testuale le modifiche che hai apportato. Se non ci sono linee guida da seguire, lascia questo campo vuoto o null. Esempio: "Modificato il saluto da 'Gentile Cliente' a 'Gentile Sig. Rossi'. Specificato l'orario dell'appuntamento (14:00). Corretto il prezzo da 50 euro a 49,99 euro IVA inclusa."
+1. **written_email_body**: Il corpo della risposta email (senza oggetto), terminando con la firma email fornita
+2. **modifications_summary**: Se hai applicato delle linee guida di correzione, descrivi brevemente in forma testuale le modifiche che hai apportato. Se non ci sono linee guida da seguire, lascia questo campo vuoto o null.
 """
 
 WRITER_GENERIC_PROMPT_ENG = """
@@ -2012,6 +2017,9 @@ EMAIL CONTEXT:
 - CURRENT EMAIL SUMMARY: {mail_summary}
 - RELEVANT COMPANY INFORMATION: {chunked_company_info}
 - ATTACHMENTS SUMMARY: {attachment_summary}
+
+EMAIL SIGNATURE TO USE:
+{email_signature}
 
 {guidelines_section}
 
@@ -2024,15 +2032,17 @@ CRITICAL INSTRUCTIONS:
 
 FORMATTING RULES (MANDATORY):
 - Professional but friendly and accessible tone, not too formal or heavy
-- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
+- NEVER use emojis, asterisks (*), hashtags (#) or other markdown formatting symbols
+- NEVER use bold formatting (**text**) or italic formatting (*text*)
+- For lists, use bullet point dashes (-)
 - NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
 - The response must be READY TO SEND, without parts to complete
-- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
-- Use a clean and readable format without special formatting
+- DO NOT generate contact information - use the EMAIL SIGNATURE provided above at the end of the email
+- Use a clean and readable format, all in PLAIN TEXT without special formatting
 
 REQUIRED OUTPUT:
-1. **written_email_body**: The email response body (without subject)
-2. **modifications_summary**: If you applied correction guidelines, briefly describe in text form the changes you made. If there are no guidelines to follow, leave this field empty or null. Example: "Changed greeting from 'Dear Customer' to 'Dear Mr. Smith'. Specified appointment time (2:00 PM). Corrected price from $50 to $49.99 including VAT."
+1. **written_email_body**: The email response body (without subject), ending with the provided email signature
+2. **modifications_summary**: If you applied correction guidelines, briefly describe the changes you made. If there are no guidelines to follow, leave this field empty or null.
 """
 
 # Guidelines section templates

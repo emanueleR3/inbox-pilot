@@ -750,7 +750,44 @@ def get_qdrant_collection_sync(box_email: str) -> Optional[str]:
         return None
 
 
-
+def get_email_signature_sync(box_email: str) -> Optional[str]:
+    """
+    Recupera la firma email per un utente.
+    Versione sincrona per i nodi del workflow.
+    
+    Args:
+        box_email (str): Email della casella di posta
+        
+    Returns:
+        str: Firma email, None se non presente o vuota
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Query per recuperare il campo email_signature
+        response = supabase.table("subscription_services") \
+            .select("email_signature") \
+            .eq("email", box_email) \
+            .eq("activated", True) \
+            .execute()
+        
+        if not response.data or len(response.data) == 0:
+            print(f"⚠️ [DB_CLIENT] No subscription found for box_email: {box_email}")
+            return None
+        
+        email_signature = response.data[0].get("email_signature")
+        
+        # Verifica se email_signature è vuota o None
+        if not email_signature or email_signature.strip() == "":
+            print(f"ℹ️ [DB_CLIENT] No email_signature set for box_email: {box_email}")
+            return None
+        
+        print(f"✅ [DB_CLIENT] Email signature found for: {box_email}")
+        return email_signature
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving email_signature: {str(e)}")
+        return None
 def get_email_service_data(email: str) -> Optional[Dict]:
     """
     Retrieves email service configuration (provider and credentials) from subscription_services.
