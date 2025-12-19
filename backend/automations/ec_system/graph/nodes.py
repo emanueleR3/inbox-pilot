@@ -1820,11 +1820,11 @@ def writer_node(state):
                 attachment_summary=attachment_summary,
                 guidelines=guidelines,
                 language=language,
+                email_signature=email_signature,
                 scheduled=scheduled,
                 event_code=event_code,
                 proposed_slots=proposed_slots,
-                favorite_day_unavailable=favorite_day_unavailable,
-                status=status
+                favorite_day_unavailable=favorite_day_unavailable
             )
             
         elif subcategory == "REQUEST_APPOINTMENT_CHANGE":
