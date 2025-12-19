@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: broker-worker
     app.kubernetes.io/part-of: corretto
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: broker-worker
