@@ -21,38 +21,6 @@ class UserController:
         self.user_dao = UserDAO()
         self.subscription_dao = SubscriptionDAO()
 
-    def setup_calendar_information(self, payload: dict) -> bool:
-        subscription_id = payload.get("subscription_id")
-        business_hours = payload.get("business_hours")
-        appointment_duration = payload.get("appointment_duration")
-
-        if business_hours is None or appointment_duration is None:
-            raise MissingFieldException(fields=["business_hours", "appointment_duration"])
-
-        if not isinstance(business_hours, dict) or not business_hours:
-            raise BadRequestException(detail="business_hours deve essere un oggetto non vuoto")
-
-        if not isinstance(appointment_duration, int) or appointment_duration <= 0:
-            raise BadRequestException(detail="appointment_duration deve essere un intero positivo")
-
-        if not subscription_id:
-            raise SubscriptionIdRequiredException()
-
-        try:
-            updated = self.subscription_dao.setup_calendar_information(
-                subscription_id=subscription_id,
-                business_hours=business_hours,
-                appointment_duration=appointment_duration,
-            )
-            if not updated:
-                raise NotFoundException(detail="Nessun servizio trovato per salvare le informazioni calendario")
-            return True
-
-        except APIException:
-            raise
-        except Exception as e:
-            raise DatabaseException(operation=f"setup informazioni calendario: {str(e)}")
-
     def get_users_by_subscription(self, subscription_id: str):
         if not subscription_id:
             raise SubscriptionIdRequiredException()

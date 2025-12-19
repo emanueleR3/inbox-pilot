@@ -391,7 +391,7 @@ def get_calendar_service_data(service_id: str) -> Optional[Dict]:
         
         # Fetch subscription service data
         response_sub_ser = supabase.table("subscription_services").select(
-            "subscription_id, calendar_provider, hashed_access_token, email"
+            "subscription_id, calendar_provider, hashed_access_token, email, business_hours, appointment_duration"
         ).eq("service_id", service_id).execute()
         
         if not response_sub_ser.data:
@@ -402,6 +402,8 @@ def get_calendar_service_data(service_id: str) -> Optional[Dict]:
         calendar_provider = data.get("calendar_provider")
         hashed_access_token = data.get("hashed_access_token")
         subscription_id = data.get("subscription_id")
+        business_hours = data.get("business_hours")
+        appointment_duration = data.get("appointment_duration")
         
         if not hashed_access_token:
             print(f"❌ [DB_CLIENT] No hashed access token found")
@@ -413,23 +415,12 @@ def get_calendar_service_data(service_id: str) -> Optional[Dict]:
             print(f"❌ [DB_CLIENT] Failed to decrypt token")
             return None
         
-        # Fetch subscription data
-        response_sub = supabase.table("subscriptions").select(
-            "business_hours, appointment_duration"
-        ).eq("subscription_id", subscription_id).execute()
-        
-        if not response_sub.data:
-            print(f"❌ [DB_CLIENT] No subscription data found for subscription_id: {subscription_id}")
-            return None
-        
-        sub_data = response_sub.data[0]
-        
         result = {
             "subscription_id": subscription_id,
             "calendar_provider": calendar_provider,
             "access_token": access_token,
-            "business_hours": sub_data.get("business_hours"),
-            "appointment_duration": sub_data.get("appointment_duration"),
+            "business_hours": business_hours,
+            "appointment_duration": appointment_duration,
             "email": data.get("email")
         }
         
