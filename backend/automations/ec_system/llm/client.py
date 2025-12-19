@@ -2321,6 +2321,7 @@ class LLMClient:
                     event_code=event_code or "N/A",
                     proposed_slots=proposed_slots or [],
                     favorite_day_unavailable=favorite_day_unavailable,
+                    email_signature=email_signature or ("Cordiali saluti" if language == "ITA" else "Best regards"),
                     guidelines_section=guidelines_section
                 )
                 
@@ -2341,6 +2342,7 @@ class LLMClient:
                     event_code=event_code or "N/A",
                     proposed_slots=proposed_slots or [],
                     favorite_day_unavailable=favorite_day_unavailable,
+                    email_signature=email_signature or ("Cordiali saluti" if language == "ITA" else "Best regards"),
                     guidelines_section=guidelines_section
                 )
                 
@@ -2357,6 +2359,7 @@ class LLMClient:
                     attachment_summary=attachment_text,
                     cancellation_event_code=cancellation_event_code or "N/A",
                     status=status or "UNKNOWN",
+                    email_signature=email_signature or ("Cordiali saluti" if language == "ITA" else "Best regards"),
                     guidelines_section=guidelines_section
                 )
             
@@ -2379,6 +2382,7 @@ class LLMClient:
                         proposed_slots=proposed_slots or [],
                         favorite_day_unavailable=favorite_day_unavailable,
                         status=status or "UNKNOWN",
+                        email_signature=email_signature or ("Cordiali saluti" if language == "ITA" else "Best regards"),
                         guidelines_section=guidelines_section
                     )
                 else:
