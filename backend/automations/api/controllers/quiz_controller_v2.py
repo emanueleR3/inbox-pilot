@@ -12,6 +12,8 @@ from api.services.quiz_service_v2 import (
     create_session,
     get_session,
     delete_session,
+    fetch_quiz_session_row,
+    list_quiz_sessions,
     start_quiz,
     submit_answer,
     force_finish_quiz,
@@ -21,28 +23,30 @@ from api.services.quiz_service_v2 import (
 class QuizControllerV2:
     """Controller for the simplified quiz system."""
     
-    async def start_quiz(self, email: str) -> Dict[str, Any]:
+    async def start_quiz(self, service_id: str) -> Dict[str, Any]:
         """
         Start a new quiz session.
         
         Args:
-            email: The email (unique) to start the quiz for
+            service_id: subscription_services.service_id
             
         Returns:
             Dictionary with session info and initial question
         """
-        if not email:
+        if not service_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email è richiesta"
+                detail="service_id è richiesto"
             )
         
         try:
+            #TODO Check if service exists
+
             # Create session
-            session_id = create_session(email)
+            session_id = create_session(service_id)
             
             # Start the quiz flow
-            result = await start_quiz(email, session_id)
+            result = await start_quiz(service_id, session_id)
             
             return {
                 "session_id": result["session_id"],
@@ -126,6 +130,13 @@ class QuizControllerV2:
             )
         
         try:
+            row = fetch_quiz_session_row(session_id)
+            if not row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Sessione non trovata"
+                )
+
             flow = get_session(session_id)
             if not flow:
                 raise HTTPException(
@@ -142,7 +153,8 @@ class QuizControllerV2:
             
             return {
                 "session_id": session_id,
-                "service_id": state["service_id"],
+                "service_id": row.get("service_id"),
+                "email": row.get("email"),
                 "phase": state["phase"],
                 "turn_count": state["turn_count"],
                 "max_turns": state["max_turns"],
@@ -214,10 +226,8 @@ class QuizControllerV2:
         Returns:
             List of session IDs
         """
-        from api.services.quiz_service_v2 import _sessions
-        
         try:
-            return list(_sessions.keys())
+            return list_quiz_sessions(limit=50, status="in_progress")
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -17,7 +17,7 @@ So all endpoints below are under `/internal-quiz`.
 ## Notes / current behavior
 
 - These endpoints are marked `include_in_schema=False`, so they may not appear in Swagger/OpenAPI.
-- Sessions are stored **in-memory** (see `_sessions` in `api/services/quiz_service_v2.py`). Restarting the service clears active sessions.
+- Sessions are stored in the `quiz_sessions` table (Supabase/Postgres). Restarting the service does not clear active sessions.
 - `email` is required to start a quiz and is used as the key to load/update the service in DB.
 - On start, the backend checks whether the service has a `qdrant_collection` (scraping done) and returns it as `has_context`.
 
@@ -223,12 +223,24 @@ curl -X POST http://localhost:8010/internal-quiz/finish \
 
 ### GET /internal-quiz/sessions
 
-Lists all active session IDs currently in memory.
+Lists active quiz sessions from the database.
 
 **Response (200)**
 
 ```json
-["uuid", "uuid"]
+[
+  {
+    "session_id": "uuid",
+    "service_id": "uuid",
+    "email": "string",
+    "status": "in_progress",
+    "phase": "string",
+    "turn_count": 0,
+    "max_turns": 20,
+    "created_at": "2025-01-01T00:00:00Z",
+    "updated_at": "2025-01-01T00:00:00Z"
+  }
+]
 ```
 
 **Example**
