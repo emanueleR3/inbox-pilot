@@ -1612,6 +1612,9 @@ STATO SCHEDULAZIONE APPUNTAMENTO:
 - SLOT PROPOSTI: {proposed_slots}
 - GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
 
+FIRMA EMAIL DA USARE:
+{email_signature}
+
 {guidelines_section}
 
 ISTRUZIONI CRITICHE:
@@ -1630,13 +1633,15 @@ ISTRUZIONI CRITICHE:
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
 - Tono professionale ma cordiale e accessibile, non troppo formale o pesante
-- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
-- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- NON usare MAI emoji, asterischi (*), cancelletti (#) o altri simboli di formattazione markdown
+- NON usare MAI formattazione grassetto (**testo**) o corsivo (*testo*)
+- Per gli elenchi, usa i trattini
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], [Indirizzo], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
 - La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
-- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
-- Usa un formato pulito e leggibile senza formattazione speciale
+- NON generare informazioni di contatto - usa la FIRMA EMAIL fornita sopra alla fine dell'email
+- Usa un formato pulito e leggibile, tutto in TESTO SEMPLICE senza formattazione speciale
 
-Scrivi SOLO il corpo della risposta email, senza oggetto.
+Scrivi SOLO il corpo della risposta email, senza oggetto, terminando con la firma email fornita.
 """
 
 WRITER_REQUEST_APPOINTMENT_PROMPT_ENG = """
@@ -1653,6 +1658,9 @@ APPOINTMENT SCHEDULING STATUS:
 - EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
 - FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
+
+EMAIL SIGNATURE TO USE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1672,13 +1680,15 @@ CRITICAL INSTRUCTIONS:
 
 FORMATTING RULES (MANDATORY):
 - Professional but friendly and accessible tone, not too formal or heavy
-- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
-- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- NEVER use emojis, asterisks (*), hashtags (#) or other markdown formatting symbols
+- NEVER use bold formatting (**text**) or italic formatting (*text*)
+- For lists, use bullet point dashes (-)
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], [Address], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
 - The response must be READY TO SEND, without parts to complete
-- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
-- Use a clean and readable format without special formatting
+- DO NOT generate contact information - use the EMAIL SIGNATURE provided above at the end of the email
+- Use a clean and readable format, all in PLAIN TEXT without special formatting
 
-Write ONLY the email response body, without subject.
+Write ONLY the email response body, without subject, ending with the provided email signature.
 """
 
 # WRITER PROMPT - REQUEST_APPOINTMENT_CHANGE SUBCATEGORY
@@ -1698,6 +1708,9 @@ STATO MODIFICA APPUNTAMENTO:
 - NUOVO CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
 - GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
+
+FIRMA EMAIL DA USARE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1724,13 +1737,15 @@ ISTRUZIONI CRITICHE:
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
 - Tono professionale ma cordiale e accessibile, non troppo formale o pesante
-- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
-- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- NON usare MAI emoji, asterischi (*), cancelletti (#) o altri simboli di formattazione markdown
+- NON usare MAI formattazione grassetto (**testo**) o corsivo (*testo*)
+- Per gli elenchi, usa i trattini (-)
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], [Indirizzo], etc.
 - La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
-- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
-- Usa un formato pulito e leggibile senza formattazione speciale
+- NON generare informazioni di contatto - usa la FIRMA EMAIL fornita sopra alla fine dell'email
+- Usa un formato pulito e leggibile, tutto in TESTO SEMPLICE senza formattazione speciale
 
-Scrivi SOLO il corpo della risposta email, senza oggetto.
+Scrivi SOLO il corpo della risposta email, senza oggetto, terminando con la firma email fornita.
 """
 
 WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ENG = """
@@ -1749,6 +1764,9 @@ APPOINTMENT CHANGE STATUS:
 - NEW EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
 - FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
+
+EMAIL SIGNATURE TO USE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1775,13 +1793,15 @@ CRITICAL INSTRUCTIONS:
 
 FORMATTING RULES (MANDATORY):
 - Professional but friendly and accessible tone, not too formal or heavy
-- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
-- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- NEVER use emojis, asterisks (*), hashtags (#) or other markdown formatting symbols
+- NEVER use bold formatting (**text**) or italic formatting (*text*)
+- For lists, use bullet point dashes (-)
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], [Address], etc.
 - The response must be READY TO SEND, without parts to complete
-- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
-- Use a clean and readable format without special formatting
+- DO NOT generate contact information - use the EMAIL SIGNATURE provided above at the end of the email
+- Use a clean and readable format, all in PLAIN TEXT without special formatting
 
-Write ONLY the email response body, without subject.
+Write ONLY the email response body, without subject, ending with the provided email signature.
 """
 
 # WRITER PROMPT - CANCEL_APPOINTMENT SUBCATEGORY
@@ -1797,6 +1817,9 @@ CONTESTO EMAIL:
 STATO CANCELLAZIONE APPUNTAMENTO:
 - CODICE EVENTO RICHIESTA: {cancellation_event_code}
 - STATO OPERAZIONE: {status}
+
+FIRMA EMAIL DA USARE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1815,14 +1838,15 @@ ISTRUZIONI CRITICHE:
 5. Basa la risposta sulle informazioni aziendali fornite
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
-- Tono professionale ma comprensivo e accessibile, non troppo formale o pesante
-- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
-- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- Tono professionale ma comprensivo e accessibile
+- NON usare MAI emoji, asterischi (*), cancelletti (#) o altri simboli di formattazione markdown
+- NON usare MAI formattazione grassetto (**testo**) o corsivo (*testo*)
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Indirizzo], etc.
 - La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
-- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
-- Usa un formato pulito e leggibile senza formattazione speciale
-
-Scrivi SOLO il corpo della risposta email, senza oggetto.
+- NON generare informazioni di contatto - usa la FIRMA EMAIL fornita sopra alla fine dell'email
+- Usa un formato pulito e leggibile, tutto in TESTO SEMPLICE
+- Per gli elenchi, usa i trattini (-)
+Scrivi SOLO il corpo della risposta email, senza oggetto, terminando con la firma email fornita.
 """
 
 WRITER_CANCEL_APPOINTMENT_PROMPT_ENG = """
@@ -1837,6 +1861,9 @@ EMAIL CONTEXT:
 APPOINTMENT CANCELLATION STATUS:
 - REQUESTED EVENT CODE: {cancellation_event_code}
 - OPERATION STATUS: {status}
+
+EMAIL SIGNATURE TO USE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1855,14 +1882,16 @@ CRITICAL INSTRUCTIONS:
 5. Base the response on the provided company information
 
 FORMATTING RULES (MANDATORY):
-- Professional but understanding and accessible tone, not too formal or heavy
-- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
-- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- Professional but understanding and accessible tone
+- NEVER use emojis, asterisks (*), hashtags (#) or other markdown formatting symbols
+- NEVER use bold formatting (**text**) or italic formatting (*text*)
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Address], etc.
 - The response must be READY TO SEND, without parts to complete
-- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
-- Use a clean and readable format without special formatting
+- DO NOT generate contact information - use the EMAIL SIGNATURE provided above at the end of the email
+- Use a clean and readable format, all in PLAIN TEXT
+- For lists, use bullet point dashes (-)
 
-Write ONLY the email response body, without subject.
+Write ONLY the email response body, without subject, ending with the provided email signature.
 """
 
 # WRITER PROMPT - CONFIRM_APPOINTMENT SUBCATEGORY (when already_scheduled=False, i.e., after scheduling)
@@ -1881,6 +1910,9 @@ STATO CONFERMA APPUNTAMENTO:
 - SLOT PROPOSTI: {proposed_slots}
 - GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
 - STATO OPERAZIONE: {status}
+
+FIRMA EMAIL DA USARE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1909,14 +1941,16 @@ ISTRUZIONI CRITICHE:
 8. Non inventare informazioni non presenti nel contesto
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
-- Tono professionale ma cordiale e accessibile, non troppo formale o pesante
-- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
-- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- Tono professionale ma cordiale e accessibile
+- NON usare MAI emoji, asterischi (*), cancelletti (#) o altri simboli di formattazione markdown
+- NON usare MAI formattazione grassetto (**testo**) o corsivo (*testo*)
+- NON usare MAI placeholder come [Nome destinatario], [Indirizzo], etc.
 - La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
-- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
-- Usa un formato pulito e leggibile senza formattazione speciale
+- NON generare informazioni di contatto - usa la FIRMA EMAIL fornita sopra alla fine dell'email
+- Usa un formato pulito e leggibile, tutto in TESTO SEMPLICE
+- Per gli elenchi, usa i trattini (-)
 
-Scrivi SOLO il corpo della risposta email, senza oggetto.
+Scrivi SOLO il corpo della risposta email, senza oggetto, terminando con la firma email fornita.
 """
 
 WRITER_CONFIRM_APPOINTMENT_PROMPT_ENG = """
@@ -1934,6 +1968,9 @@ APPOINTMENT CONFIRMATION STATUS:
 - PROPOSED SLOTS: {proposed_slots}
 - FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
 - OPERATION STATUS: {status}
+
+EMAIL SIGNATURE TO USE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1962,14 +1999,16 @@ CRITICAL INSTRUCTIONS:
 8. Do not invent information not present in the context
 
 FORMATTING RULES (MANDATORY):
-- Professional but friendly and accessible tone, not too formal or heavy
-- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
-- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- Professional but friendly and accessible tone
+- NEVER use emojis, asterisks (*), hashtags (#) or other markdown formatting symbols
+- NEVER use bold formatting (**text**) or italic formatting (*text*)
+- NEVER use placeholders like [Recipient Name], [Address], etc.
 - The response must be READY TO SEND, without parts to complete
-- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
-- Use a clean and readable format without special formatting
+- DO NOT generate contact information - use the EMAIL SIGNATURE provided above at the end of the email
+- Use a clean and readable format, all in PLAIN TEXT
+- For lists, use bullet point dashes (-)
 
-Write ONLY the email response body, without subject.
+Write ONLY the email response body, without subject, ending with the provided email signature.
 """
 
 # WRITER PROMPT - GENERIC SUBCATEGORY (for all other cases)
