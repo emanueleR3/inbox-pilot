@@ -190,7 +190,7 @@ POST {{baseUrl}}/internal-quiz/start
 Content-Type: application/json
 
 {
-	"email": "test@example.com"
+	"service_id": "99f58669-8763-4580-82a0-77e21b2091da"
 }
 
 ### Submit an answer
@@ -198,12 +198,12 @@ POST {{baseUrl}}/internal-quiz/answer
 Content-Type: application/json
 
 {
-	"session_id": "7dd42f9c-8c4b-4beb-bad4-91f1db802dac",
-	"value": "IDK, maybe Rome?"
+	"session_id": "561339a9-6041-4f03-8ba5-2822cec8245d",
+	"value": "OK, salva"
 }
 
 ### Get quiz state
-GET {{baseUrl}}/internal-quiz/7dd42f9c-8c4b-4beb-bad4-91f1db802dac/state
+GET {{baseUrl}}/internal-quiz/561339a9-6041-4f03-8ba5-2822cec8245d/state
 Accept: application/json
 
 ### Finish quiz (force extraction)
@@ -211,11 +211,11 @@ POST {{baseUrl}}/internal-quiz/finish
 Content-Type: application/json
 
 {
-	"session_id": "c181be4d-5fd1-4714-8f69-2c53bd889ec1"
+	"session_id": "f0836350-ccb5-425e-9177-327e77d8c85a"
 }
 
 ### List all active quiz sessions
-GET {{baseUrl}}/quiz/sessions
+GET {{baseUrl}}/internal-quiz/sessions
 Accept: application/json
 
 ###############################################################################
