@@ -176,28 +176,39 @@ class AttachmentContentExtractor:
     def _extract_pdf_content(self, file_path: str, file_name: str) -> Optional[str]:
         """Extract text content from PDF files."""
         try:
+            if not PDF_AVAILABLE:
+                print(f"❌ [EXTRACTOR] PDF libraries not available (PyMuPDF/pdfminer not installed)")
+                return None
+            
             # Try PyMuPDF first (faster)
-            if PDF_AVAILABLE:
-                try:
-                    doc = fitz.open(file_path)
-                    text = ""
-                    for page in doc:
-                        text += page.get_text()
-                    doc.close()
-                    
-                    if text.strip():
-                        return text.strip()
-                except Exception as e:
-                    print(f"⚠️ [EXTRACTOR] PyMuPDF failed for {file_name}, trying pdfminer: {e}")
-            
-                # Fallback to pdfminer
-                try:
-                    text = pdfminer_extract_text(file_path)
-                    if text.strip():
-                        return text.strip()
-                except Exception as e:
-                    print(f"❌ [EXTRACTOR] pdfminer also failed for {file_name}: {e}")
-            
+            try:
+                print(f"📄 [EXTRACTOR] Trying PyMuPDF for {file_name}...")
+                doc = fitz.open(file_path)
+                text = ""
+                for page in doc:
+                    text += page.get_text()
+                doc.close()
+                
+                if text.strip():
+                    print(f"✅ [EXTRACTOR] PyMuPDF extracted {len(text)} chars from {file_name}")
+                    return text.strip()
+                else:
+                    print(f"⚠️ [EXTRACTOR] PyMuPDF returned empty text for {file_name}")
+            except Exception as e:
+                print(f"⚠️ [EXTRACTOR] PyMuPDF failed for {file_name}: {e}")
+        
+            # Fallback to pdfminer
+            try:
+                print(f"📄 [EXTRACTOR] Trying pdfminer for {file_name}...")
+                text = pdfminer_extract_text(file_path)
+                if text.strip():
+                    print(f"✅ [EXTRACTOR] pdfminer extracted {len(text)} chars from {file_name}")
+                    return text.strip()
+                else:
+                    print(f"⚠️ [EXTRACTOR] pdfminer returned empty text for {file_name}")
+            except Exception as e:
+                print(f"❌ [EXTRACTOR] pdfminer also failed for {file_name}: {e}")
+        
             return None
             
         except Exception as e:
