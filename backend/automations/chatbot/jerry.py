@@ -67,6 +67,42 @@ def _build_system_prompt_with_context(user_id: str) -> str:
 
 
 def handle_user_message(user_id: str, thread_id: str | None, text: str):
+    # Content moderation check BEFORE any LLM processing
+    try:
+        from openai import OpenAI
+        
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        moderation_response = client.moderations.create(
+            model="omni-moderation-latest",
+            input=text
+        )
+        
+        result = moderation_response.results[0]
+        if result.flagged:
+            # Log flagged categories
+            try:
+                categories_dict = result.categories.model_dump()
+            except AttributeError:
+                categories_dict = dict(result.categories)
+            
+            flagged_categories = [cat for cat, flagged in categories_dict.items() if flagged]
+            print(f"🚨 [JERRY_MODERATION] Content FLAGGED! Categories: {flagged_categories}")
+            
+            # Return immediately with error message - don't pass to any LLM
+            class ModerationBlockedMessage:
+                content = "Non posso elaborare richieste di questo genere."
+            
+            # Return thread_id (create if needed) and blocked message
+            if thread_id is None:
+                thread_id = f"user{user_id}:conv{uuid4()}"
+            return thread_id, ModerationBlockedMessage()
+        
+        print(f"✅ [JERRY_MODERATION] Content passed moderation check")
+        
+    except Exception as e:
+        print(f"❌ [JERRY_MODERATION] Error during moderation check: {e}")
+        # On error, continue but log for monitoring
+
     # Nel caso non esista thread_id, ne crea uno nuovo con user context. 
     # Tuttavia, dovrebbe essere sempre gia' presente, perche' gestito a livello di API.
     if thread_id is None:

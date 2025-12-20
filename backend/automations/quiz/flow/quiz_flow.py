@@ -98,6 +98,42 @@ class QuizFlow:
         if self.state is None:
             raise ValueError("Quiz not started. Call start() first.")
         
+        # Content moderation check BEFORE any LLM processing
+        try:
+            from openai import OpenAI
+            import os
+            
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            moderation_response = client.moderations.create(
+                model="omni-moderation-latest",
+                input=user_answer
+            )
+            
+            result = moderation_response.results[0]
+            if result.flagged:
+                # Log flagged categories
+                try:
+                    categories_dict = result.categories.model_dump()
+                except AttributeError:
+                    categories_dict = dict(result.categories)
+                
+                flagged_categories = [cat for cat, flagged in categories_dict.items() if flagged]
+                print(f"🚨 [QUIZ_MODERATION] Content FLAGGED! Categories: {flagged_categories}")
+                
+                # Return immediately with error message - don't pass to any LLM
+                self.state["current_response"] = "Non posso elaborare richieste di questo genere."
+                self.state["messages"].append({
+                    "role": "assistant",
+                    "content": "Non posso elaborare richieste di questo genere."
+                })
+                return self.state
+            
+            print(f"✅ [QUIZ_MODERATION] Content passed moderation check")
+            
+        except Exception as e:
+            print(f"❌ [QUIZ_MODERATION] Error during moderation check: {e}")
+            # On error, continue but log for monitoring
+        
         # Add user message to history
         self.state["messages"].append({
             "role": "user",
