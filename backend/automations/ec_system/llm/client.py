@@ -145,10 +145,17 @@ class LLMClient:
     """Client for interacting with OpenAI LLMs via Langchain."""
     
     def __init__(self):
-        """Initialize the LLM client with GPT-4o-mini."""
+        """Initialize the LLM client with GPT-4o-mini and GPT-4.1-mini for writer/reviewer."""
+        # Default LLM for most operations
         self.llm = ChatOpenAI(
             model="gpt-4o-mini",
             temperature=0.1,  # Low temperature for consistent results
+            api_key=os.getenv("OPENAI_API_KEY")
+        )
+        # Upgraded LLM for writer and reviewer (better quality for email generation/review)
+        self.llm_writer_reviewer = ChatOpenAI(
+            model="gpt-5-mini",
+            temperature=0.2,  # Slightly higher for more natural writing
             api_key=os.getenv("OPENAI_API_KEY")
         )
         # Security settings
@@ -546,13 +553,14 @@ class LLMClient:
                 must_see_attachments=False
             )
 
-    def structured_completion(self, prompt: str, response_model: Type[T]) -> T:
+    def structured_completion(self, prompt: str, response_model: Type[T], use_writer_reviewer: bool = False) -> T:
         """
         Generic method for structured completions with Pydantic models.
         
         Args:
             prompt: The prompt to send to the LLM
             response_model: Pydantic model class for response parsing
+            use_writer_reviewer: If True, use the upgraded LLM for writer/reviewer
             
         Returns:
             Parsed response of the specified type
@@ -567,8 +575,11 @@ class LLMClient:
             # Create message
             message = HumanMessage(content=prompt_with_format)
             
+            # Select LLM based on flag
+            llm_to_use = self.llm_writer_reviewer if use_writer_reviewer else self.llm
+            
             # Get response from LLM
-            response = self.llm.invoke([message])
+            response = llm_to_use.invoke([message])
             
             # Parse response
             parsed_response = parser.parse(response.content)
@@ -2417,8 +2428,8 @@ class LLMClient:
                     guidelines_section=guidelines_section
                 )
             
-            # Use structured completion to get response
-            response = self.structured_completion(prompt, WriteResponse)
+            # Use structured completion to get response (using upgraded LLM)
+            response = self.structured_completion(prompt, WriteResponse, use_writer_reviewer=True)
             
             print(f"✅ [LLM_CLIENT] Email written successfully")
             print(f"   📝 Response length: {len(response.written_email_body)} characters")
@@ -2508,8 +2519,8 @@ class LLMClient:
             print(f"   📝 Edit history entries: {len(edit_history)}")
             print(f"   📅 Appointment context: {'Yes' if appointment_context else 'No'}")
             
-            # Use structured completion to get ReviewerResponse
-            response = self.structured_completion(prompt, ReviewerResponse)
+            # Use structured completion to get ReviewerResponse (using upgraded LLM)
+            response = self.structured_completion(prompt, ReviewerResponse, use_writer_reviewer=True)
             
             print(f"✅ [LLM_CLIENT] Email review completed")
             print(f"   📊 Needs review: {response.needs_review}")

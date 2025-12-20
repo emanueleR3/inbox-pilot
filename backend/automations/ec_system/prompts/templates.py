@@ -2177,28 +2177,44 @@ ISTRUZIONI PER LA REVISIONE:
    - NON inventare date di appuntamenti o dettagli che non sono nel contesto
    - L'email deve essere neutra e chiedere cortesemente il codice corretto, SENZA assumere nulla sull'appuntamento del cliente
 
+9. CRITICO - INFORMAZIONI INVENTATE O NON SUPPORTATE DAL CONTESTO:
+   - Se l'email fa affermazioni che NON sono presenti nel contesto della conversazione o nelle informazioni aziendali, SEGNALA COME ERRORE CRITICO
+   - Esempi: diagnosi mediche, risultati di esami, dettagli tecnici, prezzi, date specifiche che non sono nel contesto
+   - L'email NON deve MAI inventare informazioni o fare affermazioni non supportate dai dati disponibili
+   - Se l'email fa affermazioni false o inventate, imposta correctness_score <= 0.5 e needs_review=True
+   - La correzione deve suggerire di rimuovere l'affermazione inventata o sostituirla con una risposta più generica
+
+10. CRITICO - QUANDO L'EMAIL È ACCETTABILE (needs_review=False):
+   - Se l'email è professionale, coerente con il contesto, senza formattazione errata e risponde appropriatamente
+   - NON segnalare miglioramenti stilistici minori come "migliorare la fluidità" o "rendere più naturale"
+   - NON suggerire correzioni che cambiano solo sinonimi senza migliorare la sostanza
+   - NON fornire guidelines che ripetono lo stesso testo prima e dopo il ":"
+   - Se non ci sono ERRORI REALI da correggere, imposta needs_review=False anche se l'email non è perfetta
+
 OUTPUT RICHIESTO:
 
 1. **needs_review** (bool):
-   - True: se l'email necessita di correzioni o miglioramenti significativi
-   - False: se l'email è accettabile e può essere inviata
+   - True: se l'email ha ERRORI REALI che devono essere corretti (informazioni false, formattazione errata, placeholder, dati mancanti critici)
+   - False: se l'email è accettabile per l'invio, anche se non perfetta. Preferisci False in caso di dubbio.
 
 2. **correctness_score** (float 0.0-1.0):
    - 0.9-1.0: Email eccellente, accurata, completa e ben scritta
-   - 0.7-0.8: Email buona con errori minori o miglioramenti marginali
+   - 0.7-0.8: Email buona con miglioramenti marginali possibili ma non necessari
    - 0.5-0.6: Email accettabile ma con alcuni problemi da correggere
    - 0.0-0.4: Email con problemi significativi che richiedono revisione
 
 3. **guidelines** (lista di stringhe):
    - Se needs_review = True, fornisci una lista di correzioni specifiche
    - Ogni elemento della lista deve essere nel formato: "parte esatta da correggere : correzione da applicare"
-   - Sii specifico e preciso indicando la parte esatta del testo da modificare
-   - Fornisci correzioni chiare e actionable
+   - La parte PRIMA del ":" deve essere DIVERSA dalla parte DOPO il ":", altrimenti non è una correzione
+   - NON includere correzioni dove il testo prima e dopo sono uguali o quasi uguali
+   - Fornisci solo correzioni che risolvono ERRORI REALI, non miglioramenti stilistici
 
 ESEMPI DI GUIDELINES:
 - "Buongiorno Sig. Rossi : Gentile Sig. Rossi"
 - "appuntamento fissato per il 15 marzo : appuntamento confermato per il 15 marzo alle ore 14:00"
 - "Il prodotto costa 100 euro : Il prodotto costa 99,99 euro IVA inclusa come da listino"
+- "non ci sono anomalie significative : RIMUOVERE - non abbiamo accesso ai risultati degli esami"
 
 Analizza attentamente l'email e fornisci una valutazione professionale e costruttiva.
 """
@@ -2277,28 +2293,44 @@ REVIEW INSTRUCTIONS:
    - DO NOT invent appointment dates or details that are not in the context
    - The email must be neutral and kindly ask for the correct code, WITHOUT assuming anything about the customer's appointment
 
+9. CRITICAL - INVENTED OR UNSUPPORTED INFORMATION:
+   - If the email makes claims that are NOT present in the conversation context or company information, FLAG AS CRITICAL ERROR
+   - Examples: medical diagnoses, exam results, technical details, prices, specific dates that are not in the context
+   - The email must NEVER invent information or make claims not supported by available data
+   - If the email makes false or invented claims, set correctness_score <= 0.5 and needs_review=True
+   - The correction should suggest removing the invented claim or replacing it with a more generic response
+
+10. CRITICAL - WHEN EMAIL IS ACCEPTABLE (needs_review=False):
+   - If the email is professional, consistent with context, without formatting errors and responds appropriately
+   - DO NOT flag minor stylistic improvements like "improve flow" or "make more natural"
+   - DO NOT suggest corrections that only change synonyms without improving substance
+   - DO NOT provide guidelines that repeat the same text before and after the ":"
+   - If there are no REAL ERRORS to correct, set needs_review=False even if the email is not perfect
+
 REQUIRED OUTPUT:
 
 1. **needs_review** (bool):
-   - True: if the email needs significant corrections or improvements
-   - False: if the email is acceptable and can be sent
+   - True: if the email has REAL ERRORS that need correction (false information, wrong formatting, placeholders, critical missing data)
+   - False: if the email is acceptable for sending, even if not perfect. Prefer False when in doubt.
 
 2. **correctness_score** (float 0.0-1.0):
    - 0.9-1.0: Excellent email, accurate, complete and well written
-   - 0.7-0.8: Good email with minor errors or marginal improvements
+   - 0.7-0.8: Good email with possible but unnecessary marginal improvements
    - 0.5-0.6: Acceptable email but with some problems to correct
    - 0.0-0.4: Email with significant problems requiring revision
 
 3. **guidelines** (list of strings):
    - If needs_review = True, provide a list of specific corrections
    - Each list item must be in the format: "exact part to correct : correction to apply"
-   - Be specific and precise indicating the exact part of the text to modify
-   - Provide clear and actionable corrections
+   - The part BEFORE the ":" must be DIFFERENT from the part AFTER the ":", otherwise it is not a correction
+   - DO NOT include corrections where text before and after are equal or nearly equal
+   - Only provide corrections that fix REAL ERRORS, not stylistic improvements
 
 EXAMPLES OF GUIDELINES:
 - "Dear Mr. Smith : Dear Mr. Smith,"
 - "appointment scheduled for March 15 : appointment confirmed for March 15 at 2:00 PM"
 - "The product costs $100 : The product costs $99.99 including VAT as per price list"
+- "no significant anomalies : REMOVE - we don't have access to the exam results"
 
 Carefully analyze the email and provide a professional and constructive evaluation.
 """
