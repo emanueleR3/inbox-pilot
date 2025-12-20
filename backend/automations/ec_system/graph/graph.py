@@ -28,6 +28,7 @@ from .nodes import (
     new_mail_node,
     config_loader_node,
     language_detector_node,
+    moderation_node,
     ai_filter_node,
     guardrail_node,
     summarizer_node,
@@ -97,6 +98,7 @@ def create_email_classification_graph():
     graph.add_node(NodeNames.NEW_MAIL, new_mail_node)
     graph.add_node(NodeNames.CONFIG_LOADER, config_loader_node)
     graph.add_node(NodeNames.LANGUAGE_DETECTOR, language_detector_node)
+    graph.add_node(NodeNames.MODERATION, moderation_node)
     graph.add_node(NodeNames.AI_FILTER, ai_filter_node)
     graph.add_node(NodeNames.GUARDRAIL, guardrail_node)
     graph.add_node(NodeNames.SUMMARIZER, summarizer_node)
@@ -152,7 +154,24 @@ def create_email_classification_graph():
     # Configure workflow edges
     graph.set_entry_point(NodeNames.NEW_MAIL)
     graph.add_edge(NodeNames.NEW_MAIL, NodeNames.CONFIG_LOADER)
-    graph.add_edge(NodeNames.CONFIG_LOADER, NodeNames.LANGUAGE_DETECTOR)
+    graph.add_edge(NodeNames.CONFIG_LOADER, NodeNames.MODERATION)
+
+    # Conditional edge from moderation: continue if not flagged, end if dangerous
+    def should_continue_after_moderation(state):
+        """Check if workflow should continue after moderation."""
+        if state.get("dangerous_email"):
+            print(f"🚨 [MODERATION] Dangerous content detected - exiting workflow before any LLM processing")
+            return END
+        return NodeNames.LANGUAGE_DETECTOR
+    
+    graph.add_conditional_edges(
+        NodeNames.MODERATION,
+        should_continue_after_moderation,
+        {
+            NodeNames.LANGUAGE_DETECTOR: NodeNames.LANGUAGE_DETECTOR,
+            END: END
+        }
+    )
 
     def route_after_language_detector(state):
         if state.get("summarizer_only"):

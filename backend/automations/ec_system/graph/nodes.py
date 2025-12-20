@@ -151,6 +151,78 @@ def language_detector_node(state):
         return state
 
 
+def moderation_node(state):
+    """
+    Content moderation using OpenAI's omni-moderation-latest model.
+    Checks email subject and body for harmful content before any LLM processing.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state - if content is flagged, sets dangerous_email=True
+    """
+    try:
+        print(f"🛡️ [MODERATION] Starting content moderation check...")
+        
+        # Get email body and subject from state
+        email_body = state.get("email_body", "")
+        extracted_info = state.get("extracted_info", {})
+        subject = extracted_info.get("subject", "")
+        
+        # Combine subject and body for moderation
+        content_to_moderate = f"Subject: {subject}\n\nBody: {email_body}"
+        
+        if not content_to_moderate.strip():
+            print(f"⚠️ [MODERATION] No content to moderate")
+            return state
+        
+        # Initialize OpenAI client
+        from openai import OpenAI
+        import os
+        
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        
+        # Call moderation endpoint
+        moderation_response = client.moderations.create(
+            model="omni-moderation-latest",
+            input=content_to_moderate
+        )
+        
+        # Check if content was flagged
+        result = moderation_response.results[0]
+        is_flagged = result.flagged
+        
+        if is_flagged:
+            # Log which categories were flagged
+            flagged_categories = []
+            # Use model_dump() for Pydantic models or fallback to dict iteration
+            try:
+                categories_dict = result.categories.model_dump()
+            except AttributeError:
+                categories_dict = dict(result.categories)
+            
+            for category, is_cat_flagged in categories_dict.items():
+                if is_cat_flagged:
+                    flagged_categories.append(category)
+            
+            print(f"🚨 [MODERATION] Content FLAGGED! Categories: {flagged_categories}")
+            state["dangerous_email"] = True
+            state["moderation_flagged_categories"] = flagged_categories
+            state["status"] = "MODERATION_FLAGGED"
+            state["automation_executed"] = True
+        else:
+            print(f"✅ [MODERATION] Content passed moderation check")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [MODERATION] Error during moderation check: {e}")
+        # On error, continue with caution - don't block the flow
+        # but log the error for monitoring
+        return state
+
+
 def ai_filter_node(state):
     """
     Filters email body removing structural elements and HTML residue.
