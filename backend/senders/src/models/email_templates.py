@@ -80,6 +80,11 @@ def get_base_template(content: str, notification_type: str) -> str:
             "primary": "#0D9488",  # Teal 600
             "secondary": "#CCFBF1",  # Teal 100
             "accent": "#0F766E"  # Teal 700
+        },
+        "NO_CALENDAR_PROVIDED": {
+            "primary": "#DC2626",  # Red
+            "secondary": "#FEE2E2",
+            "accent": "#991B1B"
         }
     }
     
@@ -1275,6 +1280,43 @@ def create_low_confidence_writer_email(
     return get_base_template(content, "LOW_CONFIDENCE_WRITER")
 
 
+def create_no_calendar_provided_email(
+    sender_email: str,
+    subject: str,
+    body: str,
+    timestamp: str,
+    summary_attachment: Optional[str] = None
+) -> str:
+    """Create HTML email for no calendar provided notifications."""
+    
+    attachment_html = ""
+    if summary_attachment:
+        attachment_html = f"""
+        <div style="margin-top: 20px; padding: 15px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;">
+            <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 600; color: #92400e;">
+                📎 Allegato
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #6b7280;">
+                {summary_attachment}
+            </p>
+        </div>
+        """
+    
+    content = f"""
+    <div style="margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+            Email Generato
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.8; white-space: pre-wrap;">
+            {body[:500]}{'...' if len(body) > 500 else ''}
+        </p>
+    </div>
+    
+    {attachment_html}
+    """
+    
+    return get_base_template(content, "NO_CALENDAR_PROVIDED")
+
 def get_email_template(
     notification_type: str,
     sender_email: str,
@@ -1325,6 +1367,8 @@ def get_email_template(
         return create_email_not_sent_email(sender_email, subject, body, timestamp, summary_attachment)
     elif notification_type == "LOW_CONFIDENCE_WRITER":
         return create_low_confidence_writer_email(sender_email, subject, body, timestamp, summary_attachment)
+    elif notification_type == "NO_CALENDAR_PROVIDED":
+        return create_no_calendar_provided_email(sender_email, subject, body, timestamp, summary_attachment)
     else:
         # Fallback to low confidence template
         return create_low_confidence_email(sender_email, subject, body, timestamp, summary_attachment)

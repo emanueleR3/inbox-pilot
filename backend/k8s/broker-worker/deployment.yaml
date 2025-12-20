@@ -62,7 +62,8 @@ spec:
               cpu: "500m"
       volumes:
         - name: attachments
-          persistentVolumeClaim:
-            claimName: attachments-pvc
+          hostPath:
+            path: /home/deploy/corretto/data/attachments
+            type: DirectoryOrCreate
       imagePullSecrets:
         - name: ghcr-secret
