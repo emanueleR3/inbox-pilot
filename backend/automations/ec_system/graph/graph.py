@@ -295,12 +295,26 @@ def create_email_classification_graph():
         """Route to appropriate subcategory handler based on subcategory."""
         subcategory = state.get("subcategory", "SPAM_OR_UNKNOWN")
         
-        if state.get("high_priority_email") and subcategory in [
+        # Check calendar_provider for appointment-related subcategories
+        appointment_subcategories = [
             "REQUEST_APPOINTMENT",
             "REQUEST_APPOINTMENT_CHANGE",
             "CANCEL_APPOINTMENT",
             "CONFIRM_APPOINTMENT"
-        ]:
+        ]
+        
+        if subcategory in appointment_subcategories:
+            # Get calendar_provider from user_config
+            user_config = state.get("user_config", {})
+            calendar_provider = user_config.get("calendar_provider")
+            
+            if calendar_provider is None:
+                print(f"❌ [SUBCATEGORY_ROUTER] No calendar provider configured - cannot process {subcategory}")
+                state["status"] = "NO_CALENDAR_PROVIDER"
+                state["automation_executed"] = True
+                return END
+        
+        if state.get("high_priority_email") and subcategory in appointment_subcategories:
             return END # TODO valutare di continuare i flussi con scheduler
 
         # Map subcategories to node names

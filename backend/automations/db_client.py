@@ -49,6 +49,7 @@ class UserConfiguration:
         self.urgent_meeting_threshold = data.get("urgent_meeting_threshold", 0.85)
         self.activated = data.get("activated", False)
         self.config_completed = data.get("config_completed", False)
+        self.calendar_provider = data.get("calendar_provider")  # None if no calendar connected
     
     def to_dict(self) -> Dict:
         """Convert configuration to dictionary for workflow state."""
@@ -61,7 +62,8 @@ class UserConfiguration:
             "confidence_classification_threshold": self.confidence_classification_threshold,
             "urgent_meeting_threshold": self.urgent_meeting_threshold,
             "activated": self.activated,
-            "config_completed": self.config_completed
+            "config_completed": self.config_completed,
+            "calendar_provider": self.calendar_provider
         }
     
     def __repr__(self) -> str:
@@ -157,7 +159,8 @@ def get_user_configuration_sync(box_email: str) -> Optional[UserConfiguration]:
             "confidence_classification_threshold, "
             "urgent_meeting_threshold, "
             "activated, "
-            "config_completed"
+            "config_completed, "
+            "calendar_provider"
         ).eq("email", box_email).execute()
         
         if not response.data:
