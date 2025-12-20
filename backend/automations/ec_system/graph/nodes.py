@@ -617,10 +617,6 @@ def router_node(state):
     print(f"   📊 Confidence: {state.get('confidence_score', 'Not set')}")
     print(f"   📝 Mail Summary: {state.get('mail_summary', 'Not set')[:50]}...")
     
-    # For now, just return the state - routing logic will be in conditional edges
-    # This is a placeholder until specific extraction nodes are implemented
-    print(f"   ⚠️ [ROUTER] Extraction nodes not yet implemented - ending workflow")
-    
     return state 
 
 

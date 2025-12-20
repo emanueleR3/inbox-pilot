@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: automations
     app.kubernetes.io/part-of: corretto
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: automations
@@ -42,7 +42,7 @@ spec:
               value: /home/deploy/corretto/data/scrapings
           volumeMounts:
             - name: attachments
-              mountPath: /automations/attachments
+              mountPath: /app/attachments
             - name: scrapings
               mountPath: /app/scrapings
           resources:
@@ -70,8 +70,9 @@ spec:
           #   failureThreshold: 3
       volumes:
         - name: attachments
-          persistentVolumeClaim:
-            claimName: attachments-pvc
+          hostPath:
+            path: /home/deploy/corretto/data/attachments
+            type: DirectoryOrCreate
         - name: scrapings
           hostPath:
             path: /home/deploy/corretto/data/scrapings
