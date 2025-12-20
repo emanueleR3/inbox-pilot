@@ -154,7 +154,7 @@ class LLMClient:
         )
         # Upgraded LLM for writer and reviewer (better quality for email generation/review)
         self.llm_writer_reviewer = ChatOpenAI(
-            model="gpt-5-mini",
+            model="gpt-4o-mini", #NOTE per il momento è uguale
             temperature=0.2,  # Slightly higher for more natural writing
             api_key=os.getenv("OPENAI_API_KEY")
         )
