@@ -10,6 +10,17 @@ project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
 load_dotenv()
 
+# Lingua language detector (algorithmic, no LLM)
+from lingua import Language, LanguageDetectorBuilder
+
+# Build detector for Italian and English only
+_lingua_detector = (
+    LanguageDetectorBuilder
+    .from_languages(Language.ITALIAN, Language.ENGLISH)
+    .with_minimum_relative_distance(0.8)  # Higher = more conservative
+    .build()
+)
+
 from .config import NodeNames
 from ..llm.client import llm_client
 from db_client import (
@@ -113,7 +124,8 @@ def config_loader_node(state):
 
 def language_detector_node(state):
     """
-    Detects the language of the email using GPT-4o-mini.
+    Detects the language of the email using lingua-language-detector (algorithmic, no LLM).
+    Only supports Italian (ITA) and English (ENG). Defaults to ITA if uncertain.
     
     Args:
         state: Current workflow state
@@ -122,7 +134,7 @@ def language_detector_node(state):
         Updated state with detected language
     """
     try:
-        print(f"🔍 [LANGUAGE_DETECTOR] Starting language detection...")
+        print(f"🔍 [LANGUAGE_DETECTOR] Starting language detection (algorithmic)...")
         
         # Get email body from state
         email_body = state.get("email_body", "")
@@ -132,14 +144,42 @@ def language_detector_node(state):
             state["language"] = "ITA"
             return state
         
-        # Detect language using LLM (first 400 characters)
-        language_response = llm_client.detect_language(email_body)
-        detected_language = language_response.language
+        # Too short text -> default to ITA
+        if len(email_body.strip()) < 20:
+            print(f"⚠️ [LANGUAGE_DETECTOR] Text too short ({len(email_body)} chars), defaulting to ITA")
+            state["language"] = "ITA"
+            return state
+        
+        # Detect language using lingua (algorithmic)
+        detected_lang = _lingua_detector.detect_language_of(email_body)
+        
+        if detected_lang is None:
+            print(f"⚠️ [LANGUAGE_DETECTOR] Language ambiguous, defaulting to ITA")
+            state["language"] = "ITA"
+            return state
+        
+        # Check confidence
+        confidence_values = _lingua_detector.compute_language_confidence_values(email_body)
+        if confidence_values:
+            top_confidence = confidence_values[0]
+            if top_confidence.value < 0.75:
+                print(f"⚠️ [LANGUAGE_DETECTOR] Low confidence ({top_confidence.value:.2f}), defaulting to ITA")
+                state["language"] = "ITA"
+                return state
+            
+            # Map to ITA/ENG
+            if top_confidence.language == Language.ENGLISH:
+                detected_language = "ENG"
+            else:
+                detected_language = "ITA"
+            
+            print(f"✅ [LANGUAGE_DETECTOR] Language detected: {detected_language} (confidence: {top_confidence.value:.2f})")
+        else:
+            detected_language = "ITA"
+            print(f"⚠️ [LANGUAGE_DETECTOR] No confidence values, defaulting to ITA")
         
         # Update state
         state["language"] = detected_language
-        
-        print(f"✅ [LANGUAGE_DETECTOR] Language detected: {detected_language}")
         print(f"📝 [LANGUAGE_DETECTOR] Text analyzed: '{email_body[:100]}...'")
         
         return state

@@ -7,14 +7,6 @@ from typing import Literal, Optional, List
 from enum import Enum
 
 
-class LanguageDetectionResponse(BaseModel):
-    """Response model for language detection."""
-    language: Literal["ITA", "ENG"] = Field(
-        ..., 
-        description="Lingua del testo: ITA per Italiano, ENG per Inglese"
-    )
-
-
 class CategoryClassificationResponse(BaseModel):
     """Response model for email category classification."""
     category: str = Field(..., description="Detected email category")

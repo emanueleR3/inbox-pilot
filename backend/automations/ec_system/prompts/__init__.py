@@ -3,7 +3,6 @@ Prompts package initialization.
 """
 
 from .templates import (
-    LANGUAGE_DETECTION_PROMPT, 
     EMAIL_CLASSIFICATION_PROMPT,
     EMAIL_FILTER_PROMPT_ITA,
     EMAIL_FILTER_PROMPT_ENG,
@@ -12,7 +11,6 @@ from .templates import (
 )
 
 __all__ = [
-    "LANGUAGE_DETECTION_PROMPT", 
     "EMAIL_CLASSIFICATION_PROMPT",
     "EMAIL_FILTER_PROMPT_ITA",
     "EMAIL_FILTER_PROMPT_ENG", 
