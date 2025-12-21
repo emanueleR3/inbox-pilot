@@ -1612,6 +1612,9 @@ STATO SCHEDULAZIONE APPUNTAMENTO:
 - SLOT PROPOSTI: {proposed_slots}
 - GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
 
+FIRMA EMAIL DA USARE:
+{email_signature}
+
 {guidelines_section}
 
 ISTRUZIONI CRITICHE:
@@ -1630,13 +1633,15 @@ ISTRUZIONI CRITICHE:
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
 - Tono professionale ma cordiale e accessibile, non troppo formale o pesante
-- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
-- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- NON usare MAI emoji, asterischi (*), cancelletti (#) o altri simboli di formattazione markdown
+- NON usare MAI formattazione grassetto (**testo**) o corsivo (*testo*)
+- Per gli elenchi, usa i trattini
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], [Indirizzo], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
 - La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
-- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
-- Usa un formato pulito e leggibile senza formattazione speciale
+- NON generare informazioni di contatto - usa la FIRMA EMAIL fornita sopra alla fine dell'email
+- Usa un formato pulito e leggibile, tutto in TESTO SEMPLICE senza formattazione speciale
 
-Scrivi SOLO il corpo della risposta email, senza oggetto.
+Scrivi SOLO il corpo della risposta email, senza oggetto, terminando con la firma email fornita.
 """
 
 WRITER_REQUEST_APPOINTMENT_PROMPT_ENG = """
@@ -1653,6 +1658,9 @@ APPOINTMENT SCHEDULING STATUS:
 - EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
 - FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
+
+EMAIL SIGNATURE TO USE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1672,13 +1680,15 @@ CRITICAL INSTRUCTIONS:
 
 FORMATTING RULES (MANDATORY):
 - Professional but friendly and accessible tone, not too formal or heavy
-- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
-- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- NEVER use emojis, asterisks (*), hashtags (#) or other markdown formatting symbols
+- NEVER use bold formatting (**text**) or italic formatting (*text*)
+- For lists, use bullet point dashes (-)
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], [Address], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
 - The response must be READY TO SEND, without parts to complete
-- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
-- Use a clean and readable format without special formatting
+- DO NOT generate contact information - use the EMAIL SIGNATURE provided above at the end of the email
+- Use a clean and readable format, all in PLAIN TEXT without special formatting
 
-Write ONLY the email response body, without subject.
+Write ONLY the email response body, without subject, ending with the provided email signature.
 """
 
 # WRITER PROMPT - REQUEST_APPOINTMENT_CHANGE SUBCATEGORY
@@ -1698,6 +1708,9 @@ STATO MODIFICA APPUNTAMENTO:
 - NUOVO CODICE EVENTO: {event_code}
 - SLOT PROPOSTI: {proposed_slots}
 - GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
+
+FIRMA EMAIL DA USARE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1724,13 +1737,15 @@ ISTRUZIONI CRITICHE:
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
 - Tono professionale ma cordiale e accessibile, non troppo formale o pesante
-- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
-- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- NON usare MAI emoji, asterischi (*), cancelletti (#) o altri simboli di formattazione markdown
+- NON usare MAI formattazione grassetto (**testo**) o corsivo (*testo*)
+- Per gli elenchi, usa i trattini (-)
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], [Indirizzo], etc.
 - La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
-- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
-- Usa un formato pulito e leggibile senza formattazione speciale
+- NON generare informazioni di contatto - usa la FIRMA EMAIL fornita sopra alla fine dell'email
+- Usa un formato pulito e leggibile, tutto in TESTO SEMPLICE senza formattazione speciale
 
-Scrivi SOLO il corpo della risposta email, senza oggetto.
+Scrivi SOLO il corpo della risposta email, senza oggetto, terminando con la firma email fornita.
 """
 
 WRITER_REQUEST_APPOINTMENT_CHANGE_PROMPT_ENG = """
@@ -1749,6 +1764,9 @@ APPOINTMENT CHANGE STATUS:
 - NEW EVENT CODE: {event_code}
 - PROPOSED SLOTS: {proposed_slots}
 - FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
+
+EMAIL SIGNATURE TO USE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1775,13 +1793,15 @@ CRITICAL INSTRUCTIONS:
 
 FORMATTING RULES (MANDATORY):
 - Professional but friendly and accessible tone, not too formal or heavy
-- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
-- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- NEVER use emojis, asterisks (*), hashtags (#) or other markdown formatting symbols
+- NEVER use bold formatting (**text**) or italic formatting (*text*)
+- For lists, use bullet point dashes (-)
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], [Address], etc.
 - The response must be READY TO SEND, without parts to complete
-- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
-- Use a clean and readable format without special formatting
+- DO NOT generate contact information - use the EMAIL SIGNATURE provided above at the end of the email
+- Use a clean and readable format, all in PLAIN TEXT without special formatting
 
-Write ONLY the email response body, without subject.
+Write ONLY the email response body, without subject, ending with the provided email signature.
 """
 
 # WRITER PROMPT - CANCEL_APPOINTMENT SUBCATEGORY
@@ -1797,6 +1817,9 @@ CONTESTO EMAIL:
 STATO CANCELLAZIONE APPUNTAMENTO:
 - CODICE EVENTO RICHIESTA: {cancellation_event_code}
 - STATO OPERAZIONE: {status}
+
+FIRMA EMAIL DA USARE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1815,14 +1838,15 @@ ISTRUZIONI CRITICHE:
 5. Basa la risposta sulle informazioni aziendali fornite
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
-- Tono professionale ma comprensivo e accessibile, non troppo formale o pesante
-- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
-- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- Tono professionale ma comprensivo e accessibile
+- NON usare MAI emoji, asterischi (*), cancelletti (#) o altri simboli di formattazione markdown
+- NON usare MAI formattazione grassetto (**testo**) o corsivo (*testo*)
+- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Indirizzo], etc.
 - La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
-- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
-- Usa un formato pulito e leggibile senza formattazione speciale
-
-Scrivi SOLO il corpo della risposta email, senza oggetto.
+- NON generare informazioni di contatto - usa la FIRMA EMAIL fornita sopra alla fine dell'email
+- Usa un formato pulito e leggibile, tutto in TESTO SEMPLICE
+- Per gli elenchi, usa i trattini (-)
+Scrivi SOLO il corpo della risposta email, senza oggetto, terminando con la firma email fornita.
 """
 
 WRITER_CANCEL_APPOINTMENT_PROMPT_ENG = """
@@ -1837,6 +1861,9 @@ EMAIL CONTEXT:
 APPOINTMENT CANCELLATION STATUS:
 - REQUESTED EVENT CODE: {cancellation_event_code}
 - OPERATION STATUS: {status}
+
+EMAIL SIGNATURE TO USE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1855,14 +1882,16 @@ CRITICAL INSTRUCTIONS:
 5. Base the response on the provided company information
 
 FORMATTING RULES (MANDATORY):
-- Professional but understanding and accessible tone, not too formal or heavy
-- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
-- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- Professional but understanding and accessible tone
+- NEVER use emojis, asterisks (*), hashtags (#) or other markdown formatting symbols
+- NEVER use bold formatting (**text**) or italic formatting (*text*)
+- NEVER use placeholders like [Recipient Name], [Customer Name], [Address], etc.
 - The response must be READY TO SEND, without parts to complete
-- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
-- Use a clean and readable format without special formatting
+- DO NOT generate contact information - use the EMAIL SIGNATURE provided above at the end of the email
+- Use a clean and readable format, all in PLAIN TEXT
+- For lists, use bullet point dashes (-)
 
-Write ONLY the email response body, without subject.
+Write ONLY the email response body, without subject, ending with the provided email signature.
 """
 
 # WRITER PROMPT - CONFIRM_APPOINTMENT SUBCATEGORY (when already_scheduled=False, i.e., after scheduling)
@@ -1881,6 +1910,9 @@ STATO CONFERMA APPUNTAMENTO:
 - SLOT PROPOSTI: {proposed_slots}
 - GIORNO PREFERITO NON DISPONIBILE: {favorite_day_unavailable}
 - STATO OPERAZIONE: {status}
+
+FIRMA EMAIL DA USARE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1909,14 +1941,16 @@ ISTRUZIONI CRITICHE:
 8. Non inventare informazioni non presenti nel contesto
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
-- Tono professionale ma cordiale e accessibile, non troppo formale o pesante
-- NON usare MAI emoji, asterischi (*), cancelletti (#), o altri simboli di formattazione markdown
-- NON usare MAI placeholder come [Nome destinatario], [Nome Cliente], [Nome], etc. Se non conosci il nome, usa un saluto generico come "Gentile Cliente" o "Buongiorno"
+- Tono professionale ma cordiale e accessibile
+- NON usare MAI emoji, asterischi (*), cancelletti (#) o altri simboli di formattazione markdown
+- NON usare MAI formattazione grassetto (**testo**) o corsivo (*testo*)
+- NON usare MAI placeholder come [Nome destinatario], [Indirizzo], etc.
 - La risposta deve essere PRONTA PER L'INVIO, senza parti da completare
-- Alla fine dell'email, PRIMA dei saluti finali, inserisci le informazioni di contatto dell'azienda (nome azienda, telefono, indirizzo, email) presenti nelle INFORMAZIONI AZIENDALI
-- Usa un formato pulito e leggibile senza formattazione speciale
+- NON generare informazioni di contatto - usa la FIRMA EMAIL fornita sopra alla fine dell'email
+- Usa un formato pulito e leggibile, tutto in TESTO SEMPLICE
+- Per gli elenchi, usa i trattini (-)
 
-Scrivi SOLO il corpo della risposta email, senza oggetto.
+Scrivi SOLO il corpo della risposta email, senza oggetto, terminando con la firma email fornita.
 """
 
 WRITER_CONFIRM_APPOINTMENT_PROMPT_ENG = """
@@ -1934,6 +1968,9 @@ APPOINTMENT CONFIRMATION STATUS:
 - PROPOSED SLOTS: {proposed_slots}
 - FAVORITE DAY UNAVAILABLE: {favorite_day_unavailable}
 - OPERATION STATUS: {status}
+
+EMAIL SIGNATURE TO USE:
+{email_signature}
 
 {guidelines_section}
 
@@ -1962,14 +1999,16 @@ CRITICAL INSTRUCTIONS:
 8. Do not invent information not present in the context
 
 FORMATTING RULES (MANDATORY):
-- Professional but friendly and accessible tone, not too formal or heavy
-- NEVER use emojis, asterisks (*), hashtags (#), or other markdown formatting symbols
-- NEVER use placeholders like [Recipient Name], [Customer Name], [Name], etc. If you don't know the name, use a generic greeting like "Dear Customer" or "Hello"
+- Professional but friendly and accessible tone
+- NEVER use emojis, asterisks (*), hashtags (#) or other markdown formatting symbols
+- NEVER use bold formatting (**text**) or italic formatting (*text*)
+- NEVER use placeholders like [Recipient Name], [Address], etc.
 - The response must be READY TO SEND, without parts to complete
-- At the end of the email, BEFORE the closing greeting, include the company contact information (company name, phone, address, email) from the RELEVANT COMPANY INFORMATION
-- Use a clean and readable format without special formatting
+- DO NOT generate contact information - use the EMAIL SIGNATURE provided above at the end of the email
+- Use a clean and readable format, all in PLAIN TEXT
+- For lists, use bullet point dashes (-)
 
-Write ONLY the email response body, without subject.
+Write ONLY the email response body, without subject, ending with the provided email signature.
 """
 
 # WRITER PROMPT - GENERIC SUBCATEGORY (for all other cases)
@@ -2138,28 +2177,44 @@ ISTRUZIONI PER LA REVISIONE:
    - NON inventare date di appuntamenti o dettagli che non sono nel contesto
    - L'email deve essere neutra e chiedere cortesemente il codice corretto, SENZA assumere nulla sull'appuntamento del cliente
 
+9. CRITICO - INFORMAZIONI INVENTATE O NON SUPPORTATE DAL CONTESTO:
+   - Se l'email fa affermazioni che NON sono presenti nel contesto della conversazione o nelle informazioni aziendali, SEGNALA COME ERRORE CRITICO
+   - Esempi: diagnosi mediche, risultati di esami, dettagli tecnici, prezzi, date specifiche che non sono nel contesto
+   - L'email NON deve MAI inventare informazioni o fare affermazioni non supportate dai dati disponibili
+   - Se l'email fa affermazioni false o inventate, imposta correctness_score <= 0.5 e needs_review=True
+   - La correzione deve suggerire di rimuovere l'affermazione inventata o sostituirla con una risposta più generica
+
+10. CRITICO - QUANDO L'EMAIL È ACCETTABILE (needs_review=False):
+   - Se l'email è professionale, coerente con il contesto, senza formattazione errata e risponde appropriatamente
+   - NON segnalare miglioramenti stilistici minori come "migliorare la fluidità" o "rendere più naturale"
+   - NON suggerire correzioni che cambiano solo sinonimi senza migliorare la sostanza
+   - NON fornire guidelines che ripetono lo stesso testo prima e dopo il ":"
+   - Se non ci sono ERRORI REALI da correggere, imposta needs_review=False anche se l'email non è perfetta
+
 OUTPUT RICHIESTO:
 
 1. **needs_review** (bool):
-   - True: se l'email necessita di correzioni o miglioramenti significativi
-   - False: se l'email è accettabile e può essere inviata
+   - True: se l'email ha ERRORI REALI che devono essere corretti (informazioni false, formattazione errata, placeholder, dati mancanti critici)
+   - False: se l'email è accettabile per l'invio, anche se non perfetta. Preferisci False in caso di dubbio.
 
 2. **correctness_score** (float 0.0-1.0):
    - 0.9-1.0: Email eccellente, accurata, completa e ben scritta
-   - 0.7-0.8: Email buona con errori minori o miglioramenti marginali
+   - 0.7-0.8: Email buona con miglioramenti marginali possibili ma non necessari
    - 0.5-0.6: Email accettabile ma con alcuni problemi da correggere
    - 0.0-0.4: Email con problemi significativi che richiedono revisione
 
 3. **guidelines** (lista di stringhe):
    - Se needs_review = True, fornisci una lista di correzioni specifiche
    - Ogni elemento della lista deve essere nel formato: "parte esatta da correggere : correzione da applicare"
-   - Sii specifico e preciso indicando la parte esatta del testo da modificare
-   - Fornisci correzioni chiare e actionable
+   - La parte PRIMA del ":" deve essere DIVERSA dalla parte DOPO il ":", altrimenti non è una correzione
+   - NON includere correzioni dove il testo prima e dopo sono uguali o quasi uguali
+   - Fornisci solo correzioni che risolvono ERRORI REALI, non miglioramenti stilistici
 
 ESEMPI DI GUIDELINES:
 - "Buongiorno Sig. Rossi : Gentile Sig. Rossi"
 - "appuntamento fissato per il 15 marzo : appuntamento confermato per il 15 marzo alle ore 14:00"
 - "Il prodotto costa 100 euro : Il prodotto costa 99,99 euro IVA inclusa come da listino"
+- "non ci sono anomalie significative : RIMUOVERE - non abbiamo accesso ai risultati degli esami"
 
 Analizza attentamente l'email e fornisci una valutazione professionale e costruttiva.
 """
@@ -2238,28 +2293,44 @@ REVIEW INSTRUCTIONS:
    - DO NOT invent appointment dates or details that are not in the context
    - The email must be neutral and kindly ask for the correct code, WITHOUT assuming anything about the customer's appointment
 
+9. CRITICAL - INVENTED OR UNSUPPORTED INFORMATION:
+   - If the email makes claims that are NOT present in the conversation context or company information, FLAG AS CRITICAL ERROR
+   - Examples: medical diagnoses, exam results, technical details, prices, specific dates that are not in the context
+   - The email must NEVER invent information or make claims not supported by available data
+   - If the email makes false or invented claims, set correctness_score <= 0.5 and needs_review=True
+   - The correction should suggest removing the invented claim or replacing it with a more generic response
+
+10. CRITICAL - WHEN EMAIL IS ACCEPTABLE (needs_review=False):
+   - If the email is professional, consistent with context, without formatting errors and responds appropriately
+   - DO NOT flag minor stylistic improvements like "improve flow" or "make more natural"
+   - DO NOT suggest corrections that only change synonyms without improving substance
+   - DO NOT provide guidelines that repeat the same text before and after the ":"
+   - If there are no REAL ERRORS to correct, set needs_review=False even if the email is not perfect
+
 REQUIRED OUTPUT:
 
 1. **needs_review** (bool):
-   - True: if the email needs significant corrections or improvements
-   - False: if the email is acceptable and can be sent
+   - True: if the email has REAL ERRORS that need correction (false information, wrong formatting, placeholders, critical missing data)
+   - False: if the email is acceptable for sending, even if not perfect. Prefer False when in doubt.
 
 2. **correctness_score** (float 0.0-1.0):
    - 0.9-1.0: Excellent email, accurate, complete and well written
-   - 0.7-0.8: Good email with minor errors or marginal improvements
+   - 0.7-0.8: Good email with possible but unnecessary marginal improvements
    - 0.5-0.6: Acceptable email but with some problems to correct
    - 0.0-0.4: Email with significant problems requiring revision
 
 3. **guidelines** (list of strings):
    - If needs_review = True, provide a list of specific corrections
    - Each list item must be in the format: "exact part to correct : correction to apply"
-   - Be specific and precise indicating the exact part of the text to modify
-   - Provide clear and actionable corrections
+   - The part BEFORE the ":" must be DIFFERENT from the part AFTER the ":", otherwise it is not a correction
+   - DO NOT include corrections where text before and after are equal or nearly equal
+   - Only provide corrections that fix REAL ERRORS, not stylistic improvements
 
 EXAMPLES OF GUIDELINES:
 - "Dear Mr. Smith : Dear Mr. Smith,"
 - "appointment scheduled for March 15 : appointment confirmed for March 15 at 2:00 PM"
 - "The product costs $100 : The product costs $99.99 including VAT as per price list"
+- "no significant anomalies : REMOVE - we don't have access to the exam results"
 
 Carefully analyze the email and provide a professional and constructive evaluation.
 """

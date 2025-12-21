@@ -29,6 +29,7 @@ class NodeNames:
     NEW_MAIL = "new_mail"
     CONFIG_LOADER = "config_loader"
     LANGUAGE_DETECTOR = "language_detector"
+    MODERATION = "moderation"
     AI_FILTER = "ai_filter"
     GUARDRAIL = "guardrail"
     SUMMARIZER = "summarizer"

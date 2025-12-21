@@ -30,6 +30,7 @@ class NotificationType:
     EVENT_DELETION_FAILED = "EVENT_DELETION_FAILED"
     EMAIL_NOT_SENT = "EMAIL_NOT_SENT"
     LOW_CONFIDENCE_WRITER = "LOW_CONFIDENCE_WRITER"
+    NO_CALENDAR_PROVIDED = "NO_CALENDAR_PROVIDED"
 
 
 def _convert_timestamp_to_timezone(user_timezone: str = "Europe/Rome") -> str:
@@ -546,6 +547,38 @@ def send_low_confidence_writer_notification(
     """
     return send_notification(
         notification_type=NotificationType.LOW_CONFIDENCE_WRITER,
+        sender_email=sender_email,
+        box_email=box_email,
+        subject=subject,
+        body=body,
+        summary_attachment=summary_attachment,
+        timestamp=timestamp
+    )
+
+def send_no_calendar_provided_notification(
+    sender_email: str,
+    box_email: str,
+    subject: str,
+    body: str,
+    summary_attachment: Optional[str] = None,
+    timestamp: Optional[str] = None
+) -> bool:
+    """
+    Send a notification when no calendar is provided.
+    
+    Args:
+        sender_email: Email address of the sender
+        box_email: Email address of the mailbox
+        subject: Email subject
+        body: Email body content
+        summary_attachment: Summary of attachments if present
+        timestamp: Timestamp in user's local timezone
+        
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    return send_notification(
+        notification_type=NotificationType.NO_CALENDAR_PROVIDED,
         sender_email=sender_email,
         box_email=box_email,
         subject=subject,

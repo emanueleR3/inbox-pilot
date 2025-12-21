@@ -49,6 +49,7 @@ class UserConfiguration:
         self.urgent_meeting_threshold = data.get("urgent_meeting_threshold", 0.85)
         self.activated = data.get("activated", False)
         self.config_completed = data.get("config_completed", False)
+        self.calendar_provider = data.get("calendar_provider")  # None if no calendar connected
     
     def to_dict(self) -> Dict:
         """Convert configuration to dictionary for workflow state."""
@@ -61,7 +62,8 @@ class UserConfiguration:
             "confidence_classification_threshold": self.confidence_classification_threshold,
             "urgent_meeting_threshold": self.urgent_meeting_threshold,
             "activated": self.activated,
-            "config_completed": self.config_completed
+            "config_completed": self.config_completed,
+            "calendar_provider": self.calendar_provider
         }
     
     def __repr__(self) -> str:
@@ -157,7 +159,8 @@ def get_user_configuration_sync(box_email: str) -> Optional[UserConfiguration]:
             "confidence_classification_threshold, "
             "urgent_meeting_threshold, "
             "activated, "
-            "config_completed"
+            "config_completed, "
+            "calendar_provider"
         ).eq("email", box_email).execute()
         
         if not response.data:
@@ -353,19 +356,16 @@ def get_email_attachments_sync(message_id: str) -> list:
         
         attachment_files = []
         for attachment_record in response.data:
-            # Convert file path from /app/attachments to /automations/attachments
-            original_path = attachment_record["file_path"]
-            converted_path = original_path.replace("/app/attachments", "/automations/attachments")
-            
+            # Use file path as-is (both broker and automations mount at /app/attachments)
             attachment_files.append({
                 "file_name": attachment_record["file_name"],
-                "file_path": converted_path,
+                "file_path": attachment_record["file_path"],
                 "mime_type": attachment_record.get("mime_type", ""),
                 "size_bytes": attachment_record.get("size_bytes", 0)
             })
     
         
-        print(f"✅ [DB_CLIENT] Retrieved {len(attachment_files)} attachments with converted paths")
+        print(f"✅ [DB_CLIENT] Retrieved {len(attachment_files)} attachments")
         return attachment_files
         
     except Exception as e:

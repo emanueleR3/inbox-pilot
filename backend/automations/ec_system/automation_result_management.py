@@ -25,7 +25,8 @@ from .services.notification_client import (
     send_calendar_service_not_found_notification,
     send_event_deletion_failed_notification,
     send_email_not_sent_notification,
-    send_low_confidence_writer_notification
+    send_low_confidence_writer_notification,
+    send_no_calendar_provided_notification
 )
 from .utils.utils import (
     get_google_calendar_timezone,
@@ -584,7 +585,49 @@ def process_automation_result(workflow_result: dict):
                     timestamp=notification_timestamp
                 )
                 return
-            
+
+            # CASE - NO_CALENDAR_PROVIDED ✅
+            if status == "NO_CALENDAR_PROVIDED":
+                print(f"⚠️ [WORKFLOW] NO CALENDAR PROVIDED - SENDING NOTIFICATION")
+
+                thread_data = {
+                    "category": category,
+                    "subcategory": subcategory,
+                    "summary": summary,
+                    "extended_summary": extended_summary,
+                    "human_response": True,
+                    "status": ThreadStatus.HUMAN_REVIEW.value
+                }
+
+                try:
+                    update_thread(thread_id, thread_data)
+                except Exception as e:
+                    print(f"❌ [WORKFLOW] Error updating thread: {e}")
+
+                try:
+                    notification_success = insert_notification_sync(
+                        email=box_email,
+                        notification_type="NO_CALENDAR_PROVIDED",
+                        message_id=message_id,
+                        text=None
+                    )
+
+                    if not notification_success:
+                        print(f"❌ [NO_CALENDAR_PROVIDED] Failed to insert notification for {box_email}")
+
+                except Exception as e:
+                    print(f"❌ [NO_CALENDAR_PROVIDED] Error inserting notification: {e}")
+
+                send_no_calendar_provided_notification(
+                    sender_email=sender_email,
+                    box_email=box_email,
+                    subject=subject,
+                    body=email_body,
+                    summary_attachment=summary_attachments,
+                    timestamp=notification_timestamp
+                )
+                return
+
             # CASE - COMPANY_INFO_EXTRACTION_FAILED ✅
             if status == "COMPANY_INFO_EXTRACTION_FAILED":
                 print(f"⚠️ [WORKFLOW] COMPANY INFO EXTRACTION FAILED - SENDING NOTIFICATION")
