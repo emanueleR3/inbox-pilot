@@ -3,7 +3,6 @@ Models package initialization.
 """
 
 from .llm_responses import (
-    LanguageDetectionResponse, 
     CategoryClassificationResponse,
     EmailFilterResponse,
     GuardrailResponse,
@@ -11,7 +10,6 @@ from .llm_responses import (
 )
 
 __all__ = [
-    "LanguageDetectionResponse", 
     "CategoryClassificationResponse",
     "EmailFilterResponse",
     "GuardrailResponse", 
