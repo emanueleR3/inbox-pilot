@@ -2,7 +2,7 @@ name: CI/CD Deploy to k3s
 
 on:
   push:
-    branches: [ main, test-workflow, k8s, backend ]
+    branches: [ main, backend, agentic-architecture ]
 
 permissions:
   contents: read

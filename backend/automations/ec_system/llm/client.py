@@ -14,7 +14,6 @@ from langchain_core.output_parsers import PydanticOutputParser
 from typing import TypeVar, Type, Optional, List
 
 from ..models.llm_responses import (
-    LanguageDetectionResponse, 
     EmailFilterResponse, 
     GuardrailResponse,
     EmailSummaryResponse,
@@ -39,7 +38,6 @@ from ..models.llm_responses import (
     ReviewerResponse
 )
 from ..prompts.templates import (
-    LANGUAGE_DETECTION_PROMPT,
     EMAIL_FILTER_PROMPT_ITA,
     EMAIL_FILTER_PROMPT_ENG,
     EMAIL_GUARDRAIL_PROMPT_ITA,
@@ -161,48 +159,6 @@ class LLMClient:
         # Security settings
         self.enable_salt_protection = os.getenv("ENABLE_PROMPT_PROTECTION", "true").lower() == "true"
         self.salt_length = int(os.getenv("SALT_LENGTH", "8"))
-    
-    def detect_language(self, email_text: str) -> LanguageDetectionResponse:
-        """
-        Detect the language of an email text.
-        
-        Args:
-            email_text: The email text to analyze (first 400 chars)
-            
-        Returns:
-            LanguageDetectionResponse with detected language
-        """
-        try:
-            # Truncate text to 400 characters
-            truncated_text = email_text[:400] if email_text else ""
-            
-            # Create output parser
-            parser = PydanticOutputParser(pydantic_object=LanguageDetectionResponse)
-            
-            # Format prompt
-            prompt_text = LANGUAGE_DETECTION_PROMPT.format(
-                email_text=truncated_text
-            )
-            
-            # Add format instructions
-            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
-            
-            # Create message
-            message = HumanMessage(content=prompt_with_format)
-            
-            # Get response from LLM
-            response = self.llm.invoke([message])
-            
-            # Parse response
-            parsed_response = parser.parse(response.content)
-            
-            print(f"🔍 [LLM] Language detected: {parsed_response.language}")
-            return parsed_response
-            
-        except Exception as e:
-            print(f"❌ [LLM] Error detecting language: {e}")
-            # Return default ITA on error
-            return LanguageDetectionResponse(language="ITA")
     
     def filter_email_body(self, email_body: str, language: str) -> EmailFilterResponse:
         """

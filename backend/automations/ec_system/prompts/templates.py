@@ -1,23 +1,5 @@
 """
-Prompt templates for language detection and email classification.
-"""
-
-LANGUAGE_DETECTION_PROMPT = """
-Sei un esperto linguista che deve identificare la lingua di un testo email.
-
-Analizza il seguente testo e determina se è scritto in italiano (ITA) o inglese (ENG).
-
-TESTO DA ANALIZZARE:
-{email_text}
-
-ISTRUZIONI:
-- Analizza attentamente il testo
-- Se il testo è principalmente in italiano, rispondi con "ITA"
-- Se il testo è principalmente in inglese, rispondi con "ENG"
-- Se non riesci a determinare la lingua o è mista, usa "ITA" come default
-- Ignora eventuali firme automatiche o disclaimer in altre lingue
-
-Fornisci solo il campo language con il valore ITA o ENG.
+Prompt templates for email classification.
 """
 
 
