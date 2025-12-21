@@ -15,7 +15,6 @@ from src.modules.metric.src.routes import router as metric_router
 from src.modules.scraper.src.routes import router as scraper_router
 from src.modules.subscription.src.routes import router as subscription_router
 from src.modules.quiz_session.src.routes import router as quiz_router
-from src.modules.subscription_service.src.routes import router as subscription_service_router
 
 logger = setup_logger()
 app = FastAPI(title="AI Mail Automation API", version="1.0.0")
@@ -35,7 +34,6 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/auth")
 app.include_router(subscription_router, prefix="/subscription")
 app.include_router(subscription_service_router, prefix="/subscriptionServiceRouter")
-app.include_router(subscription_service_router, prefix="/subscriptionService")
 app.include_router(quiz_router, prefix="/quiz")
 app.include_router(metric_router, prefix="/metric")
 app.include_router(jerry_router, prefix="/jerry")
