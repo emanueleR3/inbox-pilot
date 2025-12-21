@@ -219,3 +219,72 @@ class SubscriptionServiceController:
             raise
         except Exception as e:
             raise DatabaseException(operation=f"aggiornamento tone_of_voice: {str(e)}")
+    
+    def static_quiz(self, payload: dict) -> dict:
+        email = payload.get("email")
+        if not email:
+            raise MissingFieldException(fields=["email"])
+        
+        if not isinstance(email, str) or email.strip() == "":
+            raise BadRequestException(detail="email deve essere una stringa non vuota")
+        
+        business_hours = payload.get("business_hours")
+        appointment_duration = payload.get("appointment_duration")
+        email_signature = payload.get("email_signature")
+        tone_of_voice = payload.get("tone_of_voice")
+        phone_numbers = payload.get("phone_numbers")
+        
+        if business_hours is not None:
+            if not isinstance(business_hours, dict):
+                raise BadRequestException(detail="business_hours deve essere un oggetto JSON")
+            
+            for day, hours in business_hours.items():
+                if not isinstance(hours, list):
+                    raise BadRequestException(detail=f"business_hours[{day}] deve essere un array")
+                for hour_range in hours:
+                    if not isinstance(hour_range, str) or "-" not in hour_range:
+                        raise BadRequestException(detail=f"Formato orario non valido: {hour_range}. Usare formato HH:MM-HH:MM")
+        
+        if appointment_duration is not None:
+            if not isinstance(appointment_duration, int) or appointment_duration <= 0:
+                raise BadRequestException(detail="appointment_duration deve essere un numero intero positivo")
+        
+        if email_signature is not None:
+            if not isinstance(email_signature, str):
+                raise BadRequestException(detail="email_signature deve essere una stringa")
+        
+        if tone_of_voice is not None:
+            if not isinstance(tone_of_voice, str):
+                raise BadRequestException(detail="tone_of_voice deve essere una stringa")
+        
+        if phone_numbers is not None:
+            if not isinstance(phone_numbers, (dict, list)):
+                raise BadRequestException(detail="phone_numbers deve essere un oggetto JSON o un array")
+        
+        update_payload = {}
+        if business_hours is not None:
+            update_payload["business_hours"] = business_hours
+        if appointment_duration is not None:
+            update_payload["appointment_duration"] = appointment_duration
+        if email_signature is not None:
+            update_payload["email_signature"] = email_signature
+        if tone_of_voice is not None:
+            update_payload["tone_of_voice"] = tone_of_voice
+        if phone_numbers is not None:
+            update_payload["phone_numbers"] = phone_numbers
+        
+        if not update_payload:
+            raise BadRequestException(detail="Nessun campo da aggiornare fornito")
+        
+        try:
+            updated_service = self.subscription_service_dao.static_quiz(email, update_payload)
+            
+            if not updated_service:
+                raise NotFoundException(detail=f"Servizio con email '{email}' non trovato")
+            
+            return updated_service
+        
+        except APIException:
+            raise
+        except Exception as e:
+            raise DatabaseException(operation=f"aggiornamento dati static quiz: {str(e)}")

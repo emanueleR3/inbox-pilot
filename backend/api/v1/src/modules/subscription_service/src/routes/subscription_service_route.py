@@ -244,6 +244,171 @@ async def start_quiz(
 
 
 @router.post(
+    "/static-quiz",
+    summary="Aggiorna i dati del quiz statico",
+    description="""
+    Aggiorna i dati di configurazione del servizio tramite quiz statico.
+    
+    Questo endpoint permette di aggiornare i seguenti campi per un servizio identificato dall'email:
+    - **business_hours**: Orari di lavoro settimanali in formato JSON (0=Domenica, 1=Lunedì, ..., 6=Sabato)
+    - **appointment_duration**: Durata degli appuntamenti in minuti
+    - **email_signature**: Firma email personalizzata
+    - **tone_of_voice**: Tono di voce da utilizzare nelle comunicazioni
+    - **phone_numbers**: Numeri di telefono di contatto
+    
+    **Formato business_hours:**
+    ```json
+    {
+      "0": ["09:00-17:00"],
+      "1": ["09:00-12:00", "14:00-18:00"],
+      "2": ["09:00-17:00"]
+    }
+    ```
+    
+    **Formato phone_numbers:**
+    ```json
+    {
+      "principale": "+39 123 456 7890",
+      "secondario": "+39 098 765 4321"
+    }
+    ```
+    oppure
+    ```json
+    ["+39 123 456 7890", "+39 098 765 4321"]
+    ```
+    
+    **Parametri:**
+    - `email` (obbligatorio): Email del servizio da aggiornare
+    - Tutti gli altri campi sono opzionali
+    """,
+    responses={
+        200: {
+            "description": "Dati aggiornati con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Dati static quiz aggiornati con successo",
+                        "data": {
+                            "email": "user@example.com",
+                            "business_hours": {
+                                "0": ["09:00-17:00"],
+                                "1": ["09:00-17:00"],
+                                "2": ["09:00-17:00"],
+                                "3": ["09:00-17:00"],
+                                "4": ["09:00-17:00"]
+                            },
+                            "appointment_duration": 30,
+                            "email_signature": "Cordiali saluti,\nIl Team",
+                            "tone_of_voice": "Professionale e cordiale",
+                            "phone_numbers": {
+                                "principale": "+39 123 456 7890"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_email": {
+                            "summary": "Email mancante",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Campi obbligatori mancanti: email"
+                            }
+                        },
+                        "invalid_business_hours": {
+                            "summary": "Formato business_hours non valido",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "business_hours deve essere un oggetto JSON"
+                            }
+                        },
+                        "invalid_duration": {
+                            "summary": "Durata appuntamento non valida",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "appointment_duration deve essere un numero intero positivo"
+                            }
+                        },
+                        "no_updates": {
+                            "summary": "Nessun campo da aggiornare",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Nessun campo da aggiornare fornito"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Servizio non trovato",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 404,
+                        "detail": "Servizio con email 'user@example.com' non trovato"
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 500,
+                        "detail": "Errore database durante: aggiornamento dati static quiz"
+                    }
+                }
+            }
+        }
+    }
+)
+def static_quiz(
+    payload: dict = Body(
+        ...,
+        description="Dati per l'aggiornamento del quiz statico",
+        examples=[{
+            "email": "user@example.com",
+            "business_hours": {
+                "0": ["09:00-17:00"],
+                "1": ["09:00-17:00"],
+                "2": ["09:00-17:00"],
+                "3": ["09:00-17:00"],
+                "4": ["09:00-17:00"]
+            },
+            "appointment_duration": 30,
+            "email_signature": "Cordiali saluti,\nIl Team",
+            "tone_of_voice": "Professionale e cordiale",
+            "phone_numbers": {
+                "principale": "+39 123 456 7890",
+                "secondario": "+39 098 765 4321"
+            }
+        }]
+    )
+) -> dict:
+    static_quiz = controller.static_quiz(payload)
+    
+    return {
+        "success": True,
+        "message": "Dati static quiz aggiornati con successo",
+        "data": static_quiz
+    }
+
+
+@router.post(
     "/quiz/answer",
     summary="Invia una risposta alla domanda corrente",
     description="Registra la risposta fornita e restituisce la prossima domanda, oppure il risultato finale se il quiz è completato.",
