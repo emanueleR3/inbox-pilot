@@ -779,20 +779,6 @@ class SubscriptionServiceDAO:
         except Exception as e:
             print(f"Error getting service by email: {e}")
             return None
-        
-    def setup_calendar_information(self, email: str, business_hours: dict, appointment_duration: int) -> bool:
-        result = (
-            self.supabase
-            .table("subscription_services")
-            .update({
-                "business_hours": business_hours,
-                "appointment_duration": appointment_duration
-            })
-            .eq("email", email)
-            .execute()
-        )
-
-        return bool(result.data)
     
     def get_calendar_information(self, email: str) -> dict | None:
         try:
@@ -899,76 +885,46 @@ class SubscriptionServiceDAO:
             print(f"Errore nell'aggiornamento di information: {e}")
             return None
     
-    def get_email_signature(self, email: str) -> str | None:
+    def get_service_settings(self, email: str) -> dict | None:
         try:
-            resp = (
+            result = (
                 self.supabase
                 .table("subscription_services")
-                .select("email_signature")
+                .select("business_hours, appointment_duration, email_signature, tone_of_voice, phone_numbers")
                 .eq("email", email)
                 .execute()
             )
             
-            if not resp.data:
+            if not result.data:
                 return None
             
-            return resp.data[0].get("email_signature")
+            return result.data[0]
         except Exception as e:
-            print(f"Errore nel recupero di email_signature: {e}")
+            print(f"Errore nel recupero settings servizio: {e}")
             return None
     
-    def update_email_signature(self, email: str, email_signature: str) -> str | None:
+    def update_service_settings(self, email: str, updates: dict) -> dict | None:
         try:
-            resp = (
+            allowed_fields = {"business_hours", "appointment_duration", "email_signature", "tone_of_voice", "phone_numbers"}
+            filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+            
+            if not filtered_updates:
+                raise ValueError("Nessun campo valido da aggiornare")
+            
+            result = (
                 self.supabase
                 .table("subscription_services")
-                .update({"email_signature": email_signature})
+                .update(filtered_updates)
                 .eq("email", email)
                 .execute()
             )
             
-            if not resp.data:
+            if not result.data:
                 return None
             
-            return resp.data[0].get("email_signature")
+            return result.data[0]
         except Exception as e:
-            print(f"Errore nell'aggiornamento di email_signature: {e}")
-            return None
-        
-    def get_tone_of_voice(self, email: str) -> str | None:
-        try:
-            resp = (
-                self.supabase
-                .table("subscription_services")
-                .select("tone_of_voice")
-                .eq("email", email)
-                .execute()
-            )
-            
-            if not resp.data:
-                return None
-            
-            return resp.data[0].get("tone_of_voice")
-        except Exception as e:
-            print(f"Errore nel recupero di tone_of_voice: {e}")
-            return None
-    
-    def update_tone_of_voice(self, email: str, tone_of_voice: str) -> str | None:
-        try:
-            resp = (
-                self.supabase
-                .table("subscription_services")
-                .update({"tone_of_voice": tone_of_voice})
-                .eq("email", email)
-                .execute()
-            )
-            
-            if not resp.data:
-                return None
-            
-            return resp.data[0].get("tone_of_voice")
-        except Exception as e:
-            print(f"Errore nell'aggiornamento di tone_of_voice: {e}")
+            print(f"Errore nell'aggiornamento settings servizio: {e}")
             return None
     
     def static_quiz(self, email: str, payload: dict) -> dict | None:
