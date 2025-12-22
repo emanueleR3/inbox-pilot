@@ -204,7 +204,7 @@ def static_quiz(
             "draft": True
         }]
     )
-) -> bool:
+) -> dict:
     static_quiz = controller.static_quiz(payload)
     
     return {

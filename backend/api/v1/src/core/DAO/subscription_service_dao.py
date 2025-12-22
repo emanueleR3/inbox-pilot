@@ -948,4 +948,4 @@ class SubscriptionServiceDAO:
             return True
         except Exception as e:
             print(f"Errore nell'aggiornamento dei dati static quiz: {e}")
-            return False
+            return None
