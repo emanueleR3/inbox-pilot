@@ -83,20 +83,32 @@ def list_quiz_sessions(limit: int = 50, status: Optional[str] = "in_progress") -
         return []
 
 
-def _get_email_for_service(service_id: str) -> Optional[str]:
+def _normalize_email(email: Optional[str]) -> str:
+    if email is None:
+        return ""
+    return str(email).strip().strip('"').strip("'").lower()
+
+
+def _get_service_id_for_email(email: str) -> Optional[str]:
+    """Fetch subscription_services.service_id for a given email."""
     supabase = get_supabase_client()
-    if not service_id:
+    email = _normalize_email(email)
+    if not email:
         return None
     try:
+        # Use a list query (no .single()) to avoid failures when multiple services exist.
         result = (
             supabase.table("subscription_services")
-            .select("email")
-            .eq("service_id", service_id)
-            .single()
+            .select("service_id")
+            .eq("email", email)
+            .limit(1)
             .execute()
         )
-        email = (result.data or {}).get("email")
-        return email
+        rows = result.data or []
+        if not rows:
+            return None
+        service_id = rows[0].get("service_id")
+        return str(service_id) if service_id else None
     except Exception:
         return None
 
@@ -186,29 +198,27 @@ def _save_quiz_session_state(session_id: str, state: QuizState) -> None:
     supabase.table(_QUIZ_SESSIONS_TABLE).update(_state_to_update_payload(state)).eq("session_id", session_id).execute()
 
 
-def create_session(service_id: str) -> str:
-    """
-    Create a new quiz session for a user (keyed by email).
-    
-    Args:
-        service_id: subscription_services.service_id
-        
+def create_session_for_email(email: str) -> tuple[str, str]:
+    """Create a new quiz session using email as the input.
+
+    Looks up the corresponding subscription_services.service_id.
+
     Returns:
-        The session ID
+        (session_id, service_id)
     """
-    email = _get_email_for_service(service_id)
-    if not email:
-        raise ValueError(f"Unable to find email for service_id: {service_id}")
+    normalized_email = _normalize_email(email)
+    service_id = _get_service_id_for_email(normalized_email)
+    if not service_id:
+        raise ValueError(f"Unable to find service_id for email: {normalized_email}")
 
     session_id = str(uuid.uuid4())
-    # Persist the session immediately (state will be filled on start_quiz)
     try:
-        _upsert_quiz_session(session_id=session_id, service_id=service_id, email=email)
+        _upsert_quiz_session(session_id=session_id, service_id=service_id, email=normalized_email)
     except Exception as e:
         raise ValueError(
             f"Unable to persist quiz session to Supabase. Ensure '{_QUIZ_SESSIONS_TABLE}' table exists. Error: {e}"
         )
-    return session_id
+    return session_id, service_id
 
 
 def get_session(session_id: str) -> Optional[QuizFlow]:

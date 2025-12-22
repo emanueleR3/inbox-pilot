@@ -13,9 +13,12 @@ async def start_quiz(req: dict):
     Checks if the user has a qdrant collection (did scraping).
     If no collection exists, starts with the initial business question.
     If collection exists, TODO: implement RAG-based flow.
+
+    Payload:
+    - email (required)
     """
-    service_id = req.get("service_id")
-    return await controller.start_quiz(service_id)
+    email = req.get("email")
+    return await controller.start_quiz(email=email)
 
 
 @router.post("/answer")
