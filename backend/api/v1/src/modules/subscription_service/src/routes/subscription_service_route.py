@@ -9,186 +9,6 @@ router = APIRouter(
 )
 controller = SubscriptionServiceController()
 
-@router.get(
-    "/get-config/{subscription_id}",
-    summary="Recupera la configurazione di un abbonamento",
-    description="Restituisce i parametri di configurazione associati all'abbonamento specificato.",
-    responses={
-        200: {
-            "description": "Configurazione trovata con successo",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "ok",
-                        "result": {
-                            "confidence_response_threshold": 0.8,
-                            "confidence_review_mail": 0.7,
-                            "priority_threshold": 0.5,
-                            "confidence_classification_threshold": 0.75,
-                            "urgent_meeting_threshold": 0.9,
-                        },
-                    }
-                }
-            },
-        },
-        400: {
-            "description": "Richiesta non valida",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "ID sottoscrizione richiesto"}
-                }
-            }
-        },
-        404: {
-            "description": "Configurazione non trovata",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Configurazione con ID {subscription_id} non trovata"}
-                }
-            }
-        },
-        500: {
-            "description": "Errore interno del server",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Errore durante il recupero della configurazione"}
-                }
-            }
-        }
-    },
-)
-def get_configuration(subscription_id: str):
-    result = controller.get_configuration(subscription_id)
-    fields = [
-        "confidence_response_threshold",
-        "confidence_review_mail",
-        "priority_threshold",
-        "confidence_classification_threshold",
-        "urgent_meeting_threshold",
-    ]
-    if not result:
-        return {"status": "not_found"}
-    filtered = {k: result.get(k) for k in fields}
-    return {"status": "ok", "result": filtered}
-
-@router.patch(
-    "/update-config/{subscription_id}",
-    summary="Aggiorna una configurazione esistente",
-    description="Aggiorna uno o più parametri di configurazione per un abbonamento esistente.",
-    responses={
-        200: {
-            "description": "Configurazione aggiornata con successo",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "ok",
-                        "result": {
-                            "subscription_id": "sub_12345",
-                            "confidence_response_threshold": 0.9,
-                            "priority_threshold": 0.6,
-                        },
-                    }
-                }
-            },
-        },
-        400: {
-            "description": "Richiesta non valida",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "missing_id": {
-                            "value": {"detail": "ID sottoscrizione richiesto"}
-                        },
-                        "missing_updates": {
-                            "value": {"detail": "Nessun aggiornamento fornito"}
-                        },
-                        "invalid_fields": {
-                            "value": {"detail": "Campi non validi per l'aggiornamento"}
-                        },
-                        "invalid_values": {
-                            "value": {"detail": "I valori devono essere numeri tra 0 e 1"}
-                        }
-                    }
-                }
-            }
-        },
-        404: {
-            "description": "Configurazione non trovata",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Configurazione con ID {subscription_id} non trovata"
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "Errore interno del server",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Errore durante l'aggiornamento della configurazione"
-                    }
-                }
-            }
-        },
-        400: {
-            "description": "Richiesta non valida",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "missing_id": {
-                            "value": {"detail": "ID sottoscrizione richiesto"}
-                        },
-                        "missing_updates": {
-                            "value": {"detail": "Nessun aggiornamento fornito"}
-                        },
-                        "invalid_fields": {
-                            "value": {"detail": "Campi non validi per l'aggiornamento"}
-                        },
-                        "invalid_values": {
-                            "value": {"detail": "I valori devono essere numeri tra 0 e 1"}
-                        }
-                    }
-                }
-            }
-        },
-        404: {
-            "description": "Configurazione non trovata",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Configurazione con ID {subscription_id} non trovata"
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "Errore interno del server",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Errore durante l'aggiornamento della configurazione"
-                    }
-                }
-            }
-        },
-    },
-)
-def update_configuration(
-    subscription_id: str,
-    payload: dict = Body(
-        ...,
-        example={
-            "confidence_response_threshold": 0.9,
-            "priority_threshold": 0.6,
-        },
-        description="Parametri da aggiornare nella configurazione dell'abbonamento.",
-    ),
-):
-    updated = controller.update_configuration(subscription_id, payload)
-    return {"status": "ok", "result": updated}
-
 
 @router.post(
     "/quiz/start",
@@ -241,6 +61,171 @@ async def start_quiz(
         ),
     ):
     return await forward_post("/start", req)
+
+
+@router.post(
+    "/static-quiz",
+    summary="Aggiorna i dati del quiz statico",
+    description="""
+    Aggiorna i dati di configurazione del servizio tramite quiz statico.
+    
+    Questo endpoint permette di aggiornare i seguenti campi per un servizio identificato dall'email:
+    - **business_hours**: Orari di lavoro settimanali in formato JSON (0=Domenica, 1=Lunedì, ..., 6=Sabato)
+    - **appointment_duration**: Durata degli appuntamenti in minuti
+    - **email_signature**: Firma email personalizzata
+    - **tone_of_voice**: Tono di voce da utilizzare nelle comunicazioni
+    - **phone_numbers**: Numeri di telefono di contatto
+    
+    **Formato business_hours:**
+    ```json
+    {
+      "0": ["09:00-17:00"],
+      "1": ["09:00-12:00", "14:00-18:00"],
+      "2": ["09:00-17:00"]
+    }
+    ```
+    
+    **Formato phone_numbers:**
+    ```json
+    {
+      "principale": "+39 123 456 7890",
+      "secondario": "+39 098 765 4321"
+    }
+    ```
+    oppure
+    ```json
+    ["+39 123 456 7890", "+39 098 765 4321"]
+    ```
+    
+    **Parametri:**
+    - `email` (obbligatorio): Email del servizio da aggiornare
+    - Tutti gli altri campi sono opzionali
+    """,
+    responses={
+        200: {
+            "description": "Dati aggiornati con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Dati static quiz aggiornati con successo",
+                        "data": {
+                            "email": "user@example.com",
+                            "business_hours": {
+                                "0": ["09:00-17:00"],
+                                "1": ["09:00-17:00"],
+                                "2": ["09:00-17:00"],
+                                "3": ["09:00-17:00"],
+                                "4": ["09:00-17:00"]
+                            },
+                            "appointment_duration": 30,
+                            "email_signature": "Cordiali saluti,\nIl Team",
+                            "tone_of_voice": "Professionale e cordiale",
+                            "phone_numbers": {
+                                "principale": "+39 123 456 7890"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_email": {
+                            "summary": "Email mancante",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Campi obbligatori mancanti: email"
+                            }
+                        },
+                        "invalid_business_hours": {
+                            "summary": "Formato business_hours non valido",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "business_hours deve essere un oggetto JSON"
+                            }
+                        },
+                        "invalid_duration": {
+                            "summary": "Durata appuntamento non valida",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "appointment_duration deve essere un numero intero positivo"
+                            }
+                        },
+                        "no_updates": {
+                            "summary": "Nessun campo da aggiornare",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Nessun campo da aggiornare fornito"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Servizio non trovato",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 404,
+                        "detail": "Servizio con email 'user@example.com' non trovato"
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 500,
+                        "detail": "Errore database durante: aggiornamento dati static quiz"
+                    }
+                }
+            }
+        }
+    }
+)
+def static_quiz(
+    payload: dict = Body(
+        ...,
+        description="Dati per l'aggiornamento del quiz statico",
+        examples=[{
+            "email": "user@example.com",
+            "business_hours": {
+                "0": ["09:00-17:00"],
+                "1": ["09:00-17:00"],
+                "2": ["09:00-17:00"],
+                "3": ["09:00-17:00"],
+                "4": ["09:00-17:00"]
+            },
+            "appointment_duration": 30,
+            "email_signature": "Cordiali saluti,\nIl Team",
+            "tone_of_voice": "Professionale e cordiale",
+            "phone_numbers": {
+                "principale": "+39 123 456 7890",
+                "secondario": "+39 098 765 4321"
+            }
+        }]
+    )
+) -> dict:
+    static_quiz = controller.static_quiz(payload)
+    
+    return {
+        "success": True,
+        "message": "Dati static quiz aggiornati con successo",
+        "data": static_quiz
+    }
 
 
 @router.post(
@@ -774,121 +759,3 @@ def update_information(
 )
 async def get_services_by_subscription(subscription_id: str, email: str):
     return controller.get_services_by_subscription(subscription_id, email)
-
-@router.post(
-    "/setup-calendar-information",
-    summary="Setup informazioni calendario utente",
-    description="""
-    Configura le informazioni del calendario per l'utente autenticato.
-    """,
-    responses={
-        200: {
-            "description": "Informazioni calendario configurate con successo",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Informazioni calendario configurate correttamente",
-                        "result": True
-                    }
-                }
-            }
-        },
-        400: {
-            "description": "Richiesta non valida",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "missing_fields": {
-                            "value": {"detail": "Campi richiesti mancanti o non validi"}
-                        },
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "Errore interno del server",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Errore interno nel servizio di autenticazione"}
-                }
-            }
-        }
-    }
-)
-def setup_calendar_information (
-    payload: dict = Body(
-        ...,
-        example={
-            "email": "user@example.com",
-            "business_hours": {
-                "0": ["09:00-17:00"],
-                "1": ["09:00-17:00"],
-                "2": ["09:00-17:00"],
-                "3": ["09:00-17:00"],
-                "4": ["09:00-17:00"],
-            },
-            "appointment_duration": 30
-        },
-        description="Informazioni del calendario da configurare per l'utente.",
-    ),
-):
-    result = controller.setup_calendar_information(payload)
-    return {"message": "Informazioni calendario configurate correttamente", "result": result}
-
-@router.get(
-    "/get-calendar-information",
-    summary="get informazioni calendario utente",
-    description="""
-    Ottiene le informazioni del calendario per l'utente autenticato.
-    """,
-    responses={
-        200: {
-            "description": "Informazioni calendario configurate con successo",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Informazioni calendario configurate correttamente",
-                        "result": """
-                            "business_hours": {
-                                "0": ["09:00-17:00"],
-                                "1": ["09:00-17:00"],
-                                "2": ["09:00-17:00"],
-                                "3": ["09:00-17:00"],
-                                "4": ["09:00-17:00"],
-                            },
-                            "appointment_duration": 30
-                        """
-                    }
-                }
-            }
-        },
-        400: {
-            "description": "Richiesta non valida",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "missing_fields": {
-                            "value": {"detail": "Campi richiesti mancanti o non validi"}
-                        },
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "Errore interno del server",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Errore interno nel servizio di autenticazione"}
-                }
-            }
-        }
-    }
-)
-def get_calendar_information (
-    payload: dict = Body(
-        ...,
-        description="Ottenere le informazioni del calendario da configurare per l'utente.",
-    ),
-):
-    result = controller.get_calendar_information(payload)
-    return {"message": "Informazioni calendario", "result": result}

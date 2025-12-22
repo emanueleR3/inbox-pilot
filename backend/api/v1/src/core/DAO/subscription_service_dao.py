@@ -779,20 +779,6 @@ class SubscriptionServiceDAO:
         except Exception as e:
             print(f"Error getting service by email: {e}")
             return None
-        
-    def setup_calendar_information(self, email: str, business_hours: dict, appointment_duration: int) -> bool:
-        result = (
-            self.supabase
-            .table("subscription_services")
-            .update({
-                "business_hours": business_hours,
-                "appointment_duration": appointment_duration
-            })
-            .eq("email", email)
-            .execute()
-        )
-
-        return bool(result.data)
     
     def get_calendar_information(self, email: str) -> dict | None:
         try:
@@ -897,4 +883,69 @@ class SubscriptionServiceDAO:
             return resp.data[0].get("information")
         except Exception as e:
             print(f"Errore nell'aggiornamento di information: {e}")
+            return None
+    
+    def get_service_settings(self, email: str) -> dict | None:
+        try:
+            result = (
+                self.supabase
+                .table("subscription_services")
+                .select("business_hours, appointment_duration, email_signature, tone_of_voice, phone_numbers")
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not result.data:
+                return None
+            
+            return result.data[0]
+        except Exception as e:
+            print(f"Errore nel recupero settings servizio: {e}")
+            return None
+    
+    def update_service_settings(self, email: str, updates: dict) -> dict | None:
+        try:
+            allowed_fields = {"business_hours", "appointment_duration", "email_signature", "tone_of_voice", "phone_numbers"}
+            filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+            
+            if not filtered_updates:
+                raise ValueError("Nessun campo valido da aggiornare")
+            
+            result = (
+                self.supabase
+                .table("subscription_services")
+                .update(filtered_updates)
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not result.data:
+                return None
+            
+            return result.data[0]
+        except Exception as e:
+            print(f"Errore nell'aggiornamento settings servizio: {e}")
+            return None
+    
+    def static_quiz(self, email: str, payload: dict) -> dict | None:
+        try:
+            update_data = {k: v for k, v in payload.items() if v is not None}
+            
+            if not update_data:
+                return None
+            
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .update(update_data)
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return None
+            
+            return resp.data[0]
+        except Exception as e:
+            print(f"Errore nell'aggiornamento dei dati static quiz: {e}")
             return None

@@ -56,6 +56,7 @@ def get_user_by_email(email: str):
                                     "current_period_end": "2025-12-31T23:59:59Z",
                                     "plan": "Premium",
                                     "is_configurated": "false", 
+                                    "industry": "Fitness",
                                 }
                             ],
                             "jwt": "jwt_token",
@@ -109,6 +110,7 @@ def create_user_with_sub(
                 "active": True,
                 "current_period_end": "2025-12-31T23:59:59Z",
                 "plan": "premium",
+                "industry": "Tecnologia",
             }
         },
         description="Email e password per la registrazione del nuovo utente.",
@@ -207,6 +209,7 @@ def add_new_user(
                                 "active": True,
                                 "current_period_end": "2025-12-31T23:59:59Z",
                                 "plan": "premium",
+                                "industry": "Tecnologia",
                             }
                         }
                     }
@@ -263,7 +266,8 @@ def create_new_sub(
                 "address": "Corso Francia 100",
                 "active": True,
                 "current_period_end": "2025-12-31T23:59:59Z",
-                "plan": "Premium"
+                "plan": "Premium",
+                "industry": "Fitness"
             }
         },
         description="Email e password per la registrazione del nuovo utente.",
@@ -323,6 +327,7 @@ def get_users_by_subscription(subscription_id: str):
                                     "active": "true",
                                     "current_period_end": "2025-12-20T00:00:00Z",
                                     "plan": "personal",
+                                    "industry": "Tecnologia",
                                     "is_configurated": "true"
                                 }
                             ],

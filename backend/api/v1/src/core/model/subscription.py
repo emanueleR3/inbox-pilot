@@ -13,12 +13,7 @@ class Subscription(BaseModel):
     plan: Optional[str] = None
     website: Optional[str] = None
     industry: Optional[str] = None
-    employee_count: Optional[int] = None
-    products_service: Optional[str] = None
-    tone_of_voice: Optional[str] = None
-    signature: Optional[str] = None
-    phone_number: Optional[str] = None
-
+    
 class SubscriptionRead(BaseModel):
     subscription_id: str
     name: str
@@ -30,11 +25,6 @@ class SubscriptionRead(BaseModel):
     plan: Optional[str] = None
     website: Optional[str] = None
     industry: Optional[str] = None
-    employee_count: Optional[int] = None
-    products_service: Optional[str] = None
-    tone_of_voice: Optional[str] = None
-    signature: Optional[str] = None
-    phone_number: Optional[str] = None
 
 class SubscriptionUpdate(BaseModel):
     name: Optional[str] = None
@@ -46,11 +36,6 @@ class SubscriptionUpdate(BaseModel):
     plan: Optional[str] = None
     website: Optional[str] = None
     industry: Optional[str] = None
-    employee_count: Optional[int] = None
-    products_service: Optional[str] = None
-    tone_of_voice: Optional[str] = None
-    signature: Optional[str] = None
-    phone_number: Optional[str] = None
 
 class SubscriptionReadWithConfig(BaseModel):
     subscription_id: str
@@ -63,8 +48,3 @@ class SubscriptionReadWithConfig(BaseModel):
     plan: Optional[str] = None
     website: Optional[str] = None
     industry: Optional[str] = None
-    employee_count: Optional[int] = None
-    products_service: Optional[str] = None
-    tone_of_voice: Optional[str] = None
-    signature: Optional[str] = None
-    phone_number: Optional[str] = None
