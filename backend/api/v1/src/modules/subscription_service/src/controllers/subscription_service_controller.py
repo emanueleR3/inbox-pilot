@@ -164,7 +164,7 @@ class SubscriptionServiceController:
         except Exception as e:
             raise DatabaseException(operation=f"aggiornamento service settings: {str(e)}")
     
-    def static_quiz(self, payload: dict) -> dict:
+    def static_quiz(self, payload: dict) -> bool:
         email = payload.get("email")
         if not email:
             raise MissingFieldException(fields=["email"])
@@ -177,6 +177,7 @@ class SubscriptionServiceController:
         email_signature = payload.get("email_signature")
         tone_of_voice = payload.get("tone_of_voice")
         phone_numbers = payload.get("phone_numbers")
+        draft = payload.get("draft")
         
         if business_hours is not None:
             if not isinstance(business_hours, dict):
@@ -205,6 +206,10 @@ class SubscriptionServiceController:
             if not isinstance(phone_numbers, (dict, list)):
                 raise BadRequestException(detail="phone_numbers deve essere un oggetto JSON o un array")
         
+        if draft is not None:
+            if not isinstance(draft, bool):
+                raise BadRequestException(detail="draft deve essere un valore booleano")
+        
         update_payload = {}
         if business_hours is not None:
             update_payload["business_hours"] = business_hours
@@ -216,6 +221,8 @@ class SubscriptionServiceController:
             update_payload["tone_of_voice"] = tone_of_voice
         if phone_numbers is not None:
             update_payload["phone_numbers"] = phone_numbers
+        if draft is not None:
+            update_payload["draft"] = draft
         
         if not update_payload:
             raise BadRequestException(detail="Nessun campo da aggiornare fornito")

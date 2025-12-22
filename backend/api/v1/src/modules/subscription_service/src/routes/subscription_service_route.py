@@ -75,6 +75,7 @@ async def start_quiz(
     - **email_signature**: Firma email personalizzata
     - **tone_of_voice**: Tono di voce da utilizzare nelle comunicazioni
     - **phone_numbers**: Numeri di telefono di contatto
+    - **draft**: Indica se il profilo è in bozza (true) o definitivo (false)
     
     **Formato business_hours:**
     ```json
@@ -108,23 +109,7 @@ async def start_quiz(
                 "application/json": {
                     "example": {
                         "success": True,
-                        "message": "Dati static quiz aggiornati con successo",
-                        "data": {
-                            "email": "user@example.com",
-                            "business_hours": {
-                                "0": ["09:00-17:00"],
-                                "1": ["09:00-17:00"],
-                                "2": ["09:00-17:00"],
-                                "3": ["09:00-17:00"],
-                                "4": ["09:00-17:00"]
-                            },
-                            "appointment_duration": 30,
-                            "email_signature": "Cordiali saluti,\nIl Team",
-                            "tone_of_voice": "Professionale e cordiale",
-                            "phone_numbers": {
-                                "principale": "+39 123 456 7890"
-                            }
-                        }
+                        "message": "Dati static quiz inseriti con successo",
                     }
                 }
             }
@@ -215,16 +200,16 @@ def static_quiz(
             "phone_numbers": {
                 "principale": "+39 123 456 7890",
                 "secondario": "+39 098 765 4321"
-            }
+            },
+            "draft": True
         }]
     )
-) -> dict:
+) -> bool:
     static_quiz = controller.static_quiz(payload)
     
     return {
-        "success": True,
-        "message": "Dati static quiz aggiornati con successo",
-        "data": static_quiz
+        "success": static_quiz,
+        "message": "Dati static quiz inseriti con successo",
     }
 
 

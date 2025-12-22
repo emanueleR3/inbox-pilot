@@ -927,7 +927,7 @@ class SubscriptionServiceDAO:
             print(f"Errore nell'aggiornamento settings servizio: {e}")
             return None
     
-    def static_quiz(self, email: str, payload: dict) -> dict | None:
+    def static_quiz(self, email: str, payload: dict) -> bool:
         try:
             update_data = {k: v for k, v in payload.items() if v is not None}
             
@@ -943,9 +943,9 @@ class SubscriptionServiceDAO:
             )
             
             if not resp.data:
-                return None
+                return False
             
-            return resp.data[0]
+            return True
         except Exception as e:
             print(f"Errore nell'aggiornamento dei dati static quiz: {e}")
-            return None
+            return False
