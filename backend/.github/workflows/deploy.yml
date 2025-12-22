@@ -2,7 +2,7 @@ name: CI/CD Deploy to k3s
 
 on:
   push:
-    branches: [ main, backend, agentic-architecture ]
+    branches: [ main, backend ]
 
 permissions:
   contents: read

@@ -25,3 +25,18 @@ async def send_microsoft_email(req: dict):
 async def send_smtp_email(req: dict):
     print("[DEBUG-SENDER] send_smtp_email")
     return controller.send_email_smtp(req)
+
+@router.post("/draft-gmail")
+async def create_gmail_draft(req: dict):
+    """Create a draft in Gmail instead of sending."""
+    return controller.create_draft_gmail(req)
+
+@router.post("/draft-microsoft")
+async def create_microsoft_draft(req: dict):
+    """Create a draft in Microsoft Outlook instead of sending."""
+    return controller.create_draft_microsoft(req)
+
+@router.post("/draft-imap")
+async def create_imap_draft(req: dict):
+    """Create a draft in IMAP Drafts folder instead of sending."""
+    return controller.create_draft_imap(req)

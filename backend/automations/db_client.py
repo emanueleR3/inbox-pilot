@@ -50,6 +50,7 @@ class UserConfiguration:
         self.activated = data.get("activated", False)
         self.config_completed = data.get("config_completed", False)
         self.calendar_provider = data.get("calendar_provider")  # None if no calendar connected
+        self.draft = data.get("draft", False)  # If True, create drafts instead of sending emails
     
     def to_dict(self) -> Dict:
         """Convert configuration to dictionary for workflow state."""
@@ -63,7 +64,8 @@ class UserConfiguration:
             "urgent_meeting_threshold": self.urgent_meeting_threshold,
             "activated": self.activated,
             "config_completed": self.config_completed,
-            "calendar_provider": self.calendar_provider
+            "calendar_provider": self.calendar_provider,
+            "draft": self.draft
         }
     
     def __repr__(self) -> str:
@@ -160,7 +162,8 @@ def get_user_configuration_sync(box_email: str) -> Optional[UserConfiguration]:
             "urgent_meeting_threshold, "
             "activated, "
             "config_completed, "
-            "calendar_provider"
+            "calendar_provider, "
+            "draft"
         ).eq("email", box_email).execute()
         
         if not response.data:
@@ -793,7 +796,7 @@ def get_email_service_data(email: str) -> Optional[Dict]:
         supabase = get_supabase_client()
         
         response = supabase.table("subscription_services").select(
-            "email_provider, hashed_access_token, smtp_server, smtp_port, hashed_password"
+            "email_provider, hashed_access_token, smtp_server, smtp_port, imap_server, imap_port, hashed_password"
         ).eq("email", email).execute()
         
         if response.data:

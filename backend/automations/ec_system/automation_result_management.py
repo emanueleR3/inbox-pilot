@@ -1055,8 +1055,16 @@ def process_automation_result(workflow_result: dict):
                     return
                 # ----------------------------------------
 
-                try:
+                # Check if draft mode is enabled
+                user_config = workflow_result.get("user_config", {})
+                draft_mode = user_config.get("draft", False)
+                
+                if draft_mode:
+                    print(f"📝 [WORKFLOW] Draft mode enabled - Creating draft instead of sending...")
+                else:
                     print(f"📧 [WORKFLOW] Sending email...")
+
+                try:
 
                     # Get email service data
                     email_service_data = get_email_service_data(box_email)
@@ -1070,7 +1078,7 @@ def process_automation_result(workflow_result: dict):
                     # Add AI disclaimer to the response body
                     response_body_with_disclaimer = _wrap_body_with_disclaimer(response_body)
 
-                    # Prepare payload TODO voglio rispondere all'email e non creare un nuovo thread
+                    # Prepare payload
                     payload = {
                         "email": sender_email,
                         "subject": subject,
@@ -1088,25 +1096,47 @@ def process_automation_result(workflow_result: dict):
                     endpoint = ""
 
                     if provider == "google":
-                        endpoint = f"{senders_url}/send-email/send-gmail"
+                        if draft_mode:
+                            endpoint = f"{senders_url}/send-email/draft-gmail"
+                        else:
+                            endpoint = f"{senders_url}/send-email/send-gmail"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
                         payload["original_thread_id"] = original_thread_id
                         payload["message_id"] = message_id
                     elif provider == "microsoft":
-                        endpoint = f"{senders_url}/send-email/send-microsoft"
+                        if draft_mode:
+                            endpoint = f"{senders_url}/send-email/draft-microsoft"
+                        else:
+                            endpoint = f"{senders_url}/send-email/send-microsoft"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
                         # Use microsoft_message_id (internal Graph ID) for replies, not the RFC message_id
                         payload["message_id"] = microsoft_message_id
                     elif provider == "imap":
                         print("[DEBUG-AUTOMATION] imap")
                         print("[DEBUG-AUTOMATION] email_service_data: ", email_service_data)
-                        endpoint = f"{senders_url}/send-email/send-smtp"
-                        payload["smtp_server"] = email_service_data.get("smtp_server")
-                        payload["smtp_port"] = email_service_data.get("smtp_port")
-                        payload["smtp_email"] = box_email
-                        payload["password"] = email_service_data.get("hashed_password")
-                        payload["reply_to_id"] = reply_to_id
-                        payload["message_id"] = message_id
+                        if draft_mode:
+                            endpoint = f"{senders_url}/send-email/draft-imap"
+                            # Get IMAP config from database, fallback to SMTP server conversion if not configured
+                            imap_server = email_service_data.get("imap_server")
+                            if not imap_server:
+                                # Fallback: convert SMTP server to IMAP server
+                                smtp_server = email_service_data.get("smtp_server", "")
+                                imap_server = smtp_server.replace("smtp.", "imap.") if smtp_server.startswith("smtp.") else smtp_server
+                            imap_port = email_service_data.get("imap_port") or 993
+                            payload["imap_server"] = imap_server
+                            payload["imap_port"] = imap_port
+                            payload["imap_email"] = box_email
+                            payload["password"] = email_service_data.get("hashed_password")
+                            payload["reply_to_id"] = reply_to_id
+                            payload["message_id"] = message_id
+                        else:
+                            endpoint = f"{senders_url}/send-email/send-smtp"
+                            payload["smtp_server"] = email_service_data.get("smtp_server")
+                            payload["smtp_port"] = email_service_data.get("smtp_port")
+                            payload["smtp_email"] = box_email
+                            payload["password"] = email_service_data.get("hashed_password")
+                            payload["reply_to_id"] = reply_to_id
+                            payload["message_id"] = message_id
                     else:
                         raise Exception(f"Unknown email provider: {provider}")
 
@@ -1115,12 +1145,15 @@ def process_automation_result(workflow_result: dict):
                     response.raise_for_status()
                     
                     result = response.json()
-                    new_message_id = result.get("message_id") # TODO da inserire
+                    new_message_id = result.get("message_id") or result.get("draft_id")
                     
                     if not result.get("success"):
-                        raise Exception(f"Email sending failed: {result.get('message')}")
+                        raise Exception(f"Email {'draft creation' if draft_mode else 'sending'} failed: {result.get('message')}")
 
-                    print(f"✅ [WORKFLOW] Email sent successfully via {provider}")
+                    if draft_mode:
+                        print(f"✅ [WORKFLOW] Draft created successfully via {provider}")
+                    else:
+                        print(f"✅ [WORKFLOW] Email sent successfully via {provider}")
                     
                     """
                     # Update ai_generated_email outcome to SENT
@@ -1200,7 +1233,7 @@ def process_automation_result(workflow_result: dict):
                     "priority_score": priority_score,
                     "body": response_body,
                     "service_id": service_id,
-                    "outcome": EmailOutcome.SENT.value
+                    "outcome": EmailOutcome.DRAFT.value if draft_mode else EmailOutcome.SENT.value
                 }
 
                 thread_data = {
@@ -1208,14 +1241,15 @@ def process_automation_result(workflow_result: dict):
                     "subcategory": subcategory,
                     "summary": summary,
                     "extended_summary": extended_summary,
-                    "status": ThreadStatus.PROCESSED.value,
-                    "last_message_id": new_message_id,
-                    "last_message_at": now_tz,
-                    "last_sender_email": box_email
+                    "status": ThreadStatus.HUMAN_REVIEW.value if draft_mode else ThreadStatus.PROCESSED.value,
+                    "last_message_id": new_message_id if not draft_mode else None,
+                    "last_message_at": now_tz if not draft_mode else None,
+                    "last_sender_email": box_email if not draft_mode else None
                 }
 
                 try:
-                    insert_new_mail_in_history_thread(thread_id, new_message_id)
+                    if not draft_mode:
+                        insert_new_mail_in_history_thread(thread_id, new_message_id)
                     save_ai_generated_email(ai_email_data)
                     update_thread(thread_id, thread_data)
                 except Exception as e:
