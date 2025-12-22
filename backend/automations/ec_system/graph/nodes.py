@@ -180,7 +180,6 @@ def language_detector_node(state):
         
         # Update state
         state["language"] = detected_language
-        print(f"📝 [LANGUAGE_DETECTOR] Text analyzed: '{email_body[:100]}...'")
         
         return state
         

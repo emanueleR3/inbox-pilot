@@ -566,3 +566,380 @@ class SendEmailService:
                 "notification_id": None
             }
 
+    def create_draft_gmail(
+        self, 
+        email: str, 
+        subject: str, 
+        body: str, 
+        hashed_access_token: str,
+        thread_id: Optional[str] = None,
+        message_id: Optional[str] = None,
+        attachments: Optional[List[Dict]] = None
+    ) -> dict:
+        """
+        Create a draft in Gmail instead of sending.
+        
+        Args:
+            email: Recipient email
+            subject: Email subject
+            body: Email body (HTML or plain text)
+            hashed_access_token: Encrypted access token
+            thread_id: Optional Gmail thread ID for replies
+            message_id: Optional RFC message ID for In-Reply-To header
+            attachments: Optional list of attachments
+        """
+        try:
+            logger.info(f"📝 Creating Gmail draft for {email}")
+            
+            # Decrypt the access token
+            access_token = decrypt(hashed_access_token, "token")
+            if not access_token:
+                raise ValueError("Failed to decrypt access token")
+
+            scopes_env = os.getenv("GOOGLE_SCOPES", "")
+            if scopes_env:
+                scopes = [scope.strip() for scope in scopes_env.split() if scope.strip()]
+            else:
+                scopes = [
+                    "https://www.googleapis.com/auth/gmail.send",
+                    "https://www.googleapis.com/auth/gmail.modify",
+                ]
+
+            creds = Credentials(
+                token=access_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=os.getenv("GOOGLE_CLIENT_ID"),
+                client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+                scopes=scopes
+            )
+
+            service = build('gmail', 'v1', credentials=creds)
+
+            # Create email message
+            if attachments:
+                message = MIMEMultipart('mixed')
+            else:
+                message = MIMEMultipart('alternative')
+                
+            message['To'] = email
+            message['Subject'] = subject
+
+            if message_id:
+                rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
+                message['In-Reply-To'] = rfc_message_id
+                message['References'] = rfc_message_id
+
+            # Body
+            if body.strip().startswith("<") and body.strip().endswith(">"):
+                body_part = MIMEText(body, 'html', 'utf-8')
+            else:
+                body_part = MIMEText(body, 'plain', 'utf-8')
+
+            if attachments:
+                body_container = MIMEMultipart('alternative')
+                body_container.attach(body_part)
+                message.attach(body_container)
+            else:
+                message.attach(body_part)
+
+            # Handle attachments
+            if attachments:
+                for attachment in attachments:
+                    filename = attachment.get('filename', 'attachment')
+                    content_b64 = attachment.get('content', '')
+                    content_type = attachment.get('content_type', 'application/octet-stream')
+                    
+                    try:
+                        content_bytes = base64.b64decode(content_b64)
+                        maintype, subtype = content_type.split('/', 1) if '/' in content_type else ('application', 'octet-stream')
+                        att_part = MIMEBase(maintype, subtype)
+                        att_part.set_payload(content_bytes)
+                        encoders.encode_base64(att_part)
+                        att_part.add_header('Content-Disposition', 'attachment', filename=filename)
+                        message.attach(att_part)
+                    except Exception as att_err:
+                        logger.warning(f"Failed to attach {filename}: {att_err}")
+
+            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+
+            draft_body = {"message": {"raw": raw_message}}
+            if thread_id:
+                draft_body["message"]["threadId"] = thread_id
+
+            # Create draft instead of sending
+            draft_result = service.users().drafts().create(
+                userId='me',
+                body=draft_body
+            ).execute()
+
+            draft_id = draft_result.get("id")
+            logger.info(f"✅ Gmail draft created successfully. Draft ID: {draft_id}")
+
+            return {
+                "success": True,
+                "message": f"Draft created for {email}",
+                "draft_id": draft_id,
+                "notification_id": draft_id
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Failed to create Gmail draft: {str(e)}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"Failed to create draft: {str(e)}",
+                "draft_id": None,
+                "notification_id": None
+            }
+
+    def create_draft_microsoft(
+        self, 
+        email: str, 
+        subject: str, 
+        body: str, 
+        hashed_access_token: str,
+        message_id: Optional[str] = None,
+        attachments: Optional[List[Dict]] = None
+    ) -> dict:
+        """
+        Create a draft in Microsoft Outlook instead of sending.
+        Uses Graph API to create message without sending.
+        
+        Args:
+            email: Recipient email
+            subject: Email subject
+            body: Email body (HTML or plain text)
+            hashed_access_token: Encrypted access token
+            message_id: Optional message ID for reply
+            attachments: Optional list of attachments
+        """
+        try:
+            logger.info(f"📝 Creating Microsoft draft for {email}")
+        
+            access_token = decrypt(hashed_access_token, "token")
+            if not access_token:
+                raise ValueError("Failed to decrypt access token")
+        
+            content_type = "HTML" if body.strip().startswith('<') and body.strip().endswith('>') else "Text"
+        
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            }
+        
+            # Create draft message
+            if message_id:
+                # Reply case: use createReply but don't send
+                create_url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/createReply"
+                reply_payload = {"comment": body}
+                create_resp = requests.post(create_url, json=reply_payload, headers=headers)
+            else:
+                # New email case
+                create_url = "https://graph.microsoft.com/v1.0/me/messages"
+                email_message = {
+                    "subject": subject,
+                    "body": {
+                        "contentType": content_type,
+                        "content": body
+                    },
+                    "toRecipients": [
+                        {"emailAddress": {"address": email}}
+                    ],
+                }
+                create_resp = requests.post(create_url, json=email_message, headers=headers)
+
+            if create_resp.status_code not in (200, 201):
+                error_msg = f"Microsoft Graph create draft error: {create_resp.status_code} - {create_resp.text}"
+                logger.error(f"❌ {error_msg}")
+                return {
+                    "success": False,
+                    "message": error_msg,
+                    "draft_id": None,
+                    "notification_id": None
+                }
+        
+            created_msg = create_resp.json()
+            msg_id = created_msg.get("id")
+            logger.info(f"📝 Microsoft draft created. ID: {msg_id}")
+        
+            # Add attachments if any
+            if attachments and msg_id:
+                for attachment in attachments:
+                    try:
+                        filename = attachment.get('filename', 'attachment')
+                        content_b64 = attachment.get('content', '')
+                        content_type = attachment.get('content_type', 'application/octet-stream')
+                        
+                        attach_url = f"https://graph.microsoft.com/v1.0/me/messages/{msg_id}/attachments"
+                        attach_payload = {
+                            "@odata.type": "#microsoft.graph.fileAttachment",
+                            "name": filename,
+                            "contentType": content_type,
+                            "contentBytes": content_b64
+                        }
+                        attach_resp = requests.post(attach_url, json=attach_payload, headers=headers)
+                        
+                        if attach_resp.status_code in (200, 201):
+                            logger.info(f"📎 Attached: {filename}")
+                        else:
+                            logger.warning(f"⚠️ Failed to attach {filename}: {attach_resp.status_code}")
+                    except Exception as att_err:
+                        logger.warning(f"⚠️ Error attaching {filename}: {att_err}")
+        
+            # DO NOT SEND - leave as draft
+            logger.info(f"✅ Microsoft draft created successfully (not sent)")
+
+            return {
+                "success": True,
+                "message": f"Draft created for {email}",
+                "draft_id": msg_id,
+                "notification_id": msg_id
+            }
+        
+        except Exception as e:
+            logger.error(f"❌ Failed to create Microsoft draft: {str(e)}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"Failed to create draft: {str(e)}",
+                "draft_id": None,
+                "notification_id": None
+            }
+
+    def create_draft_imap(
+        self,
+        email: str,
+        subject: str,
+        body: str,
+        imap_server: str,
+        imap_port: int,
+        imap_email: str,
+        password: str,
+        reply_to_id: Optional[str] = None,
+        message_id: Optional[str] = None,
+        attachments: Optional[List[Dict]] = None
+    ) -> dict:
+        """
+        Create a draft in IMAP Drafts folder.
+        
+        Args:
+            email: Recipient email
+            subject: Email subject
+            body: Email body (HTML or plain text)
+            imap_server: IMAP server hostname
+            imap_port: IMAP port (993 for SSL, 143 for STARTTLS)
+            imap_email: User email for login
+            password: IMAP password
+            reply_to_id: Optional message ID for In-Reply-To header
+            message_id: Optional message ID for References header
+            attachments: Optional list of attachments
+        """
+        try:
+            import imaplib
+            from email.utils import formatdate
+            
+            logger.info(f"📝 Creating IMAP draft for {email}")
+
+            # Create message
+            message = MIMEMultipart("alternative")
+            message["From"] = imap_email
+            message["To"] = email
+            message["Subject"] = subject
+            message["Date"] = formatdate(localtime=True)
+
+            # Generate Message-ID
+            msg_id = make_msgid()
+            message["Message-ID"] = msg_id
+
+            # Reply headers
+            if reply_to_id:
+                rfc_reply_to_id = reply_to_id if reply_to_id.startswith('<') else f"<{reply_to_id}>"
+                message["In-Reply-To"] = rfc_reply_to_id
+
+            if message_id:
+                rfc_message_id = message_id if message_id.startswith('<') else f"<{message_id}>"
+                message["References"] = rfc_message_id
+
+            # Body
+            if body.strip().startswith("<"):
+                message.attach(MIMEText(body, "html", "utf-8"))
+            else:
+                message.attach(MIMEText(body, "plain", "utf-8"))
+
+            # Attachments
+            if attachments:
+                for attachment in attachments:
+                    filename = attachment.get('filename', 'attachment')
+                    content_b64 = attachment.get('content', '')
+                    content_type = attachment.get('content_type', 'application/octet-stream')
+                    
+                    try:
+                        content_bytes = base64.b64decode(content_b64)
+                        maintype, subtype = content_type.split('/', 1) if '/' in content_type else ('application', 'octet-stream')
+                        att_part = MIMEBase(maintype, subtype)
+                        att_part.set_payload(content_bytes)
+                        encoders.encode_base64(att_part)
+                        att_part.add_header('Content-Disposition', 'attachment', filename=filename)
+                        message.attach(att_part)
+                    except Exception as att_err:
+                        logger.warning(f"Failed to attach {filename}: {att_err}")
+
+            # Connect to IMAP and append to Drafts
+            if imap_port == 993:
+                imap = imaplib.IMAP4_SSL(imap_server, imap_port)
+            else:
+                imap = imaplib.IMAP4(imap_server, imap_port)
+                imap.starttls()
+
+            imap.login(imap_email, password)
+
+            # Try common draft folder names
+            draft_folders = ["Drafts", "INBOX.Drafts", "Draft", "[Gmail]/Drafts", "Bozze"]
+            draft_folder = None
+            
+            for folder in draft_folders:
+                status, _ = imap.select(folder)
+                if status == 'OK':
+                    draft_folder = folder
+                    break
+            
+            if not draft_folder:
+                # Fallback: try to find drafts folder
+                status, folders = imap.list()
+                if status == 'OK':
+                    for folder_data in folders:
+                        if b'Draft' in folder_data or b'Bozze' in folder_data:
+                            # Extract folder name
+                            parts = folder_data.decode().split('"')
+                            if len(parts) >= 2:
+                                draft_folder = parts[-2]
+                                break
+            
+            if not draft_folder:
+                draft_folder = "Drafts"  # Default fallback
+
+            # Append message to drafts folder
+            import time
+            import imaplib
+            
+            message_bytes = message.as_bytes()
+            imap.append(draft_folder, '\\Draft', imaplib.Time2Internaldate(time.time()), message_bytes)
+
+            imap.logout()
+
+            cleaned_msg_id = _clean_message_id(msg_id)
+            logger.info(f"✅ IMAP draft created successfully in {draft_folder}")
+
+            return {
+                "success": True,
+                "message": f"Draft created in {draft_folder}",
+                "draft_id": cleaned_msg_id,
+                "notification_id": cleaned_msg_id
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Failed to create IMAP draft: {str(e)}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"Failed to create draft: {str(e)}",
+                "draft_id": None,
+                "notification_id": None
+            }
