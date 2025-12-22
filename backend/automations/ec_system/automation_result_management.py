@@ -1242,10 +1242,13 @@ def process_automation_result(workflow_result: dict):
                     "summary": summary,
                     "extended_summary": extended_summary,
                     "status": ThreadStatus.HUMAN_REVIEW.value if draft_mode else ThreadStatus.PROCESSED.value,
-                    "last_message_id": new_message_id if not draft_mode else None,
-                    "last_message_at": now_tz if not draft_mode else None,
-                    "last_sender_email": box_email if not draft_mode else None
                 }
+                
+                # Only add these fields when actually sending (not draft mode)
+                if not draft_mode:
+                    thread_data["last_message_id"] = new_message_id
+                    thread_data["last_message_at"] = now_tz
+                    thread_data["last_sender_email"] = box_email
 
                 try:
                     if not draft_mode:
