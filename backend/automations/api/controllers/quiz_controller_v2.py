@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from typing import Dict, Any
 
 from api.services.quiz_service_v2 import (
-    create_session,
+    create_session_for_email,
     get_session,
     delete_session,
     fetch_quiz_session_row,
@@ -23,30 +23,28 @@ from api.services.quiz_service_v2 import (
 class QuizControllerV2:
     """Controller for the simplified quiz system."""
     
-    async def start_quiz(self, service_id: str) -> Dict[str, Any]:
+    async def start_quiz(self, email: str) -> Dict[str, Any]:
         """
         Start a new quiz session.
         
         Args:
-            service_id: subscription_services.service_id
+            email: subscription_services.email
             
         Returns:
             Dictionary with session info and initial question
         """
-        if not service_id:
+        if not email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="service_id è richiesto"
+                detail="email è richiesto"
             )
         
         try:
-            #TODO Check if service exists
-
             # Create session
-            session_id = create_session(service_id)
+            session_id, resolved_service_id = create_session_for_email(email)
             
             # Start the quiz flow
-            result = await start_quiz(service_id, session_id)
+            result = await start_quiz(resolved_service_id, session_id)
             
             return {
                 "session_id": result["session_id"],
