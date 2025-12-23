@@ -90,7 +90,10 @@ class UserDAO:
                 active=sub["active"],
                 current_period_end=sub["current_period_end"],
                 plan=sub.get("plan"),
-                is_configurated=config_map.get(sub["subscription_id"], False),
+                website=sub.get("website"),
+                industry=sub.get("industry"),
+                is_configurated=config_map.get(sub["subscription_id"]),
+
             )
             for sub in subs_response.data
         ]
