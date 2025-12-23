@@ -13,6 +13,7 @@ from api.services.quiz_service_v2 import (
     get_session,
     delete_session,
     fetch_quiz_session_row,
+    fetch_latest_quiz_session_row_for_email,
     list_quiz_sessions,
     start_quiz,
     submit_answer,
@@ -111,28 +112,35 @@ class QuizControllerV2:
                 detail=f"Errore durante l'invio della risposta: {str(e)}"
             )
     
-    async def get_state(self, session_id: str) -> Dict[str, Any]:
+    async def get_state(self, email: str) -> Dict[str, Any]:
         """
         Get the current state of a quiz session.
         
         Args:
-            session_id: The session ID
+            email: subscription_services.email
             
         Returns:
             Dictionary with current session state
         """
-        if not session_id:
+        if not email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Session ID è richiesto"
+                detail="email è richiesto"
             )
         
         try:
-            row = fetch_quiz_session_row(session_id)
+            row = fetch_latest_quiz_session_row_for_email(email=email, status="in_progress")
             if not row:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Sessione non trovata"
+                    detail="Quiz non ancora configurato per questa email"
+                )
+
+            session_id = str(row.get("session_id") or "").strip()
+            if not session_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Quiz non ancora configurato per questa email"
                 )
 
             flow = get_session(session_id)

@@ -141,7 +141,7 @@ curl -X POST http://localhost:8010/internal-quiz/answer \
 
 ---
 
-### GET /internal-quiz/{session_id}/state
+### GET /internal-quiz/{email}/state
 
 Returns the full state of the current quiz session.
 
@@ -170,13 +170,13 @@ Returns the full state of the current quiz session.
 
 **Errors**
 
-- `400` if `session_id` is missing or the quiz is not started yet
-- `404` if `session_id` does not exist
+- `400` if `email` is missing or the quiz is not started yet
+- `404` if no quiz session exists for that `email`
 
 **Example**
 
 ```bash
-curl http://localhost:8010/internal-quiz/<uuid>/state
+curl http://localhost:8010/internal-quiz/<email>/state
 ```
 
 ---

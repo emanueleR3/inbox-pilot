@@ -36,14 +36,14 @@ async def submit_answer(req: dict):
     return await controller.submit_answer(session_id, answer)
 
 
-@router.get("/{session_id}/state")
-async def get_state(session_id: str):
+@router.get("/{email}/state")
+async def get_state(email: str):
     """
     Get the current state of a quiz session.
     
     Returns the full state including messages history and bullet list.
     """
-    return await controller.get_state(session_id)
+    return await controller.get_state(email)
 
 
 @router.post("/finish")
@@ -57,11 +57,11 @@ async def finish_quiz(req: dict):
     return await controller.finish_quiz(session_id)
 
 
-@router.get("/sessions")
-async def list_sessions():
-    """
-    List all active quiz sessions.
-    """
+# @router.get("/sessions")
+# async def list_sessions():
+    # """
+    # List all active quiz sessions.
+    # """
     return controller.list_sessions()
 
 

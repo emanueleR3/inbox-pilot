@@ -89,6 +89,44 @@ def _normalize_email(email: Optional[str]) -> str:
     return str(email).strip().strip('"').strip("'").lower()
 
 
+def fetch_latest_quiz_session_row_for_email(
+    email: str,
+    status: Optional[str] = "in_progress",
+) -> Optional[dict[str, Any]]:
+    """Fetch the latest quiz session row for an email.
+
+    This is used to resolve the active session_id starting from the user email.
+
+    Args:
+        email: User email.
+        status: If provided, filters by quiz_sessions.status (default: in_progress).
+
+    Returns:
+        The latest matching quiz_sessions row, or None if not found.
+    """
+    supabase = get_supabase_client()
+    normalized_email = _normalize_email(email)
+    if not normalized_email:
+        return None
+
+    try:
+        query = (
+            supabase.table(_QUIZ_SESSIONS_TABLE)
+            .select(_QUIZ_SESSION_COLUMNS)
+            .eq("email", normalized_email)
+        )
+        if status:
+            query = query.eq("status", status)
+
+        result = query.order("updated_at", desc=True).limit(1).execute()
+        rows = result.data or []
+        if not rows:
+            return None
+        return rows[0]
+    except Exception:
+        return None
+
+
 def _get_service_id_for_email(email: str) -> Optional[str]:
     """Fetch subscription_services.service_id for a given email."""
     supabase = get_supabase_client()
