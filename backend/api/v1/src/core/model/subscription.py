@@ -48,3 +48,4 @@ class SubscriptionReadWithConfig(BaseModel):
     plan: Optional[str] = None
     website: Optional[str] = None
     industry: Optional[str] = None
+    is_configurated: bool
