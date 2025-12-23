@@ -1,9 +1,8 @@
-from pydantic import BaseModel
+import json
+from pydantic import BaseModel, field_validator
 from google.oauth2.credentials import Credentials
 from datetime import datetime
-from typing import Optional, List, Dict
-
-from typing import Optional, List, Dict
+from typing import Any, Optional, List, Dict
 
 class SubscriptionServiceCrate(BaseModel):
     subscription_id: str
@@ -32,6 +31,38 @@ class SubscriptionServiceCrate(BaseModel):
     microsoft_expiration_datetime_outbound: datetime | None
     oauth_user_id: str | None
 
+    @field_validator("information", mode="before")
+    @classmethod
+    def _coerce_information(cls, value: Any):
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            cleaned = value.strip().translate({
+                ord("\u200b"): None,  # zero-width space
+                ord("\u200c"): None,
+                ord("\u200d"): None,
+                ord("\u2060"): None,  # word joiner
+                ord("\ufeff"): None,  # BOM
+            })
+
+            try:
+                parsed = json.loads(cleaned)
+                if isinstance(parsed, dict):
+                    return parsed
+                return {"value": parsed}
+            except Exception:
+                pass
+
+            if cleaned.lower().startswith("markdown"):
+                content = cleaned[len("markdown"):].lstrip("\n\r ")
+                return {"format": "markdown", "content": content}
+
+            return {"format": "text", "content": cleaned}
+
+        return {"value": value}
+
 class SubscriptionServiceRead(BaseModel):
     email: str
     email_provider: Optional[str] = None
@@ -57,6 +88,38 @@ class SubscriptionServiceRead(BaseModel):
     microsoft_expiration_datetime_inbound: Optional[datetime] = None
     microsoft_expiration_datetime_outbound: Optional[datetime] = None
     oauth_user_id: Optional[str] = None
+
+    @field_validator("information", mode="before")
+    @classmethod
+    def _coerce_information(cls, value: Any):
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            cleaned = value.strip().translate({
+                ord("\u200b"): None,  # zero-width space
+                ord("\u200c"): None,
+                ord("\u200d"): None,
+                ord("\u2060"): None,  # word joiner
+                ord("\ufeff"): None,  # BOM
+            })
+
+            try:
+                parsed = json.loads(cleaned)
+                if isinstance(parsed, dict):
+                    return parsed
+                return {"value": parsed}
+            except Exception:
+                pass
+
+            if cleaned.lower().startswith("markdown"):
+                content = cleaned[len("markdown"):].lstrip("\n\r ")
+                return {"format": "markdown", "content": content}
+
+            return {"format": "text", "content": cleaned}
+
+        return {"value": value}
 
 class SubscriptionServiceConfigCrate(BaseModel):
     confidence_response_threshold: float | None 
