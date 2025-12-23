@@ -59,7 +59,7 @@ class UserDAO:
         subs_response = (
             self.supabase
             .table("subscriptions")
-            .select("subscription_id, name, vat_number, city, address, active, current_period_end, plan")
+            .select("subscription_id, name, vat_number, city, address, active, current_period_end, plan, website, industry")
             .in_("subscription_id", subscription_ids)
             .execute()
         )
