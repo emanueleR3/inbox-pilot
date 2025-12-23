@@ -327,9 +327,9 @@ def get_users_by_subscription(subscription_id: str):
                                     "active": "true",
                                     "current_period_end": "2025-12-20T00:00:00Z",
                                     "plan": "personal",
-                                    "is_configurated": "true",
                                     "website": "www.namesrl.com",
-                                    "industry": "Tecnologia"
+                                    "industry": "Tecnologia",
+                                    "is_configurated": "true"
                                 }
                             ],
                             "jwt": "jwt_token",
