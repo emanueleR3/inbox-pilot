@@ -11,6 +11,7 @@ class Subscription(BaseModel):
     active: bool = False
     current_period_end: datetime
     plan: Optional[str] = None
+    is_configured: Optional[bool] = False
     website: Optional[str] = None
     industry: Optional[str] = None
     
@@ -23,6 +24,7 @@ class SubscriptionRead(BaseModel):
     active: bool
     current_period_end: datetime
     plan: Optional[str] = None
+    is_configured: Optional[bool] = False
     website: Optional[str] = None
     industry: Optional[str] = None
 
@@ -34,6 +36,7 @@ class SubscriptionUpdate(BaseModel):
     active: Optional[bool] = None
     current_period_end: Optional[datetime] = None
     plan: Optional[str] = None
+    is_configured: Optional[bool] = False
     website: Optional[str] = None
     industry: Optional[str] = None
 
@@ -46,5 +49,6 @@ class SubscriptionReadWithConfig(BaseModel):
     active: bool
     current_period_end: datetime
     plan: Optional[str] = None
+    is_configured: Optional[bool] = False
     website: Optional[str] = None
     industry: Optional[str] = None
