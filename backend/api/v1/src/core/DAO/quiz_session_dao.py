@@ -5,17 +5,16 @@ from typing import Optional
 class QuizSessionDAO:
     def __init__(self):
         self.supabase = get_supabase_client()
-        self.table_name = "quiz_session"
     
     def get_session_by_id(self, session_id: str) -> Optional[dict]:
-        response = self.supabase.table(self.table_name).select("*").eq("session_id", session_id).execute()
+        response = self.supabase.table("quiz_sessions").select("*").eq("session_id", session_id).execute()
         
         if response.data and len(response.data) > 0:
             return response.data[0]
         return None
     
     def update_final_markdown(self, session_id: str, final_markdown: str) -> Optional[dict]:
-        response = self.supabase.table(self.table_name).update(
+        response = self.supabase.table("quiz_sessions").update(
             {"final_markdown": final_markdown}
         ).eq("session_id", session_id).execute()
         
