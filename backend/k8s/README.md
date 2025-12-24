@@ -204,5 +204,5 @@ Se vuoi Redis protetto da password, aggiungi queste variabili nel file `.env` (c
 
 ```bash
 REDIS_URL=redis://redis:6379/0
-  =your-strong-password
+REDIS_PASSWORD=your-strong-password
 ```

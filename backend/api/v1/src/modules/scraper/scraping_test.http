@@ -1,0 +1,90 @@
+### Scraper + Redis persistence checks
+### Usage:
+### - Install VS Code extension "REST Client" (humao.rest-client)
+### - Fill variables below, then run requests in order
+### - IMPORTANT: to validate Redis (not in-memory), do the "API restart" step and re-run the status request
+
+@baseUrl = https://api.corretto.pro/scraper
+@email = dev4@example.com
+@websiteUrl = https://topflysolutions.com/
+@maxUrls = 30
+
+### =============================================================
+### 0) Optional: discover candidate URLs
+### =============================================================
+# @name discoverUrls
+POST {{baseUrl}}/research
+Content-Type: application/json
+
+{
+  "website_url": "{{websiteUrl}}",
+  "max_urls": {{maxUrls}}
+}
+
+### =============================================================
+### 1) Start scraping job (this writes initial job state)
+### =============================================================
+# NOTE: incolla qui 1-3 URL reali presi da discoverUrls (o scelti manualmente)
+# @name startJob
+POST {{baseUrl}}/start
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "website_url": "{{websiteUrl}}",
+  "urls": [
+    "https://topflysolutions.com",
+    "https://topflysolutions.com/articoli",
+    "https://topflysolutions.com/esempi-di-applicazioni",
+    "https://topflysolutions.com/la-nostra-azienda",
+    "https://topflysolutions.com/exhibitions",
+    "https://topflysolutions.com/i-nostri-marchi",
+    "https://topflysolutions.com/lavora-con-noi",
+    "https://topflysolutions.com/contattaci",
+    "https://topflysolutions.com/rete-di-installazione",
+    "https://topflysolutions.com/richiesta-demo-prezzo",
+    "https://topflysolutions.com/tempo-reale-e-storico",
+    "https://topflysolutions.com/passeggeri",
+    "https://topflysolutions.com/centralina-e-anomalie-veicolo",
+    "https://topflysolutions.com/tachigrafo-e-infrazioni",
+    "https://topflysolutions.com/carburante",
+    "https://topflysolutions.com/autisti",
+    "https://topflysolutions.com/missioni",
+    "https://topflysolutions.com/costi-e-manutenzione",
+    "https://topflysolutions.com/cassoni-e-rimorchi",
+    "https://topflysolutions.com/antifurto-completo"
+  ]
+}
+
+### =============================================================
+### 2) Poll status (repeat until progress updates)
+### =============================================================
+# @name statusBeforeRestart
+GET {{baseUrl}}/status/{{email}}
+
+### =============================================================
+### 3) Redis verification: restart API, then read status again
+### =============================================================
+# MANUAL STEP (outside this .http file): restart the API process/container.
+# - If API is running via uvicorn locally: stop it and start it again.
+# - If API is running via docker compose: `docker compose restart api`
+#
+# Expected outcome:
+# - The response should still contain the last known `status/progress`.
+# - If it resets to 404 "job not found" (or loses progress), Redis is not being used.
+#
+# @name statusAfterRestart
+GET {{baseUrl}}/status/{{email}}
+
+### =============================================================
+### 4) Optional: check Qdrant collection status (when job completes)
+### =============================================================
+# @name collectionStatus
+GET {{baseUrl}}/collection/{{email}}
+
+### =============================================================
+### 5) Optional: cleanup (delete collection)
+### =============================================================
+# WARNING: this deletes the Qdrant collection for the service.
+# @name deleteCollection
+DELETE {{baseUrl}}/collection/{{email}}
