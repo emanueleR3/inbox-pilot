@@ -136,7 +136,17 @@ kubectl wait --for=condition=ready pod -l app=qdrant -n $NAMESPACE --timeout=180
     log_warning "Qdrant non pronto entro il timeout, continuo comunque..."
 }
 
-# 8. Deploy servizi base
+# 8. Deploy Redis
+log_info "Deploy Redis..."
+kubectl apply -f "$SCRIPT_DIR/redis/"
+log_success "Redis deployato"
+
+log_info "Attesa avvio Redis..."
+kubectl wait --for=condition=ready pod -l app=redis -n $NAMESPACE --timeout=180s || {
+    log_warning "Redis non pronto entro il timeout, continuo comunque..."
+}
+
+# 9. Deploy servizi base
 log_info "Deploy Senders..."
 kubectl apply -f "$SCRIPT_DIR/senders/"
 log_success "Senders deployato"

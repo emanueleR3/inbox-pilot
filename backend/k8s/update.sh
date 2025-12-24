@@ -36,7 +36,7 @@ else
     echo "🔄 Aggiornamento di tutti i servizi..."
     echo ""
     
-    for dir in api automations senders listeners refreshers broker-worker; do
+    for dir in api automations senders listeners refreshers broker-worker redis; do
         update_service "$dir"
     done
 fi
