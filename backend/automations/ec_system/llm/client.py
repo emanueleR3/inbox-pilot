@@ -35,7 +35,8 @@ from ..models.llm_responses import (
     ExtractorCompanyInfoResponse,
     OptimizedQueryResponse,
     WriteResponse,
-    ReviewerResponse
+    ReviewerResponse,
+    TasksExtractorResponse
 )
 from ..prompts.templates import (
     EMAIL_FILTER_PROMPT_ITA,
@@ -95,7 +96,9 @@ from ..prompts.templates import (
     OPTIMIZE_QUERY_PROMPT_ITA,
     OPTIMIZE_QUERY_PROMPT_ENG,
     EXTRACTOR_FROM_CHUNKS_PROMPT_ITA,
-    EXTRACTOR_FROM_CHUNKS_PROMPT_ENG
+    EXTRACTOR_FROM_CHUNKS_PROMPT_ENG,
+    TASKS_EXTRACTOR_PROMPT_ITA,
+    TASKS_EXTRACTOR_PROMPT_ENG
 )
 
 # Import utils and db_client for calendar operations
@@ -2621,6 +2624,66 @@ class LLMClient:
             lines.append(f"- Event code to cancel: {ctx['cancellation_event_code']}")
         
         return "\n".join(lines) if lines else "No appointment context applicable."
+
+    def extract_tasks(self, subject: str, mail_summary: str, extended_summary: str, 
+                      summary_attachments: str, language: str) -> TasksExtractorResponse:
+        """
+        Extract required tasks from email content.
+        
+        Args:
+            subject: Email subject line
+            mail_summary: Summary of the current email
+            extended_summary: Extended conversation summary
+            summary_attachments: Summary of attachment contents (or empty string)
+            language: Language of the email ("ITA" or "ENG")
+            
+        Returns:
+            TasksExtractorResponse with list_of_tasks
+        """
+        try:
+            # Choose prompt based on language
+            if language == "ENG":
+                prompt_template = TASKS_EXTRACTOR_PROMPT_ENG
+            else:
+                prompt_template = TASKS_EXTRACTOR_PROMPT_ITA
+            
+            # Create output parser
+            parser = PydanticOutputParser(pydantic_object=TasksExtractorResponse)
+            
+            # Handle empty attachment summary
+            if not summary_attachments or summary_attachments.strip() == "":
+                if language == "ENG":
+                    summary_attachments = "No attachments in this email."
+                else:
+                    summary_attachments = "Nessun allegato in questa email."
+            
+            # Format prompt
+            prompt_text = prompt_template.format(
+                subject=subject,
+                mail_summary=mail_summary,
+                extended_summary=extended_summary or "Nessun riassunto conversazione precedente.",
+                summary_attachments=summary_attachments
+            )
+            
+            # Add format instructions
+            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            
+            # Create message
+            message = HumanMessage(content=prompt_with_format)
+            
+            # Get response from LLM
+            response = self.llm.invoke([message])
+            
+            # Parse response
+            parsed_response = parser.parse(response.content)
+            
+            print(f"📋 [LLM] Tasks extracted ({language}): {[t.value for t in parsed_response.list_of_tasks]}")
+            return parsed_response
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in task extraction: {e}")
+            # Return empty list on error
+            return TasksExtractorResponse(list_of_tasks=[])
 
         
 

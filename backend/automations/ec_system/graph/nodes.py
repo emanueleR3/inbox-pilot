@@ -1137,6 +1137,62 @@ def subcategory_router_node(state):
     return state
 
 
+def tasks_extractor_node(state):
+    """
+    Extract tasks from email content using LLM.
+    Determines which tasks need to be performed based on email content.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with list_of_tasks
+    """
+    try:
+        print(f"📋 [TASKS_EXTRACTOR] Processing email for task extraction...")
+        
+        # Get required data from state
+        extracted_info = state.get("extracted_info", {})
+        subject = extracted_info.get("subject", "")
+        mail_summary = state.get("mail_summary", "")
+        extended_summary = state.get("extended_summary", "")
+        summary_attachments = state.get("summary_attachments", "")
+        language = state.get("language", "ITA")
+        subcategory = state.get("subcategory", "")
+        
+        print(f"   🏷️ Subcategory: {subcategory}")
+        print(f"   📧 Subject: {subject[:50]}...")
+        print(f"   🔒 Language: {language}")
+        
+        # Call LLM to extract tasks
+        tasks_response = llm_client.extract_tasks(
+            subject=subject,
+            mail_summary=mail_summary,
+            extended_summary=extended_summary,
+            summary_attachments=summary_attachments,
+            language=language
+        )
+        
+        # Convert TaskType enum values to strings for storage
+        list_of_tasks = [task.value for task in tasks_response.list_of_tasks]
+        
+        # Update state with extracted tasks
+        state["list_of_tasks"] = list_of_tasks
+        state["automation_executed"] = True # TODO: da togliere quando si implementa il workflow
+        
+        print(f"✅ [TASKS_EXTRACTOR] Tasks extracted successfully")
+        print(f"   📋 Tasks: {list_of_tasks}")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [TASKS_EXTRACTOR] Error in task extraction: {e}")
+        # Set empty list on error
+        state["list_of_tasks"] = []
+        state["automation_executed"] = True
+        return state
+
+
 def reader_node(state):
     """
     Extract key entities and determine if email needs response using LLM.
@@ -1640,14 +1696,6 @@ def cancellation_node(state):
         Updated state with cancellation results or AutomationExecutedResponse if event_code invalid
     """
     print(f"❌ [CANCELLATION] Processing appointment cancellation")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
 
     # Extract event_code from response
     event_code = state.get("cancellation_event_code")

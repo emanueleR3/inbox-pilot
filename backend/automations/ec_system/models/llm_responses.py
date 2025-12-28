@@ -492,3 +492,17 @@ class ReviewerResponse(BaseModel):
         None,
         description="Lista di linee guida per correggere l'email, nel formato 'parte da correggere : correzione'"
     )
+
+
+class TaskType(str, Enum):
+    """Enum for supported task types in TASKS_EXTRACTOR."""
+    INFO_REQUESTED_TASK = "INFO_REQUESTED_TASK"
+    MANAGE_APPOINTMENT_TASK = "MANAGE_APPOINTMENT_TASK"
+
+
+class TasksExtractorResponse(BaseModel):
+    """Response model for Tasks Extractor node - determines required tasks from email."""
+    list_of_tasks: List[TaskType] = Field(
+        ...,
+        description="Lista delle task da eseguire basata sul contenuto dell'email"
+    )
