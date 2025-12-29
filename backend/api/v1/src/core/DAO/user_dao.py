@@ -92,7 +92,7 @@ class UserDAO:
                 plan=sub.get("plan"),
                 website=sub.get("website"),
                 industry=sub.get("industry"),
-                is_configurated=config_map.get(sub["subscription_id"]),
+                is_configurated=config_map.get(sub["subscription_id"], False), # TODO: monitorare se funziona sempre
 
             )
             for sub in subs_response.data

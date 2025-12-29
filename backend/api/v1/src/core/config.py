@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 import os
 
+
 load_dotenv()  # Carica le variabili d'ambiente dal file .env
 
 class Settings(BaseSettings):
@@ -18,7 +19,7 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY")
     # Redis configuration (URL form preferred, e.g., redis://localhost:6379/0)
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", None)
+    REDIS_PASSWORD: str | None = os.getenv("REDIS_PASSWORD")
 
     class Config:
         env_file = ".env"
