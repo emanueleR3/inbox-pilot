@@ -503,7 +503,7 @@ class SubscriptionServiceDAO:
 
     def get_configuration(self, subscription_id: str):
         result = self.supabase.table("subscription_services").select(
-            "subscription_id, confidence_response_threshold, confidence_review_mail, priority_threshold, confidence_classification_threshold, urgent_meeting_threshold"
+            "subscription_id, confidence_response_threshold, confidence_review_mail, priority_threshold, confidence_classification_threshold, urgent_meeting_threshold, draft"
         ).eq("subscription_id", subscription_id).execute()
 
         if not result.data:

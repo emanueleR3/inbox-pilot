@@ -26,6 +26,7 @@ controller = SubscriptionServiceController()
                             "priority_threshold": 0.5,
                             "confidence_classification_threshold": 0.75,
                             "urgent_meeting_threshold": 0.9,
+                            "draft": True
                         },
                     }
                 }
@@ -65,6 +66,7 @@ def get_configuration(subscription_id: str):
         "priority_threshold",
         "confidence_classification_threshold",
         "urgent_meeting_threshold",
+        "draft",
     ]
     if not result:
         return {"status": "not_found"}

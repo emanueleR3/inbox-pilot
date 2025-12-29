@@ -126,7 +126,8 @@ class SubscriptionServiceConfigCrate(BaseModel):
     confidence_review_mail: float | None 
     priority_threshold: float | None 
     confidence_classification_threshold: float | None 
-    urgent_meeting_threshold: float | None 
+    urgent_meeting_threshold: float | None
+    draft: bool | None
 
 class OAuthGoogleCredentials(Credentials):
     def __init__(self, email: str, access_token: str, refresh_token: str, expiry: datetime, **kwargs):
