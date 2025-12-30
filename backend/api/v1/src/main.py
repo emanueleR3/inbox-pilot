@@ -15,6 +15,7 @@ from src.modules.metric.src.routes import router as metric_router
 from src.modules.scraper.src.routes import router as scraper_router
 from src.modules.subscription.src.routes import router as subscription_router
 from src.modules.quiz_session.src.routes import router as quiz_router
+from src.modules.calendars.src.routes.calendar_routes import router as calendars_router
 
 logger = setup_logger()
 app = FastAPI(title="AI Mail Automation API", version="1.0.0")
@@ -36,6 +37,7 @@ app.include_router(subscription_router, prefix="/subscription")
 app.include_router(subscription_service_router, prefix="/subscriptionServiceRouter")
 app.include_router(quiz_router, prefix="/quiz")
 app.include_router(metric_router, prefix="/metric")
+app.include_router(calendars_router, prefix="/calendars")
 app.include_router(jerry_router, prefix="/jerry")
 app.include_router(metric_router, prefix="/metric")
 app.include_router(scraper_router, prefix="/scraper")
