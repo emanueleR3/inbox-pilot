@@ -1,1 +1,3 @@
-"""Calendars module."""
+from .src.routes.calendar_routes import router
+
+__all__ = ["router"]
