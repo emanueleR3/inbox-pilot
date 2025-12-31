@@ -714,7 +714,7 @@ class LLMClient:
     
     def read_email(self, filtered_body: str, summary_attachments: str, language: str) -> ReaderResponse:
         """
-        Extract key entities and determine if email needs response.
+        Extract key entities from email.
         
         Args:
             filtered_body: Filtered email body
@@ -722,7 +722,7 @@ class LLMClient:
             language: Language of the email ("ITA" or "ENG")
             
         Returns:
-            ReaderResponse with key_entities dict and needs_response boolean
+            ReaderResponse with key_entities dict
         """
         try:
             # Choose prompt based on language
@@ -757,7 +757,7 @@ class LLMClient:
             # Parse response
             parsed_response = parser.parse(response.content)
             
-            print(f"📖 [LLM] Email read ({language}): needs_response={parsed_response.needs_response}, entities={len(parsed_response.key_entities)} keys")
+            print(f"📖 [LLM] Email read ({language}): entities={len(parsed_response.key_entities)} keys")
             return parsed_response
             
         except Exception as e:
@@ -774,8 +774,7 @@ class LLMClient:
                     "amounts": [],
                     "documents": [],
                     "other_info": []
-                },
-                needs_response=True  # Default to True to be safe
+                }
             )
     
     def read_appointment_request(self, filtered_body: str, extended_summary: str, 

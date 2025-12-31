@@ -110,14 +110,10 @@ class AttachmentSummaryResponse(BaseModel):
 
 
 class ReaderResponse(BaseModel):
-    """Response model for Reader node analysis."""
+    """Response model for Reader node analysis - extracts key entities only."""
     key_entities: dict = Field(
         ...,
         description="Entità chiave estratte dalla mail e allegati (date, informazioni, richieste, luoghi, ecc.)"
-    )
-    needs_response: bool = Field(
-        ...,
-        description="Se true, la mail richiede una risposta; se false, è conclusiva"
     )
 
 

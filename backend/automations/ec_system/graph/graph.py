@@ -47,6 +47,9 @@ from .nodes import (
     writer_node,
     reviewer_node,
     tasks_extractor_node,
+    info_reader_node,
+    appointment_router_node,
+    task_merger_node,
     # Subcategory handler nodes
     handle_offer_promotion_node,
     handle_newsletter_node,
@@ -118,9 +121,9 @@ def create_email_classification_graph():
     graph.add_node(NodeNames.WRITER, writer_node)
     graph.add_node(NodeNames.REVIEWER, reviewer_node)
     graph.add_node(NodeNames.TASKS_EXTRACTOR, tasks_extractor_node)
-    
-    # Add edge from TASKS_EXTRACTOR to END TODO: remove this
-    graph.add_edge(NodeNames.TASKS_EXTRACTOR, END)
+    graph.add_node(NodeNames.INFO_READER, info_reader_node)
+    graph.add_node(NodeNames.APPOINTMENT_ROUTER, appointment_router_node)
+    graph.add_node(NodeNames.TASK_MERGER, task_merger_node)
     
     # Add subcategory handler nodes
     graph.add_node(NodeNames.HANDLE_OFFER_PROMOTION, handle_offer_promotion_node)
@@ -477,7 +480,88 @@ def create_email_classification_graph():
     for node_name in always_to_tasks_extractor_nodes:
         graph.add_edge(node_name, NodeNames.TASKS_EXTRACTOR)
     
-    # Conditional logic for Reader node based on needs_response and subcategory
+    # === PARALLEL TASK EXECUTION ROUTING ===
+    
+    # Route after TASKS_EXTRACTOR based on extracted tasks
+    def route_after_tasks_extractor(state):
+        """Route based on extracted tasks for parallel execution."""
+        tasks = state.get("list_of_tasks", [])
+        high_priority = state.get("high_priority_email", False)
+        
+        print(f"🔀 [TASKS_EXTRACTOR] Routing based on tasks: {tasks}, high_priority={high_priority}")
+        
+        # If no tasks, end workflow
+        if not tasks:
+            print(f"   → No tasks to execute, ending workflow")
+            state["automation_executed"] = True
+            return END
+        
+        # Determine which branches to execute
+        has_info_task = "INFO_REQUESTED_TASK" in tasks
+        has_appointment_task = "MANAGE_APPOINTMENT_TASK" in tasks and not high_priority
+        
+        # Return list of nodes for parallel execution
+        if has_info_task and has_appointment_task:
+            print(f"   → Executing BOTH branches in parallel")
+            return [NodeNames.INFO_READER, NodeNames.APPOINTMENT_ROUTER]
+        elif has_info_task:
+            print(f"   → Executing INFO_READER branch only")
+            return NodeNames.INFO_READER
+        elif has_appointment_task:
+            print(f"   → Executing APPOINTMENT_ROUTER branch only")
+            return NodeNames.APPOINTMENT_ROUTER
+        else:
+            # MANAGE_APPOINTMENT_TASK with high_priority goes to END
+            print(f"   → No applicable tasks (high_priority appointment), ending workflow")
+            state["automation_executed"] = True
+            return END
+    
+    graph.add_conditional_edges(
+        NodeNames.TASKS_EXTRACTOR,
+        route_after_tasks_extractor,
+        {
+            NodeNames.INFO_READER: NodeNames.INFO_READER,
+            NodeNames.APPOINTMENT_ROUTER: NodeNames.APPOINTMENT_ROUTER,
+            END: END
+        }
+    )
+    
+    # INFO_READER → EXTRACTOR_COMPANY_INFO → TASK_MERGER
+    graph.add_edge(NodeNames.INFO_READER, NodeNames.EXTRACTOR_COMPANY_INFO)
+    
+    # APPOINTMENT_ROUTER routes to specialized READER based on subcategory
+    def route_appointment_by_subcategory(state):
+        """Route to appropriate appointment flow based on subcategory."""
+        subcategory = state.get("subcategory", "")
+        
+        appointment_subcategories = [
+            "REQUEST_APPOINTMENT",
+            "CONFIRM_APPOINTMENT", 
+            "REQUEST_APPOINTMENT_CHANGE",
+            "CANCEL_APPOINTMENT"
+        ]
+        
+        if subcategory in appointment_subcategories:
+            print(f"   → Routing to READER for {subcategory}")
+            return NodeNames.READER
+        else:
+            # Default: go directly to TASK_MERGER
+            print(f"   → Subcategory {subcategory} not appointment-related, going to TASK_MERGER")
+            return NodeNames.TASK_MERGER
+    
+    graph.add_conditional_edges(
+        NodeNames.APPOINTMENT_ROUTER,
+        route_appointment_by_subcategory,
+        {
+            NodeNames.READER: NodeNames.READER,
+            NodeNames.TASK_MERGER: NodeNames.TASK_MERGER
+        }
+    )
+    
+    # TASK_MERGER → WRITER
+    graph.add_edge(NodeNames.TASK_MERGER, NodeNames.WRITER)
+    
+    # Conditional logic for Reader node based on subcategory
     def should_continue_after_reader(state):
         """
         Check if workflow should end with automation or continue based on needs_response.
@@ -702,19 +786,17 @@ def create_email_classification_graph():
 
     def should_continue_after_extractor_company_info(state):
         """
-        Check extractor company info results and create appropriate AutomationExecutedResponse.
-        Routes based on which tool was called (propose_new_slots vs reschedule_appointment)
-        and the results obtained.
+        Check extractor company info results and route to TASK_MERGER for merge.
         """
         if state.get("status") == "COMPANY_INFO_EXTRACTION_FAILED":
             return END
-        return NodeNames.WRITER
+        return NodeNames.TASK_MERGER
 
     graph.add_conditional_edges(
         NodeNames.EXTRACTOR_COMPANY_INFO,
         should_continue_after_extractor_company_info,
         {
-            NodeNames.WRITER: NodeNames.WRITER,
+            NodeNames.TASK_MERGER: NodeNames.TASK_MERGER,
             END: END
         }
     )

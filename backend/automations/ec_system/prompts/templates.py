@@ -787,9 +787,9 @@ Analyze the content and determine the most appropriate priority and subcategory.
 # READER NODE PROMPTS
 READER_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email aziendali.
 
-Analizza la seguente email e gli allegati (se presenti) ed estrai:
+Analizza la seguente email e gli allegati (se presenti) ed estrai le entità chiave.
 
-1. **key_entities**: Un dizionario JSON con le entità chiave contenute nella mail e negli allegati:
+**key_entities**: Un dizionario JSON con le entità chiave contenute nella mail e negli allegati:
    - "dates": Lista di date/orari menzionati (formato: "YYYY-MM-DD HH:MM" o descrizione testuale)
    - "locations": Lista di luoghi/indirizzi menzionati
    - "people": Lista di nomi di persone menzionate
@@ -800,23 +800,19 @@ Analizza la seguente email e gli allegati (se presenti) ed estrai:
    - "documents": Lista di documenti/file menzionati
    - "other_info": Altre informazioni rilevanti non categorizzabili sopra
 
-2. **needs_response**: Boolean che indica se la mail richiede una risposta:
-   - True: La mail contiene domande, richieste, proposte che necessitano risposta DA PARTE DI UNA PERSONA REALE
-   - False: La mail è conclusiva, di saluto, followup automatico, conferma ricezione, NOTIFICA AUTOMATICA DA SISTEMI (WordPress, CMS, plugin, sistemi di monitoraggio), ecc.
-
 CORPO EMAIL:
 {filtered_body}
 
 ALLEGATI:
 {summary_attachments}
 
-Rispondi in formato JSON con le chiavi "key_entities" e "needs_response"."""
+Rispondi in formato JSON con la chiave "key_entities"."""
 
 READER_PROMPT_ENG = """You are an expert assistant in analyzing business emails.
 
-Analyze the following email and attachments (if present) and extract:
+Analyze the following email and attachments (if present) and extract key entities.
 
-1. **key_entities**: A JSON dictionary with key entities found in the email and attachments:
+**key_entities**: A JSON dictionary with key entities found in the email and attachments:
    - "dates": List of dates/times mentioned (format: "YYYY-MM-DD HH:MM" or textual description)
    - "locations": List of places/addresses mentioned
    - "people": List of people's names mentioned
@@ -827,17 +823,13 @@ Analyze the following email and attachments (if present) and extract:
    - "documents": List of documents/files mentioned
    - "other_info": Other relevant information not categorizable above
 
-2. **needs_response**: Boolean indicating if the email requires a response:
-   - True: The email contains questions, requests, proposals that need a response FROM A REAL PERSON
-   - False: The email is conclusive, greeting, automatic followup, receipt confirmation, AUTOMATIC NOTIFICATION FROM SYSTEMS (WordPress, CMS, plugins, monitoring systems), etc.
-
 EMAIL BODY:
 {filtered_body}
 
 ATTACHMENTS:
 {summary_attachments}
 
-Respond in JSON format with keys "key_entities" and "needs_response"."""
+Respond in JSON format with key "key_entities"."""
 
 # REQUEST_APPOINTMENT READER PROMPTS
 READER_APPOINTMENT_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email per richieste di appuntamento.
