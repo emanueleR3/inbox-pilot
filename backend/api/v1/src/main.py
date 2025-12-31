@@ -15,7 +15,7 @@ from src.modules.metric.src.routes import router as metric_router
 from src.modules.scraper.src.routes import router as scraper_router
 from src.modules.subscription.src.routes import router as subscription_router
 from src.modules.quiz_session.src.routes import router as quiz_router
-from src.modules.calendars.src.routes.calendar_routes import router as calendars_router
+from src.modules.calendars.src.routes import router as calendars_router
 
 logger = setup_logger()
 app = FastAPI(title="AI Mail Automation API", version="1.0.0")
