@@ -3,7 +3,6 @@ from typing import Dict, Any
 from src.modules.calendars.src.controllers.calendar_controller import CalendarController
 
 router = APIRouter(
-    prefix="/calendars",
     tags=["Calendars"]
 )
 
