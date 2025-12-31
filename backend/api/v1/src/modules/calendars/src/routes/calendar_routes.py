@@ -30,36 +30,70 @@ controller = CalendarController()
     - `time_max`: Filtra eventi fino a questa data/ora (ISO 8601)
     - `max_results`: Limita il numero di risultati (default: 100, max: 2500)
     - `calendar_id`: ID del calendario (default: "primary")
+    
+    **Thread Summary:**
+    Per ogni evento, viene verificato se è stato generato da una email gestita dall'AI.
+    Se l'evento è associato a un thread email (tramite `scheduled_events`), viene incluso
+    il summary del thread nel campo `thread_summary`. Altrimenti, il campo conterrà
+    "Evento non generato da email gestita da AI".
     """,
     responses={
         200: {
             "description": "Lista di eventi recuperati con successo",
             "content": {
                 "application/json": {
-                    "example": [
-                        {
-                            "id": "abc123xyz",
-                            "title": "Riunione di team",
-                            "description": "Discussione progetto Q1",
-                            "start": "2025-01-15T10:00:00+00:00",
-                            "end": "2025-01-15T11:00:00+00:00",
-                            "location": "Sala conferenze A",
-                            "organizer": {
-                                "email": "manager@example.com",
-                                "name": "Mario Rossi"
-                            },
-                            "attendees": [
+                    "examples": {
+                        "event_from_email": {
+                            "summary": "Evento generato da email",
+                            "value": [
                                 {
-                                    "email": "user1@example.com",
-                                    "name": "Luca Bianchi",
-                                    "response_status": "accepted"
+                                    "id": "abc123xyz",
+                                    "title": "Riunione di team",
+                                    "description": "Discussione progetto Q1",
+                                    "start": "2025-01-15T10:00:00+00:00",
+                                    "end": "2025-01-15T11:00:00+00:00",
+                                    "location": "Sala conferenze A",
+                                    "organizer": {
+                                        "email": "manager@example.com",
+                                        "name": "Mario Rossi"
+                                    },
+                                    "attendees": [
+                                        {
+                                            "email": "user1@example.com",
+                                            "name": "Luca Bianchi",
+                                            "response_status": "accepted"
+                                        }
+                                    ],
+                                    "is_all_day": False,
+                                    "status": "confirmed",
+                                    "html_link": "https://calendar.google.com/event?eid=abc123",
+                                    "thread_summary": "Il cliente ha richiesto una riunione per discutere il progetto Q1 e le tempistiche di consegna."
                                 }
-                            ],
-                            "is_all_day": False,
-                            "status": "confirmed",
-                            "html_link": "https://calendar.google.com/event?eid=abc123"
+                            ]
+                        },
+                        "event_not_from_email": {
+                            "summary": "Evento non generato da email",
+                            "value": [
+                                {
+                                    "id": "def456abc",
+                                    "title": "Pausa pranzo",
+                                    "description": None,
+                                    "start": "2025-01-15T12:00:00+00:00",
+                                    "end": "2025-01-15T13:00:00+00:00",
+                                    "location": None,
+                                    "organizer": {
+                                        "email": "user@example.com",
+                                        "name": "Utente"
+                                    },
+                                    "attendees": [],
+                                    "is_all_day": False,
+                                    "status": "confirmed",
+                                    "html_link": "https://calendar.google.com/event?eid=def456",
+                                    "thread_summary": "Evento non generato da email gestita da AI"
+                                }
+                            ]
                         }
-                    ]
+                    }
                 }
             }
         },
