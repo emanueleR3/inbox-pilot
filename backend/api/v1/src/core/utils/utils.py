@@ -72,7 +72,7 @@ def decrypt_token(encrypted_token: str, cond: str = "token") -> str:
     return cipher.decrypt(encrypted_token.encode()).decode()
 
 
-def normalize_google_event(self, event: dict) -> CalendarEvent:
+def normalize_google_event(event: dict) -> CalendarEvent:
         start_data = event.get("start", {})
         end_data = event.get("end", {})
         
@@ -116,7 +116,7 @@ def normalize_google_event(self, event: dict) -> CalendarEvent:
         )
 
 
-def normalize_microsoft_event(self, event: dict) -> CalendarEvent:
+def normalize_microsoft_event(event: dict) -> CalendarEvent:
         start_data = event.get("start", {})
         end_data = event.get("end", {})
         
