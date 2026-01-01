@@ -1,5 +1,5 @@
 from src.core.DAO.mailbox_dao import MailboxDAO
-from src.utils.utils import (
+from src.modules.mailbox.src.utils.utils import (
     build_google_params,
     build_microsoft_params,
     build_imap_params
