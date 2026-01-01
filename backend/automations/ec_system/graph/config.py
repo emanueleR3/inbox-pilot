@@ -47,6 +47,10 @@ class NodeNames:
     EXTRACTOR_COMPANY_INFO = "extractor_company_info"
     WRITER = "writer"
     REVIEWER = "reviewer"
+    TASKS_EXTRACTOR = "tasks_extractor"
+    INFO_READER = "info_reader"
+    APPOINTMENT_ROUTER = "appointment_router"
+    TASK_MERGER = "task_merger"
     
     # Subcategory-specific nodes
     HANDLE_OFFER_PROMOTION = "handle_offer_promotion"

@@ -328,6 +328,116 @@ def _get_timestamp_in_user_timezone(box_email: str) -> str:
         return datetime.now(timezone.utc).isoformat()
 
 
+def _create_draft_in_provider(
+    box_email: str,
+    sender_email: str,
+    subject: str,
+    response_body: str,
+    message_id: str = None,
+    reply_to_id: str = None,
+    original_thread_id: str = None,
+    microsoft_message_id: str = None,
+    scheduled_event_details: dict = None
+) -> tuple[bool, str]:
+    """
+    Create a draft email in the user's email provider (Gmail/Microsoft/IMAP).
+    
+    Args:
+        box_email: User's mailbox email
+        sender_email: Email to reply to
+        subject: Email subject
+        response_body: Body content of the draft
+        message_id: Message ID for threading
+        reply_to_id: Reply-to message ID
+        original_thread_id: Original thread ID for Gmail
+        microsoft_message_id: Microsoft Graph message ID for replies
+        scheduled_event_details: Event details for ICS attachment (optional)
+        
+    Returns:
+        Tuple of (success: bool, draft_id: str or None)
+    """
+    # Skip if no body to draft
+    if not response_body or not response_body.strip():
+        print(f"⚠️ [DRAFT] No response body to create draft - skipping draft creation")
+        return False, None
+    
+    try:
+        # Get email service data
+        email_service_data = get_email_service_data(box_email)
+        if not email_service_data:
+            print(f"❌ [DRAFT] No email service data found for {box_email}")
+            return False, None
+        
+        provider = email_service_data.get("email_provider")
+        if not provider:
+            print(f"❌ [DRAFT] No email provider configured for {box_email}")
+            return False, None
+        
+        # Add AI disclaimer to the response body
+        response_body_with_disclaimer = _wrap_body_with_disclaimer(response_body)
+        
+        # Prepare payload
+        payload = {
+            "email": sender_email,
+            "subject": subject,
+            "body": response_body_with_disclaimer,
+        }
+        
+        # Generate ICS attachment if event was scheduled/rescheduled
+        if scheduled_event_details:
+            ics_attachment = _create_ics_attachment(scheduled_event_details)
+            if ics_attachment:
+                payload["attachments"] = [ics_attachment]
+                print(f"📎 [DRAFT] ICS attachment generated for event code: {scheduled_event_details.get('event_code')}")
+        
+        senders_url = os.getenv("SENDERS_URL")
+        endpoint = ""
+        
+        if provider == "google":
+            endpoint = f"{senders_url}/send-email/draft-gmail"
+            payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
+            payload["original_thread_id"] = original_thread_id
+            payload["message_id"] = message_id
+        elif provider == "microsoft":
+            endpoint = f"{senders_url}/send-email/draft-microsoft"
+            payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
+            payload["message_id"] = microsoft_message_id
+        elif provider == "imap":
+            endpoint = f"{senders_url}/send-email/draft-imap"
+            imap_server = email_service_data.get("imap_server")
+            if not imap_server:
+                smtp_server = email_service_data.get("smtp_server", "")
+                imap_server = smtp_server.replace("smtp.", "imap.") if smtp_server.startswith("smtp.") else smtp_server
+            imap_port = email_service_data.get("imap_port") or 993
+            payload["imap_server"] = imap_server
+            payload["imap_port"] = imap_port
+            payload["imap_email"] = box_email
+            payload["password"] = email_service_data.get("hashed_password")
+            payload["reply_to_id"] = reply_to_id
+            payload["message_id"] = message_id
+        else:
+            print(f"❌ [DRAFT] Unknown email provider: {provider}")
+            return False, None
+        
+        # Send request
+        response = requests.post(endpoint, json=payload)
+        response.raise_for_status()
+        
+        result = response.json()
+        draft_id = result.get("draft_id") or result.get("message_id")
+        
+        if not result.get("success"):
+            print(f"❌ [DRAFT] Draft creation failed: {result.get('message')}")
+            return False, None
+        
+        print(f"✅ [DRAFT] Draft created successfully via {provider}, draft_id: {draft_id}")
+        return True, draft_id
+        
+    except Exception as e:
+        print(f"❌ [DRAFT] Error creating draft: {e}")
+        return False, None
+
+
 def process_automation_result(workflow_result: dict):
     """
     Process the results of the automation workflow.
@@ -485,9 +595,26 @@ def process_automation_result(workflow_result: dict):
         try:
             update_thread(thread_id, thread_data)
 
-            if workflow_result.get("needs_response", True):
+            # Create draft in provider if response_body is available
+            draft_created = False
+            draft_id = None
+            if response_body and response_body.strip():
+                draft_created, draft_id = _create_draft_in_provider(
+                    box_email=box_email,
+                    sender_email=sender_email,
+                    subject=subject,
+                    response_body=response_body,
+                    message_id=message_id,
+                    reply_to_id=reply_to_id,
+                    original_thread_id=original_thread_id,
+                    microsoft_message_id=microsoft_message_id,
+                    scheduled_event_details=scheduled_event_details
+                )
+                
+                # Save AI generated email record
                 ai_email_data = { 
                     "thread_id": thread_id,
+                    "message_id": draft_id,
                     "response_at_id": message_id,
                     "processed_at": now_tz,
                     "duration": 0, #TODO calculate duration
@@ -497,6 +624,8 @@ def process_automation_result(workflow_result: dict):
                     "outcome": EmailOutcome.DRAFT.value
                 }
                 save_ai_generated_email(ai_email_data)
+            else:
+                print(f"⚠️ [HIGH_PRIORITY] No response body available - skipping draft creation")
 
         except Exception as e:
             print(f"❌ [WORKFLOW] Error saving AI generated email: {e}")
@@ -959,22 +1088,41 @@ def process_automation_result(workflow_result: dict):
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
 
-                ai_email_data = {
-                    "thread_id": thread_id,
-                    "response_at_id": message_id,
-                    "processed_at": now_tz,
-                    "duration": 0, #TODO calculate duration
-                    "priority_score": priority_score,
-                    "body": response_body,
-                    "service_id": service_id,
-                    "outcome": EmailOutcome.DRAFT.value
-                }
-
-                # Save draft in ai_generated_emails
-                try:
-                    save_ai_generated_email(ai_email_data)
-                except Exception as e:
-                    print(f"❌ [WORKFLOW] Error saving draft: {e}")
+                # Create draft in provider if response_body is available
+                draft_created = False
+                draft_id = None
+                if response_body and response_body.strip():
+                    draft_created, draft_id = _create_draft_in_provider(
+                        box_email=box_email,
+                        sender_email=sender_email,
+                        subject=subject,
+                        response_body=response_body,
+                        message_id=message_id,
+                        reply_to_id=reply_to_id,
+                        original_thread_id=original_thread_id,
+                        microsoft_message_id=microsoft_message_id,
+                        scheduled_event_details=scheduled_event_details
+                    )
+                    
+                    # Save AI generated email record
+                    ai_email_data = {
+                        "thread_id": thread_id,
+                        "message_id": draft_id,
+                        "response_at_id": message_id,
+                        "processed_at": now_tz,
+                        "duration": 0, #TODO calculate duration
+                        "priority_score": priority_score,
+                        "body": response_body,
+                        "service_id": service_id,
+                        "outcome": EmailOutcome.DRAFT.value
+                    }
+                    
+                    try:
+                        save_ai_generated_email(ai_email_data)
+                    except Exception as e:
+                        print(f"❌ [WORKFLOW] Error saving draft: {e}")
+                else:
+                    print(f"⚠️ [LOW_CONFIDENCE_WRITER] No response body available - skipping draft creation")
 
                 try:
                     update_thread(thread_id, thread_data)

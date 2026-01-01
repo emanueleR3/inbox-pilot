@@ -787,9 +787,9 @@ Analyze the content and determine the most appropriate priority and subcategory.
 # READER NODE PROMPTS
 READER_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email aziendali.
 
-Analizza la seguente email e gli allegati (se presenti) ed estrai:
+Analizza la seguente email e gli allegati (se presenti) ed estrai le entità chiave.
 
-1. **key_entities**: Un dizionario JSON con le entità chiave contenute nella mail e negli allegati:
+**key_entities**: Un dizionario JSON con le entità chiave contenute nella mail e negli allegati:
    - "dates": Lista di date/orari menzionati (formato: "YYYY-MM-DD HH:MM" o descrizione testuale)
    - "locations": Lista di luoghi/indirizzi menzionati
    - "people": Lista di nomi di persone menzionate
@@ -800,23 +800,19 @@ Analizza la seguente email e gli allegati (se presenti) ed estrai:
    - "documents": Lista di documenti/file menzionati
    - "other_info": Altre informazioni rilevanti non categorizzabili sopra
 
-2. **needs_response**: Boolean che indica se la mail richiede una risposta:
-   - True: La mail contiene domande, richieste, proposte che necessitano risposta DA PARTE DI UNA PERSONA REALE
-   - False: La mail è conclusiva, di saluto, followup automatico, conferma ricezione, NOTIFICA AUTOMATICA DA SISTEMI (WordPress, CMS, plugin, sistemi di monitoraggio), ecc.
-
 CORPO EMAIL:
 {filtered_body}
 
 ALLEGATI:
 {summary_attachments}
 
-Rispondi in formato JSON con le chiavi "key_entities" e "needs_response"."""
+Rispondi in formato JSON con la chiave "key_entities"."""
 
 READER_PROMPT_ENG = """You are an expert assistant in analyzing business emails.
 
-Analyze the following email and attachments (if present) and extract:
+Analyze the following email and attachments (if present) and extract key entities.
 
-1. **key_entities**: A JSON dictionary with key entities found in the email and attachments:
+**key_entities**: A JSON dictionary with key entities found in the email and attachments:
    - "dates": List of dates/times mentioned (format: "YYYY-MM-DD HH:MM" or textual description)
    - "locations": List of places/addresses mentioned
    - "people": List of people's names mentioned
@@ -827,17 +823,13 @@ Analyze the following email and attachments (if present) and extract:
    - "documents": List of documents/files mentioned
    - "other_info": Other relevant information not categorizable above
 
-2. **needs_response**: Boolean indicating if the email requires a response:
-   - True: The email contains questions, requests, proposals that need a response FROM A REAL PERSON
-   - False: The email is conclusive, greeting, automatic followup, receipt confirmation, AUTOMATIC NOTIFICATION FROM SYSTEMS (WordPress, CMS, plugins, monitoring systems), etc.
-
 EMAIL BODY:
 {filtered_body}
 
 ATTACHMENTS:
 {summary_attachments}
 
-Respond in JSON format with keys "key_entities" and "needs_response"."""
+Respond in JSON format with key "key_entities"."""
 
 # REQUEST_APPOINTMENT READER PROMPTS
 READER_APPOINTMENT_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email per richieste di appuntamento.
@@ -2434,4 +2426,113 @@ Return a dictionary where:
 - Values: exact text extracted from chunks
 
 Extract only pertinent and necessary information to answer the request and include company contact information if present in chunks.
+"""
+
+# TASKS EXTRACTOR PROMPTS
+TASKS_EXTRACTOR_PROMPT_ITA = """Sei un assistente esperto nell'analisi di email aziendali.
+
+Analizza la seguente email e determina quali task devono essere eseguite.
+
+OGGETTO: {subject}
+RIASSUNTO EMAIL: {mail_summary}
+RIASSUNTO CONVERSAZIONE: {extended_summary}
+RIASSUNTO ALLEGATI: {summary_attachments}
+
+TASK DISPONIBILI:
+1. INFO_REQUESTED_TASK: Seleziona questa task SOLO se l'email contiene domande su INFORMAZIONI AZIENDALI.
+   - Domande su orari di apertura, servizi offerti, prezzi, prodotti, politiche aziendali
+   - Richieste di informazioni che richiedono la consultazione del contesto aziendale
+   - Domande di customer service su informazioni generali dell'azienda
+   
+   NON includere INFO_REQUESTED_TASK se:
+   - L'email riguarda SOLO la gestione di un appuntamento (in quel caso usa solo MANAGE_APPOINTMENT_TASK)
+   - L'email è puramente informativa senza domande su informazioni aziendali
+
+2. MANAGE_APPOINTMENT_TASK: Seleziona questa task se l'email riguarda la GESTIONE di un appuntamento.
+   - Richieste di nuovo appuntamento
+   - Richieste di modifica di appuntamento esistente
+   - Richieste di cancellazione appuntamento
+   - Conferme di appuntamento che richiedono ancora un'azione
+   - Qualsiasi riferimento alla gestione del calendario/agenda
+   
+   IMPORTANTE: NON includere MANAGE_APPOINTMENT_TASK se:
+   - L'appuntamento è già stato schedulato/confermato/gestito nella conversazione precedente (vedi extended_summary)
+   - L'utente sta solo rispondendo a un evento già schedulato senza richiedere modifiche
+   - La risposta è solo un ringraziamento o presa visione di un appuntamento già fissato
+   - Esempio: se nell'extended_summary si legge che l'appuntamento è stato già creato e l'utente risponde "Perfetto, ci vediamo!" → NON aggiungere MANAGE_APPOINTMENT_TASK
+
+REGOLE:
+- Puoi restituire un array vuoto [] se nessuna task è applicabile
+- Puoi restituire una sola task se applicabile
+- Restituisci ENTRAMBE le task SOLO se l'email contiene sia una domanda su informazioni aziendali CHE una richiesta di gestione appuntamento
+- Analizza attentamente il CONTESTO della conversazione (extended_summary) per comprendere meglio l'intento
+- Controlla sempre l'extended_summary per verificare se l'appuntamento è già stato gestito
+
+ESEMPI:
+- "Posso fissare un appuntamento per martedì?" → [MANAGE_APPOINTMENT_TASK]
+- "Vorrei un appuntamento, e a che ora aprite?" → [INFO_REQUESTED_TASK, MANAGE_APPOINTMENT_TASK]
+- "Confermato l'appuntamento, grazie" (primo messaggio, nessun appuntamento ancora creato) → [MANAGE_APPOINTMENT_TASK]
+- "Perfetto, ci vediamo martedì!" (risposta a appuntamento già schedulato) → [] (nessuna task)
+- "A che ora aprite domani?" → [INFO_REQUESTED_TASK]
+- "In allegato il documento richiesto" → []
+- "Devo spostare l'appuntamento di giovedì" → [MANAGE_APPOINTMENT_TASK]
+- "Grazie per la conferma dell'appuntamento" (appuntamento già gestito) → [] (nessuna task)
+- "Quali sono i vostri servizi?" → [INFO_REQUESTED_TASK]
+- "A che ora aprite?" → [INFO_REQUESTED_TASK]
+- "Quanto costa una consulenza?" → [INFO_REQUESTED_TASK]
+- "Vorrei un appuntamento, e quanto costa il servizio X?" → [INFO_REQUESTED_TASK, MANAGE_APPOINTMENT_TASK]
+"""
+
+TASKS_EXTRACTOR_PROMPT_ENG = """You are an expert assistant in analyzing business emails.
+
+Analyze the following email and determine which tasks need to be executed.
+
+SUBJECT: {subject}
+EMAIL SUMMARY: {mail_summary}
+CONVERSATION SUMMARY: {extended_summary}
+ATTACHMENTS SUMMARY: {summary_attachments}
+
+AVAILABLE TASKS:
+1. INFO_REQUESTED_TASK: Select this task ONLY if the email contains questions about BUSINESS INFORMATION.
+   - Questions about opening hours, services offered, prices, products, company policies
+   - Information requests that require consulting the business context
+   - Customer service questions about general company information
+   
+   DO NOT include INFO_REQUESTED_TASK if:
+   - The email is ONLY about appointment management (in that case use only MANAGE_APPOINTMENT_TASK)
+   - The email is purely informational without questions about business information
+
+2. MANAGE_APPOINTMENT_TASK: Select this task if the email concerns appointment MANAGEMENT.
+   - New appointment requests
+   - Requests to modify existing appointments
+   - Appointment cancellation requests
+   - Appointment confirmations that still require action
+   - Any reference to calendar/schedule management
+   
+   IMPORTANT: DO NOT include MANAGE_APPOINTMENT_TASK if:
+   - The appointment has already been scheduled/confirmed/managed in the previous conversation (see extended_summary)
+   - The user is just responding to an already scheduled event without requesting changes
+   - The response is just a thank you or acknowledgment of an already fixed appointment
+   - Example: if extended_summary shows the appointment was already created and user responds "Perfect, see you then!" → DO NOT add MANAGE_APPOINTMENT_TASK
+
+RULES:
+- You can return an empty array [] if no task is applicable
+- You can return a single task if applicable
+- Return BOTH tasks ONLY if the email contains both a question about business information AND an appointment management request
+- Carefully analyze the conversation CONTEXT (extended_summary) to better understand intent
+- Always check extended_summary to verify if the appointment has already been managed
+
+EXAMPLES:
+- "Can I schedule an appointment for Tuesday?" → [MANAGE_APPOINTMENT_TASK]
+- "I'd like an appointment, and what are your opening hours?" → [INFO_REQUESTED_TASK, MANAGE_APPOINTMENT_TASK]
+- "Appointment confirmed, thank you" (first message, no appointment created yet) → [MANAGE_APPOINTMENT_TASK]
+- "Perfect, see you Tuesday!" (response to already scheduled appointment) → [] (no task)
+- "What time do you open tomorrow?" → [INFO_REQUESTED_TASK]
+- "Attached is the requested document" → []
+- "I need to reschedule Thursday's appointment" → [MANAGE_APPOINTMENT_TASK]
+- "Thanks for the appointment confirmation" (appointment already managed) → [] (no task)
+- "What services do you offer?" → [INFO_REQUESTED_TASK]
+- "What time do you open?" → [INFO_REQUESTED_TASK]
+- "How much does a consultation cost?" → [INFO_REQUESTED_TASK]
+- "I'd like an appointment, and how much does service X cost?" → [INFO_REQUESTED_TASK, MANAGE_APPOINTMENT_TASK]
 """
