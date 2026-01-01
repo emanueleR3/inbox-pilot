@@ -1137,6 +1137,178 @@ def subcategory_router_node(state):
     return state
 
 
+def tasks_extractor_node(state):
+    """
+    Extract tasks from email content using LLM.
+    Determines which tasks need to be performed based on email content.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with list_of_tasks
+    """
+    try:
+        print(f"📋 [TASKS_EXTRACTOR] Processing email for task extraction...")
+        
+        # Get required data from state
+        extracted_info = state.get("extracted_info", {})
+        subject = extracted_info.get("subject", "")
+        mail_summary = state.get("mail_summary", "")
+        extended_summary = state.get("extended_summary", "")
+        summary_attachments = state.get("summary_attachments", "")
+        language = state.get("language", "ITA")
+        subcategory = state.get("subcategory", "")
+        
+        print(f"   🏷️ Subcategory: {subcategory}")
+        print(f"   📧 Subject: {subject[:50]}...")
+        print(f"   🔒 Language: {language}")
+        
+        # Call LLM to extract tasks
+        tasks_response = llm_client.extract_tasks(
+            subject=subject,
+            mail_summary=mail_summary,
+            extended_summary=extended_summary,
+            summary_attachments=summary_attachments,
+            language=language
+        )
+        
+        # Convert TaskType enum values to strings for storage
+        list_of_tasks = [task.value for task in tasks_response.list_of_tasks]
+        
+        # Update state with extracted tasks
+        state["list_of_tasks"] = list_of_tasks
+        
+        print(f"✅ [TASKS_EXTRACTOR] Tasks extracted successfully")
+        print(f"   📋 Tasks: {list_of_tasks}")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [TASKS_EXTRACTOR] Error in task extraction: {e}")
+        # Set empty list on error
+        state["list_of_tasks"] = []
+        return state
+
+
+def info_reader_node(state):
+    """
+    Reader for INFO_REQUESTED_TASK - extracts key entities only.
+    Does NOT handle appointment-specific subcategories.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Updated state with key_entities
+    """
+    try:
+        print(f"📖 [INFO_READER] Starting email content analysis for INFO_REQUESTED_TASK...")
+        
+        # Get required data from state
+        filtered_body = state.get("email_body", "")
+        summary_attachments = state.get("summary_attachments")
+        language = state.get("language", "ITA")
+        
+        print(f"📋 [INFO_READER] Analysis parameters:")
+        print(f"   📄 Body length: {len(filtered_body)} chars")
+        print(f"   📎 Attachments summary: {'Yes' if summary_attachments else 'No'}")
+        print(f"   🔒 Language: {language}")
+        
+        if not filtered_body or not filtered_body.strip():
+            print(f"⚠️ [INFO_READER] Empty email body, using default analysis")
+            state["key_entities"] = {
+                "dates": [],
+                "locations": [],
+                "people": [],
+                "organizations": [],
+                "requests": [],
+                "actions": [],
+                "amounts": [],
+                "documents": [],
+                "other_info": []
+            }
+            return state
+        
+        # Standard email analysis - extract only key_entities
+        reader_response = llm_client.read_email(
+            filtered_body, 
+            summary_attachments or "", 
+            language
+        )
+        
+        # Update state with analysis results
+        state["key_entities"] = reader_response.key_entities
+        
+        print(f"✅ [INFO_READER] Email analysis completed successfully")
+        print(f"   📊 Entities extracted: {len(reader_response.key_entities)} categories")
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ [INFO_READER] Error in email analysis: {e}")
+        state["key_entities"] = {
+            "dates": [],
+            "locations": [],
+            "people": [],
+            "organizations": [],
+            "requests": [],
+            "actions": [],
+            "amounts": [],
+            "documents": [],
+            "other_info": []
+        }
+        return state
+
+
+def appointment_router_node(state):
+    """
+    Router node for MANAGE_APPOINTMENT_TASK flow.
+    Routes to appropriate appointment handler based on subcategory.
+    The actual routing logic is in graph.py.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        State unchanged (routing done in graph)
+    """
+    subcategory = state.get("subcategory", "")
+    print(f"📅 [APPOINTMENT_ROUTER] Routing appointment flow for subcategory: {subcategory}")
+    return state
+
+
+def task_merger_node(state):
+    """
+    Merge point for parallel task execution branches.
+    Both INFO_REQUESTED_TASK and MANAGE_APPOINTMENT_TASK branches converge here.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        State unchanged - prepares for WRITER
+    """
+    print(f"🔀 [TASK_MERGER] Merging parallel task execution branches...")
+    
+    list_of_tasks = state.get("list_of_tasks", [])
+    print(f"   📋 Tasks executed: {list_of_tasks}")
+    
+    # Log what we have from each branch
+    if "INFO_REQUESTED_TASK" in list_of_tasks:
+        key_entities = state.get("key_entities", {})
+        chunked_info = state.get("chunked_company_informations")
+        print(f"   📊 INFO branch: key_entities={len(key_entities)} cats, company_info={'Yes' if chunked_info else 'No'}")
+    
+    if "MANAGE_APPOINTMENT_TASK" in list_of_tasks:
+        scheduled = state.get("appointment_scheduled")
+        event_code = state.get("appointment_event_code")
+        print(f"   📅 APPOINTMENT branch: scheduled={scheduled}, event_code={event_code}")
+    
+    print(f"✅ [TASK_MERGER] Merge completed - proceeding to WRITER")
+    return state
+
+
 def reader_node(state):
     """
     Extract key entities and determine if email needs response using LLM.
@@ -1344,11 +1516,9 @@ def reader_node(state):
             
             # Update state with analysis results
             state["key_entities"] = reader_response.key_entities
-            state["needs_response"] = reader_response.needs_response
             
             print(f"✅ [READER] Email analysis completed successfully")
             print(f"   📊 Entities extracted: {len(reader_response.key_entities)} categories")
-            print(f"   💬 Needs response: {reader_response.needs_response}")
         
         return state
         
@@ -1369,7 +1539,6 @@ def reader_node(state):
             "documents": [],
             "other_info": []
         }
-        state["needs_response"] = True  # Default to True to be safe
         return state
 
 
@@ -1640,14 +1809,6 @@ def cancellation_node(state):
         Updated state with cancellation results or AutomationExecutedResponse if event_code invalid
     """
     print(f"❌ [CANCELLATION] Processing appointment cancellation")
-    
-    # Extract necessary information from state
-    extracted_info = state.get("extracted_info", {})
-    message_id = extracted_info.get("message_id")
-    thread_id = extracted_info.get("thread_id")
-    category = state.get("category")
-    subcategory = state.get("subcategory")
-    mail_summary = state.get("mail_summary", "")
 
     # Extract event_code from response
     event_code = state.get("cancellation_event_code")
