@@ -39,15 +39,14 @@ class SubscriptionServiceController:
         except Exception as e:
             raise DatabaseException(operation=f"aggiornamento configurazione: {str(e)}")
         
-    def get_services_by_subscription(self, subscription_id: str, email: str):
-     
-        if not subscription_id or not email:
-            raise MissingFieldException(fields=["subscription_id", "email"])
+    def get_services_by_subscription(self, subscription_id: str):
+        if not subscription_id:
+            raise MissingFieldException(fields=["subscription_id"])
         
         try:
-            services = self.subscription_service_dao.get_services_by_subscription(subscription_id, email)
+            services = self.subscription_service_dao.get_services_by_subscription(subscription_id)
             if not services:
-                    raise NotFoundException(detail="Nessun servizio trovato per questa sottoscrizione e email")
+                raise NotFoundException(detail=f"Nessun servizio trovato per subscription_id={subscription_id}")
             return services
         except APIException:
             raise

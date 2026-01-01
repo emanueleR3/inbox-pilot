@@ -629,20 +629,21 @@ def update_information(
 
 
 @router.get(
-    "/get_subscription_service/{subscription_id}/{email}",
-    summary="Recupera i servizi associati a una sottoscrizione",
+    "/get_subscription_service/{subscription_id}",
+    summary="Recupera tutti i servizi associati a una sottoscrizione",
     description=(
-        "Restituisce tutti i record della tabella `subscription_services` collegati alla sottoscrizione indicata. "
-        "Il contenuto restituito varia in base al provider del servizio (Google, Microsoft o provider personalizzato IMAP)."
+        "Restituisce una lista di tutti i record della tabella `subscription_services` collegati alla sottoscrizione indicata. "
+        "Il contenuto restituito varia in base al provider del servizio (Google, Microsoft o provider personalizzato IMAP). "
+        "\n\nL'endpoint ritorna tutti i servizi (email) associati alla subscription_id specificata."
     ),
     responses={
         200: {
-            "description": "Servizi trovati",
+            "description": "Lista dei servizi associati alla sottoscrizione",
             "content": {
                 "application/json": {
                     "examples": {
-                        "google": {
-                            "summary": "Servizio Google",
+                        "multiple_services": {
+                            "summary": "Subscription con più servizi (Google e Microsoft)",
                             "value": [
                                 {
                                     "email": "user@gmail.com",
@@ -669,12 +670,7 @@ def update_information(
                                     "microsoft_expiration_datetime_inbound": None,
                                     "microsoft_expiration_datetime_outbound": None,
                                     "oauth_user_id": None
-                                }
-                            ]
-                        },
-                        "microsoft": {
-                            "summary": "Servizio Microsoft",
-                            "value": [
+                                },
                                 {
                                     "email": "user@outlook.com",
                                     "email_provider": "microsoft",
@@ -703,8 +699,8 @@ def update_information(
                                 }
                             ]
                         },
-                        "imap": {
-                            "summary": "Servizio IMAP personalizzato",
+                        "single_imap_service": {
+                            "summary": "Subscription con un solo servizio IMAP",
                             "value": [
                                 {
                                     "email": "user@custommail.com",
@@ -738,9 +734,31 @@ def update_information(
                 }
             }
         },
-        404: {"description": "Nessun servizio associato trovato"},
-        500: {"description": "Errore interno del server"}
+        400: {
+            "description": "Parametri mancanti",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Campi richiesti mancanti: subscription_id"}
+                }
+            }
+        },
+        404: {
+            "description": "Nessun servizio associato trovato per la subscription_id specificata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Nessun servizio trovato per subscription_id=xxx"}
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore database durante: recupero servizi"}
+                }
+            }
+        }
     }
 )
-async def get_services_by_subscription(subscription_id: str, email: str):
-    return controller.get_services_by_subscription(subscription_id, email)
+async def get_services_by_subscription(subscription_id: str):
+    return controller.get_services_by_subscription(subscription_id)

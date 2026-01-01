@@ -589,20 +589,19 @@ class SubscriptionServiceDAO:
             print(f"Errore nel recupero delle credenziali Microsoft per email {email}: {str(e)}")
             return None
 
-    def get_services_by_subscription(self, subscription_id: str, email: str) -> SubscriptionServiceRead | None:
+    def get_services_by_subscription(self, subscription_id: str) -> List[SubscriptionServiceRead]:
         resp = (
             self.supabase
             .table("subscription_services")
             .select("*")
             .eq("subscription_id", subscription_id)
-            .eq("email", email)
             .execute()
         )
 
         if not resp.data:
-            return None
+            return []
 
-        return SubscriptionServiceRead(**resp.data[0])
+        return [SubscriptionServiceRead(**service) for service in resp.data]
 
     def update_qdrant_collection(self, service_id: str, collection_name: str) -> bool:
         """
