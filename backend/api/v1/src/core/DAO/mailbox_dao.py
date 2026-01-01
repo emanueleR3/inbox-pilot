@@ -42,10 +42,6 @@ class MailboxDAO:
         include_spam_trash: bool = False,
         query: Optional[str] = None
     ) -> list[EmailThread]:
-        """
-        Recupera i thread di email da Gmail API.
-        Include automaticamente i draft associati ai thread.
-        """
         decrypted_token = decrypt_token(token, "token")
         
         headers = {

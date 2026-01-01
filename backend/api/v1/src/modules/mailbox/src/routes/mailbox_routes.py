@@ -424,10 +424,4 @@ async def get_email_threads(
         }
     )
 ):
-    """
-    Recupera i thread di conversazioni email dalla casella di posta.
-    
-    Supporta Gmail, Microsoft Outlook e IMAP con un'interfaccia unificata.
-    Include automaticamente i draft associati ai thread.
-    """
     return await controller.get_email_threads(request_data)
