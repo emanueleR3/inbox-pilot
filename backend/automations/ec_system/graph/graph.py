@@ -526,8 +526,8 @@ def create_email_classification_graph():
         }
     )
 
-    # INFO_READER always converges to TASK_MERGER
-    graph.add_edge(NodeNames.INFO_READER, NodeNames.TASK_MERGER)
+    # INFO branch: INFO_READER -> EXTRACTOR_COMPANY_INFO -> TASK_MERGER
+    graph.add_edge(NodeNames.INFO_READER, NodeNames.EXTRACTOR_COMPANY_INFO)
     
     # APPOINTMENT_ROUTER routes to specialized READER based on subcategory
     def route_appointment_by_subcategory(state):
@@ -558,8 +558,45 @@ def create_email_classification_graph():
         }
     )
     
-    # TASK_MERGER → WRITER
-    graph.add_edge(NodeNames.TASK_MERGER, NodeNames.EXTRACTOR_COMPANY_INFO)
+    # TASK_MERGER is a barrier: only proceed once all required branches finished.
+    def should_continue_after_task_merger(state):
+        tasks = state.get("list_of_tasks", []) or []
+        high_priority = state.get("high_priority_email", False)
+
+        has_info_task = "INFO_REQUESTED_TASK" in tasks
+        has_appointment_task = "MANAGE_APPOINTMENT_TASK" in tasks and not high_priority
+
+        info_done = (not has_info_task) or bool(state.get("info_task_done"))
+
+        if not has_appointment_task:
+            appointment_done = True
+        else:
+            # If subcategory isn't appointment-related, the appointment task is effectively a no-op.
+            subcategory = state.get("subcategory", "")
+            appointment_subcategories = {
+                "REQUEST_APPOINTMENT",
+                "CONFIRM_APPOINTMENT",
+                "REQUEST_APPOINTMENT_CHANGE",
+                "CANCEL_APPOINTMENT",
+            }
+            appointment_done = (subcategory not in appointment_subcategories) or bool(state.get("appointment_task_done"))
+
+        if info_done and appointment_done:
+            return NodeNames.WRITER
+
+        print(
+            f"⏳ [TASK_MERGER] Waiting for branches: info_done={info_done}, appointment_done={appointment_done}"
+        )
+        return END
+
+    graph.add_conditional_edges(
+        NodeNames.TASK_MERGER,
+        should_continue_after_task_merger,
+        {
+            NodeNames.WRITER: NodeNames.WRITER,
+            END: END,
+        },
+    )
     
     # Conditional logic for Reader node based on subcategory
     def should_continue_after_reader(state):
@@ -688,7 +725,7 @@ def create_email_classification_graph():
                 state["automation_executed"] = True
                 return END
             else:
-                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to Extractor Company Info")
+                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to TASK_MERGER")
                 return NodeNames.TASK_MERGER
             
         # Case 2: book_appointment was called (scheduled is not None and proposed_slots is None)
@@ -696,7 +733,7 @@ def create_email_classification_graph():
             print(f"📅 [RESCHEDULER] Tool reschedule_appointment called - checking scheduled status")
             
             if scheduled:
-                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code} - Routing to Extractor Company Info")
+                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code} - Routing to TASK_MERGER")
                 return NodeNames.TASK_MERGER
             else:
                 state["status"] = "APPOINTMENT_NOT_SCHEDULED"
@@ -737,7 +774,7 @@ def create_email_classification_graph():
                 state["automation_executed"] = True
                 return END
             else:
-                print(f"✅ [SCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to Extractor Company Info")
+                print(f"✅ [SCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to TASK_MERGER")
                 return NodeNames.TASK_MERGER
             
         # Case 2: book_appointment was called (scheduled is not None and proposed_slots is None)
@@ -745,7 +782,7 @@ def create_email_classification_graph():
             print(f"📅 [SCHEDULER] Tool book_appointment called - checking scheduled status")
             
             if scheduled:
-                print(f"✅ [SCHEDULER] Appointment successfully scheduled - event_code: {event_code} - Routing to Extractor Company Info")
+                print(f"✅ [SCHEDULER] Appointment successfully scheduled - event_code: {event_code} - Routing to TASK_MERGER")
                 return NodeNames.TASK_MERGER
             else:
                 state["status"] = "APPOINTMENT_NOT_SCHEDULED"
@@ -785,17 +822,25 @@ def create_email_classification_graph():
 
 
     def should_continue_after_extractor_company_info(state):
+        """Route after company info extraction.
+
+        In the parallel tasks flow, company info extraction is part of the INFO
+        branch and must converge to TASK_MERGER.
         """
-        Check extractor company info results and route to WRITER.
-        """
+        tasks = state.get("list_of_tasks", []) or []
+        in_tasks_flow = "INFO_REQUESTED_TASK" in tasks
+
         if state.get("status") == "COMPANY_INFO_EXTRACTION_FAILED":
-            return END
-        return NodeNames.WRITER
+            # In tasks flow, allow other tasks (e.g., appointment) to continue.
+            return NodeNames.TASK_MERGER if in_tasks_flow else END
+
+        return NodeNames.TASK_MERGER if in_tasks_flow else NodeNames.WRITER
 
     graph.add_conditional_edges(
         NodeNames.EXTRACTOR_COMPANY_INFO,
         should_continue_after_extractor_company_info,
         {
+            NodeNames.TASK_MERGER: NodeNames.TASK_MERGER,
             NodeNames.WRITER: NodeNames.WRITER,
             END: END
         }

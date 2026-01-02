@@ -74,6 +74,9 @@ class EmailState(TypedDict):
     key_entities: Annotated[Optional[dict], _merge_key_entities]  # Key entities extracted by Reader/InfoReader (merge-safe)
     needs_response: Optional[bool]  # Flag indicating if email requires a response
     automation_executed: bool  # Flag indicating if automation was executed
+    # Parallel task barrier flags
+    info_task_done: Optional[bool]  # INFO_REQUESTED_TASK branch completed
+    appointment_task_done: Optional[bool]  # MANAGE_APPOINTMENT_TASK branch completed
     # Appointment-specific fields (for REQUEST_APPOINTMENT subcategory)
     appointment_title: Optional[str]  # Title of the appointment
     appointment_date: Optional[str]  # Date and time of the appointment (YYYY-MM-DDThh:mm:ss)
@@ -105,7 +108,7 @@ class EmailState(TypedDict):
     # Extract info and write email
     guidelines: Optional[List[str]]  # Guidelines for writing the email
     written_email_body: Optional[str]  # Body of the email to write
-    chunked_company_informations: Optional[dict]  # Filtered company information  TODO decidere se dict, list o string
+    chunked_company_informations: Optional[dict]  # Filtered company information
     correctness_score: Optional[float]  # Correctness score of the email
     needs_review: Optional[bool]  # Flag indicating if email needs review
     low_confidence_classification: Optional[bool]  # Flag for low confidence classification

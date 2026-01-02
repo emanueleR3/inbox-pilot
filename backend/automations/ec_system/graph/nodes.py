@@ -1495,6 +1495,11 @@ def reader_node(state):
             updates["already_scheduled"] = confirm_response.already_scheduled
             updates["confirm_event_code"] = confirm_response.event_code
             updates["needs_response"] = confirm_response.needs_response
+
+            # If the appointment is already scheduled, the appointment task is effectively complete
+            # (no scheduler/rescheduler/cancellation will run).
+            if confirm_response.already_scheduled:
+                updates["appointment_task_done"] = True
             
             print(f"✅ [READER] Confirm appointment analysis completed successfully")
             print(f"   📅 Title: {confirm_response.title_of_event}")
@@ -1638,6 +1643,7 @@ def scheduler_node(state):
             "appointment_proposed_slots": scheduler_response.proposed_slots,
             "appointment_favorite_day_unavailable": scheduler_response.favorite_day_unavailable,
             "scheduled_event_details": scheduler_response.event_details,
+            "appointment_task_done": True,
         }
         
         print(f"✅ [SCHEDULER] Scheduling completed successfully")
@@ -1658,6 +1664,7 @@ def scheduler_node(state):
             "appointment_event_code": None,
             "appointment_proposed_slots": None,
             "appointment_favorite_day_unavailable": False,
+            "appointment_task_done": True,
         }
 
 
@@ -1681,10 +1688,10 @@ def rescheduler_node(state):
         # Validate event_code
         if event_code is None:
             print(f"⚠️ [RESCHEDULER] Missing event_code")
-            return {"status": "EVENT_CODE_MISSING"}
+            return {"status": "EVENT_CODE_MISSING", "appointment_task_done": True}
         elif isinstance(event_code, str) and len(event_code) != 6:
             print(f"⚠️ [RESCHEDULER] Invalid event_code: {event_code}")
-            return {"status": "EVENT_CODE_INVALID"}
+            return {"status": "EVENT_CODE_INVALID", "appointment_task_done": True}
 
         event_response = get_scheduled_event_by_code(event_code)
             
@@ -1693,6 +1700,7 @@ def rescheduler_node(state):
                 "status": "EVENT_CODE_NOT_FOUND",
                 "human_response": True,
                 "automation_executed": True,
+                "appointment_task_done": True,
             }
 
 
@@ -1779,6 +1787,7 @@ def rescheduler_node(state):
         updates["appointment_proposed_slots"] = rescheduler_response.proposed_slots
         updates["appointment_favorite_day_unavailable"] = rescheduler_response.favorite_day_unavailable
         updates["scheduled_event_details"] = rescheduler_response.event_details
+        updates["appointment_task_done"] = True
         
         print(f"✅ [RESCHEDULER] Rescheduling completed successfully")
         print(f"   ✓ Scheduled: {rescheduler_response.scheduled}")
@@ -1793,7 +1802,7 @@ def rescheduler_node(state):
     except Exception as e:
         print(f"❌ [RESCHEDULER] Error in appointment rescheduling: {e}")
         # TODO notification and save to db
-        return {}
+        return {"appointment_task_done": True}
 
         
 def cancellation_node(state):
@@ -1815,10 +1824,10 @@ def cancellation_node(state):
     # Validate event_code
     if event_code is None:
         print(f"⚠️ [CANCELLATION] Missing event_code")
-        return {"status": "EVENT_CODE_MISSING"}
+        return {"status": "EVENT_CODE_MISSING", "appointment_task_done": True}
     elif isinstance(event_code, str) and len(event_code) != 6:
         print(f"⚠️ [CANCELLATION] Invalid event_code: {event_code}")
-        return {"status": "EVENT_CODE_INVALID"}
+        return {"status": "EVENT_CODE_INVALID", "appointment_task_done": True}
     
     # Check if event_code is present
     if event_code and isinstance(event_code, str) and len(event_code) == 6:
@@ -1834,6 +1843,7 @@ def cancellation_node(state):
                     "status": "EVENT_CODE_NOT_FOUND",
                     "human_response": True,
                     "automation_executed": True,
+                    "appointment_task_done": True,
                 }
             
             event_data = event_response
@@ -1851,6 +1861,7 @@ def cancellation_node(state):
                     "status": "CALENDAR_SERVICE_NOT_FOUND",
                     "human_response": True,
                     "automation_executed": True,
+                    "appointment_task_done": True,
                 }
             
             calendar_provider = service_data.get("calendar_provider")
@@ -1873,23 +1884,25 @@ def cancellation_node(state):
             
             if db_delete_response and calendar_deleted:
                 print(f"   ✅ Event {event_code} successfully deleted")
-                return {"status": "EVENT_DELETED"}
+                return {"status": "EVENT_DELETED", "appointment_task_done": True}
             else:
                 return {
                     "status": "EVENT_DELETION_FAILED",
                     "human_response": True,
                     "automation_executed": True,
+                    "appointment_task_done": True,
                 }
                 
         except Exception as e:
             #TODO: Send a notification and save in DB
             print(f"   ❌ Error processing cancellation: {e}")
-            return {}
+            return {"appointment_task_done": True}
     else:
         return {
             "status": "EVENT_CODE_NOT_FOUND",
             "human_response": True,
             "automation_executed": True,
+            "appointment_task_done": True,
         }
 
 def extractor_company_info_node(state):
@@ -1976,7 +1989,10 @@ def extractor_company_info_node(state):
                         qdrant_collection = None  # Force fallback
                     else:
                         print(f"✅ [EXTRACTOR_COMPANY_INFO] Company info extracted from Qdrant successfully")
-                        return {"chunked_company_informations": chunked_company_informations}
+                        return {
+                            "chunked_company_informations": chunked_company_informations,
+                            "info_task_done": True,
+                        }
                         
             except Exception as qdrant_error:
                 print(f"⚠️ [EXTRACTOR_COMPANY_INFO] Qdrant RAG failed: {str(qdrant_error)}, falling back to information field")
@@ -1997,6 +2013,7 @@ def extractor_company_info_node(state):
                 "human_response": True,
                 "automation_executed": True,
                 "status": "COMPANY_INFO_EXTRACTION_FAILED",
+                "info_task_done": True,
             }
         
         # Step 5: Estrai informazioni rilevanti tramite LLM
@@ -2017,10 +2034,11 @@ def extractor_company_info_node(state):
                 "human_response": True,
                 "automation_executed": True,
                 "status": "COMPANY_INFO_EXTRACTION_FAILED",
+                "info_task_done": True,
             }
 
         print(f"✅ [EXTRACTOR_COMPANY_INFO] Company information extracted successfully")
-        return {"chunked_company_informations": chunked_company_informations}
+        return {"chunked_company_informations": chunked_company_informations, "info_task_done": True}
         
     except Exception as e:
         print(f"❌ [EXTRACTOR_COMPANY_INFO] Error extracting company information: {str(e)}")
@@ -2028,6 +2046,7 @@ def extractor_company_info_node(state):
             "human_response": True,
             "status": "COMPANY_INFO_EXTRACTION_FAILED",
             "automation_executed": True,
+            "info_task_done": True,
         }
 
 def writer_node(state):
