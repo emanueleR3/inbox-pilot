@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Query, HTTPException, status
+from typing import Optional
+from urllib.parse import urlencode
 from src.core.dependecy import get_current_user
 from src.modules.subscription_service.src.controllers.subscription_service_controller import SubscriptionServiceController
 from src.modules.subscription_service.src.utils.utils import forward_post, forward_get
@@ -269,6 +271,7 @@ def static_quiz(
                                 "max_turns": 30,
                                 "extracted_markdown": "# Profilo Aziendale\n\n## Servizi\n...",
                                 "error": None,
+                                "save_started": True,
                                 "conversation_log": [
                                     "[2024-01-01T12:00:00] [MODIFY] L'utente ha cambiato l'orario da 9-18 a 8-17"
                                 ]
@@ -434,6 +437,205 @@ async def finish_quiz(
         ),
 ):
     return await forward_post("/finish", req)
+
+
+@router.post(
+    "/quiz/save",
+    summary="Avvia il salvataggio del contesto in background",
+    description="""
+    Avvia la pipeline di salvataggio del contesto (pulizia JSON, chunking, embedding e upload su Qdrant) in background.
+
+    Questo endpoint evita di dover inviare un messaggio tipo "OK, salva" in chat: avvia direttamente la pipeline usando i dati
+    raccolti fino a quel momento nella sessione quiz.
+    """,
+    responses={
+        200: {
+            "description": "Pipeline avviata con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "started": True,
+                        "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                        "email": "user@example.it",
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Impossibile avviare il salvataggio",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_session_id": {
+                            "summary": "Session ID mancante",
+                            "value": {"detail": "Session ID è richiesto"},
+                        },
+                        "already_running": {
+                            "summary": "Pipeline già in esecuzione",
+                            "value": {"detail": "Pipeline già in esecuzione per questa sessione"},
+                        },
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Sessione non trovata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Sessione non trovata"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante l'avvio del salvataggio"}
+                }
+            },
+        },
+    },
+)
+async def save_quiz_context(
+    req: dict = Body(
+        ...,
+        example={
+            "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+        },
+        description="Parametri per avviare il salvataggio del contesto per una sessione quiz",
+    ),
+):
+    return await forward_post("/save", req)
+
+
+@router.get(
+    "/quiz/save-status",
+    summary="Monitora lo stato del salvataggio del contesto",
+    description="""
+    Recupera lo stato della pipeline di salvataggio del contesto (background).
+
+    In Kubernetes con più pod lo stato è persistito su DB (quiz_sessions), quindi è sempre recuperabile.
+    """,
+    responses={
+        200: {
+            "description": "Stato recuperato con successo",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "running": {
+                            "summary": "Pipeline in esecuzione",
+                            "value": {
+                                "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                                "email": "user@example.it",
+                                "phase": "EMBEDDING",
+                                "actual_step": 7,
+                                "total_steps": 9,
+                                "started_at": "2026-01-02T10:30:00+00:00",
+                                "updated_at": "2026-01-02T10:32:15+00:00",
+                                "completed_at": None,
+                                "error": None,
+                                "details": {"message": "Embedding di 45 chunks in corso...", "chunks_count": 45},
+                                "run_id": "f1a2b3c4-d5e6-4a1b-9c2d-1234567890ab",
+                                "worker": "pod-abc123:1234",
+                                "is_running": True,
+                                "is_completed": False,
+                                "is_failed": False,
+                                "save_status": "running",
+                            },
+                        },
+                        "idle": {
+                            "summary": "Pipeline non avviata (idle)",
+                            "value": {
+                                "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                                "email": "user@example.it",
+                                "phase": "idle",
+                                "actual_step": 0,
+                                "total_steps": 9,
+                                "started_at": None,
+                                "updated_at": None,
+                                "completed_at": None,
+                                "error": None,
+                                "details": {},
+                                "run_id": None,
+                                "worker": None,
+                                "is_running": False,
+                                "is_completed": False,
+                                "is_failed": False,
+                                "save_status": "idle",
+                            },
+                        },
+                        "failed": {
+                            "summary": "Pipeline fallita",
+                            "value": {
+                                "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                                "email": "user@example.it",
+                                "phase": "UPLOADING_TO_QDRANT",
+                                "actual_step": 8,
+                                "total_steps": 9,
+                                "started_at": "2026-01-02T10:30:00+00:00",
+                                "updated_at": "2026-01-02T10:41:00+00:00",
+                                "completed_at": "2026-01-02T10:41:00+00:00",
+                                "error": "Upload su Qdrant fallito",
+                                "details": {
+                                    "message": "Upload su Qdrant: quiz_updated_user_example_it_20260102_103000",
+                                    "collection_name": "quiz_updated_user_example_it_20260102_103000",
+                                },
+                                "run_id": "f1a2b3c4-d5e6-4a1b-9c2d-1234567890ab",
+                                "worker": "pod-abc123:1234",
+                                "is_running": False,
+                                "is_completed": False,
+                                "is_failed": True,
+                                "save_status": "failed",
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Parametri mancanti",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "session_id o email è richiesto"}
+                }
+            },
+        },
+        404: {
+            "description": "Sessione non trovata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Sessione non trovata"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante il recupero dello stato di salvataggio"}
+                }
+            },
+        },
+    },
+)
+async def get_quiz_save_status(
+    session_id: Optional[str] = Query(None, description="ID sessione quiz"),
+    email: Optional[str] = Query(None, description="Email del servizio"),
+):
+    if not session_id and not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="session_id o email è richiesto",
+        )
+
+    params: dict[str, str] = {}
+    if session_id:
+        params["session_id"] = session_id
+    if email:
+        params["email"] = email
+
+    query = urlencode(params)
+    return await forward_get(f"/save-status?{query}")
 
 
 @router.get(
