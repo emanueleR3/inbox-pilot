@@ -6,7 +6,7 @@ state machine pattern instead of LangGraph.
 """
 
 from fastapi import HTTPException, status
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from api.services.quiz_service_v2 import (
     create_session_for_email,
@@ -18,6 +18,8 @@ from api.services.quiz_service_v2 import (
     start_quiz,
     submit_answer,
     force_finish_quiz,
+    trigger_save_pipeline,
+    get_save_pipeline_status,
 )
 
 
@@ -238,4 +240,85 @@ class QuizControllerV2:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Errore durante il recupero delle sessioni: {str(e)}"
+            )
+
+    async def save_context(self, session_id: str) -> Dict[str, Any]:
+        """
+        Manually trigger the save pipeline for a quiz session.
+        
+        This allows frontend to trigger save without relying on 
+        chat message interpretation.
+        
+        Args:
+            session_id: The session ID
+            
+        Returns:
+            Dictionary with started status
+        """
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Session ID è richiesto"
+            )
+        
+        try:
+            result = await trigger_save_pipeline(session_id)
+            
+            if not result.get("started"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=result.get("error", "Impossibile avviare il salvataggio")
+                )
+            
+            return result
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Errore durante l'avvio del salvataggio: {str(e)}"
+            )
+    
+    def get_save_status(
+        self, 
+        session_id: Optional[str] = None, 
+        email: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get the status of a save pipeline operation from database.
+        
+        Multi-pod safe: reads from quiz_sessions table.
+        
+        Args:
+            session_id: The session ID (optional)
+            email: User email (optional, used if session_id not provided)
+            
+        Returns:
+            Dictionary with save status
+        """
+        if not session_id and not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Session ID o email è richiesto"
+            )
+        
+        try:
+            status_data = get_save_pipeline_status(session_id=session_id, email=email)
+            
+            if not status_data:
+                # Session not found in DB
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Sessione non trovata"
+                )
+            
+            return status_data
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Errore durante il recupero dello stato di salvataggio: {str(e)}"
             )

@@ -408,28 +408,27 @@ async def submit_answer(session_id: str, user_answer: str) -> dict:
         state["is_done"] = True
         await persist_quiz_result(state)
         
-        # If pending_context_save (qdrant user), update JSON and rebuild collection
+        # If pending_context_save (qdrant user), start background save pipeline
         if state.get("pending_context_save") and state.get("has_qdrant_collection"):
-            try:
-                from quiz.flow.context_updater import finalize_context_update
-                
-                conversation_log = state.get("conversation_log", [])
-                final_markdown = state.get("final_markdown", "")
-                email = state["email"]
-                
-                print(f"🔄 [QUIZ_SERVICE] Triggering context update for {email}...")
-                success = finalize_context_update(email, conversation_log, final_markdown)
-                
-                if success:
-                    print(f"✅ [QUIZ_SERVICE] Context update completed for {email}")
-                else:
-                    print(f"⚠️ [QUIZ_SERVICE] Context update failed for {email}")
-            except Exception as e:
-                print(f"❌ [QUIZ_SERVICE] Error in context update: {e}")
-
-            # Persist final state (completed) to quiz_sessions.
+            from api.services.save_pipeline import run_save_pipeline_background
+            
+            conversation_log = state.get("conversation_log", [])
+            final_markdown = state.get("final_markdown", "")
+            email = state["email"]
+            
+            print(f"🚀 [QUIZ_SERVICE] Starting background save pipeline for {email}...")
+            run_save_pipeline_background(
+                session_id=session_id,
+                email=email,
+                conversation_log=conversation_log,
+                final_markdown=final_markdown
+            )
+            
+            # Return immediately - pipeline runs in background
             _save_quiz_session_state(session_id, state)
-            return _build_response(state)
+            response = _build_response(state)
+            response["save_started"] = True
+            return response
     
     return _build_response(state)
 
@@ -625,3 +624,90 @@ async def get_service_business_field(email: str) -> Optional[str]:
     if customer:
         return customer.get("business_field")
     return None
+
+
+async def trigger_save_pipeline(session_id: str) -> dict:
+    """
+    Manually trigger the save pipeline for a quiz session.
+    
+    This is used when the frontend wants to trigger save without 
+    relying on chat message interpretation (e.g., a save button).
+    
+    Args:
+        session_id: The quiz session ID
+        
+    Returns:
+        Dictionary with started status and error if any
+    """
+    from api.services.save_pipeline import run_save_pipeline_background
+    
+    session_id = _normalize_session_id(session_id)
+    row = _get_quiz_session_row(session_id)
+    
+    if not row:
+        return {"started": False, "error": "Sessione non trovata"}
+    
+    email = row.get("email")
+    has_qdrant = row.get("has_qdrant_collection") or row.get("has_qdrant")
+    
+    if not has_qdrant:
+        return {"started": False, "error": "L'utente non ha una collezione Qdrant (scraping non effettuato)"}
+    
+    conversation_log = row.get("conversation_log") or []
+    final_markdown = row.get("final_markdown") or ""
+    
+    if not final_markdown:
+        return {"started": False, "error": "Nessun markdown finale da salvare"}
+    
+    # Mark the session as confirmed and done
+    state = _row_to_state(row)
+    state["context_confirmed"] = True
+    state["is_done"] = True
+    state["pending_context_save"] = True
+    _save_quiz_session_state(session_id, state)
+    
+    # Persist the final result
+    await persist_quiz_result(state)
+    
+    # Start background pipeline
+    started = run_save_pipeline_background(
+        session_id=session_id,
+        email=email,
+        conversation_log=conversation_log,
+        final_markdown=final_markdown
+    )
+    
+    if started:
+        return {"started": True, "session_id": session_id, "email": email}
+    else:
+        return {"started": False, "error": "Pipeline già in esecuzione per questa sessione"}
+
+
+def get_save_pipeline_status(session_id: Optional[str] = None, email: Optional[str] = None) -> Optional[dict]:
+    """
+    Get the status of a save pipeline operation from database.
+    
+    This reads from quiz_sessions table, making it multi-pod safe.
+    
+    Args:
+        session_id: The quiz session ID (optional)
+        email: User email (optional, used if session_id not provided)
+        
+    Returns:
+        Status dictionary or None if not found
+    """
+    from api.services.save_pipeline import (
+        get_save_status_from_db,
+        get_save_status_from_db_by_email,
+        db_row_to_status_dict
+    )
+    
+    if session_id:
+        session_id = _normalize_session_id(session_id)
+        row = get_save_status_from_db(session_id)
+    elif email:
+        row = get_save_status_from_db_by_email(_normalize_email(email))
+    else:
+        return None
+    
+    return db_row_to_status_dict(row)
