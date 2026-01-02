@@ -32,6 +32,7 @@ class EmailState(TypedDict):
     summary_attachments: Optional[str]  # Discursive summary of all attachment contents
     priority_score: Optional[float]  # Category-specific priority score (0.0-1.0)
     key_entities: Optional[dict]  # Key entities extracted by Reader node (dates, locations, requests, etc.)
+    info_key_entities: Optional[dict]  # Key entities extracted by INFO_READER branch (INFO_REQUESTED_TASK)
     needs_response: Optional[bool]  # Flag indicating if email requires a response
     automation_executed: bool  # Flag indicating if automation was executed
     # Appointment-specific fields (for REQUEST_APPOINTMENT subcategory)
