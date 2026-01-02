@@ -1321,6 +1321,8 @@ def reader_node(state):
     """
     try:
         print(f"📖 [READER] Starting email content analysis...")
+
+        updates: dict = {}
         
         # Get required data from state
         filtered_body = state.get("email_body", "")
@@ -1336,7 +1338,7 @@ def reader_node(state):
         
         if not filtered_body or not filtered_body.strip():
             print(f"⚠️ [READER] Empty email body, using default analysis")
-            state["key_entities"] = {
+            updates["key_entities"] = {
                 "dates": [],
                 "locations": [],
                 "people": [],
@@ -1347,8 +1349,8 @@ def reader_node(state):
                 "documents": [],
                 "other_info": []
             }
-            state["needs_response"] = False
-            return state
+            updates["needs_response"] = False
+            return updates
         
         # Check if this is a REQUEST_APPOINTMENT email
         if subcategory == "REQUEST_APPOINTMENT":
@@ -1371,16 +1373,16 @@ def reader_node(state):
             )
             
             # Update state with appointment details
-            state["key_entities"] = appointment_response.key_entities
-            state["appointment_title"] = appointment_response.title_of_event
-            state["appointment_date"] = appointment_response.date
-            state["appointment_duration"] = appointment_response.duration
-            state["appointment_attendees"] = appointment_response.attendees
-            state["appointment_place"] = appointment_response.place
-            state["appointment_notes"] = appointment_response.additional_notes
+            updates["key_entities"] = appointment_response.key_entities
+            updates["appointment_title"] = appointment_response.title_of_event
+            updates["appointment_date"] = appointment_response.date
+            updates["appointment_duration"] = appointment_response.duration
+            updates["appointment_attendees"] = appointment_response.attendees
+            updates["appointment_place"] = appointment_response.place
+            updates["appointment_notes"] = appointment_response.additional_notes
             # REQUEST_APPOINTMENT always needs manual handling, so needs_response is not used
             # but we set it to None for clarity
-            state["needs_response"] = None
+            updates["needs_response"] = None
             
             print(f"✅ [READER] Appointment analysis completed successfully")
             print(f"   📅 Title: {appointment_response.title_of_event}")
@@ -1413,16 +1415,16 @@ def reader_node(state):
             )
             
             # Update state with appointment change details
-            state["key_entities"] = change_response.key_entities
-            state["change_event_code"] = change_response.event_code
-            state["change_new_title"] = change_response.new_title_of_event
-            state["change_new_date"] = change_response.new_date
-            state["change_new_duration"] = change_response.new_duration
-            state["change_new_attendees"] = change_response.new_attendees
-            state["change_new_place"] = change_response.new_place
-            state["change_additional_notes"] = change_response.additional_notes
+            updates["key_entities"] = change_response.key_entities
+            updates["change_event_code"] = change_response.event_code
+            updates["change_new_title"] = change_response.new_title_of_event
+            updates["change_new_date"] = change_response.new_date
+            updates["change_new_duration"] = change_response.new_duration
+            updates["change_new_attendees"] = change_response.new_attendees
+            updates["change_new_place"] = change_response.new_place
+            updates["change_additional_notes"] = change_response.additional_notes
             # REQUEST_APPOINTMENT_CHANGE needs_response is not used
-            state["needs_response"] = None
+            updates["needs_response"] = None
             
             print(f"✅ [READER] Appointment change analysis completed successfully")
             print(f"   🔑 Event code: {change_response.event_code}")
@@ -1456,8 +1458,8 @@ def reader_node(state):
             )
             
             # Update state with cancellation details
-            state["key_entities"] = cancellation_response.key_entities
-            state["cancellation_event_code"] = cancellation_response.event_code
+            updates["key_entities"] = cancellation_response.key_entities
+            updates["cancellation_event_code"] = cancellation_response.event_code
             
             print(f"✅ [READER] Cancellation analysis completed successfully")
             print(f"   🔑 Event code: {cancellation_response.event_code}")
@@ -1483,16 +1485,16 @@ def reader_node(state):
             )
             
             # Update state with confirm appointment details
-            state["key_entities"] = confirm_response.key_entities
-            state["appointment_title"] = confirm_response.title_of_event
-            state["appointment_date"] = confirm_response.date
-            state["appointment_duration"] = confirm_response.duration
-            state["appointment_attendees"] = confirm_response.attendees
-            state["appointment_place"] = confirm_response.place
-            state["appointment_notes"] = confirm_response.additional_notes
-            state["already_scheduled"] = confirm_response.already_scheduled
-            state["confirm_event_code"] = confirm_response.event_code
-            state["needs_response"] = confirm_response.needs_response
+            updates["key_entities"] = confirm_response.key_entities
+            updates["appointment_title"] = confirm_response.title_of_event
+            updates["appointment_date"] = confirm_response.date
+            updates["appointment_duration"] = confirm_response.duration
+            updates["appointment_attendees"] = confirm_response.attendees
+            updates["appointment_place"] = confirm_response.place
+            updates["appointment_notes"] = confirm_response.additional_notes
+            updates["already_scheduled"] = confirm_response.already_scheduled
+            updates["confirm_event_code"] = confirm_response.event_code
+            updates["needs_response"] = confirm_response.needs_response
             
             print(f"✅ [READER] Confirm appointment analysis completed successfully")
             print(f"   📅 Title: {confirm_response.title_of_event}")
@@ -1514,12 +1516,12 @@ def reader_node(state):
             )
             
             # Update state with analysis results
-            state["key_entities"] = reader_response.key_entities
+            updates["key_entities"] = reader_response.key_entities
             
             print(f"✅ [READER] Email analysis completed successfully")
             print(f"   📊 Entities extracted: {len(reader_response.key_entities)} categories")
         
-        return state
+        return updates
         
     except Exception as e:
         print(f"❌ [READER] Error in email analysis: {e}")
@@ -1527,7 +1529,8 @@ def reader_node(state):
         # TODO return error, notification and save to db
 
         # Continue with default values on error
-        state["key_entities"] = {
+        return {
+            "key_entities": {
             "dates": [],
             "locations": [],
             "people": [],
@@ -1537,8 +1540,8 @@ def reader_node(state):
             "amounts": [],
             "documents": [],
             "other_info": []
+            }
         }
-        return state
 
 
 def scheduler_node(state):
@@ -1628,13 +1631,14 @@ def scheduler_node(state):
             favorite_day=favorite_day
         )
         
-        # Update state with scheduling results
-        state["appointment_scheduled"] = scheduler_response.scheduled
-        state["appointment_overlap"] = scheduler_response.overlap
-        state["appointment_event_code"] = scheduler_response.event_code
-        state["appointment_proposed_slots"] = scheduler_response.proposed_slots
-        state["appointment_favorite_day_unavailable"] = scheduler_response.favorite_day_unavailable
-        state["scheduled_event_details"] = scheduler_response.event_details
+        updates = {
+            "appointment_scheduled": scheduler_response.scheduled,
+            "appointment_overlap": scheduler_response.overlap,
+            "appointment_event_code": scheduler_response.event_code,
+            "appointment_proposed_slots": scheduler_response.proposed_slots,
+            "appointment_favorite_day_unavailable": scheduler_response.favorite_day_unavailable,
+            "scheduled_event_details": scheduler_response.event_details,
+        }
         
         print(f"✅ [SCHEDULER] Scheduling completed successfully")
         print(f"   ✓ Scheduled: {scheduler_response.scheduled}")
@@ -1644,17 +1648,17 @@ def scheduler_node(state):
         print(f"   📅 Favorite day unavailable: {scheduler_response.favorite_day_unavailable}")
         print(f"   📋 Event details: {'Yes' if scheduler_response.event_details else 'No'}")
         
-        return state
+        return updates
         
     except Exception as e:
         print(f"❌ [SCHEDULER] Error in appointment scheduling: {e}")
-        # Set default values on error
-        state["appointment_scheduled"] = False
-        state["appointment_overlap"] = False
-        state["appointment_event_code"] = None
-        state["appointment_proposed_slots"] = None
-        state["appointment_favorite_day_unavailable"] = False
-        return state
+        return {
+            "appointment_scheduled": False,
+            "appointment_overlap": False,
+            "appointment_event_code": None,
+            "appointment_proposed_slots": None,
+            "appointment_favorite_day_unavailable": False,
+        }
 
 
 def rescheduler_node(state):
@@ -1677,23 +1681,22 @@ def rescheduler_node(state):
         # Validate event_code
         if event_code is None:
             print(f"⚠️ [RESCHEDULER] Missing event_code")
-            state["status"] = "EVENT_CODE_MISSING"
-            return state
+            return {"status": "EVENT_CODE_MISSING"}
         elif isinstance(event_code, str) and len(event_code) != 6:
             print(f"⚠️ [RESCHEDULER] Invalid event_code: {event_code}")
-            state["status"] = "EVENT_CODE_INVALID"
-            return state
+            return {"status": "EVENT_CODE_INVALID"}
 
         event_response = get_scheduled_event_by_code(event_code)
             
         if not event_response:
-            state["status"] = "EVENT_CODE_NOT_FOUND"
-            state["human_response"] = True
-            state["automation_executed"] = True
-            return state
+            return {
+                "status": "EVENT_CODE_NOT_FOUND",
+                "human_response": True,
+                "automation_executed": True,
+            }
 
 
-        state["status"] = "EVENT_CODE_VALID"
+        updates: dict = {"status": "EVENT_CODE_VALID"}
         
         # Event code is valid, proceed with LLM rescheduling
         print(f"✅ [RESCHEDULER] Valid event_code: {event_code}")
@@ -1768,17 +1771,14 @@ def rescheduler_node(state):
             favorite_day=favorite_day
         )
         
-        # Update state with rescheduling results
-        state["appointment_scheduled"] = rescheduler_response.scheduled
-
+        updates["appointment_scheduled"] = rescheduler_response.scheduled
         if rescheduler_response.scheduled:
-            state["status"] = "EVENT_RESCHEDULED"
-
-        state["appointment_overlap"] = rescheduler_response.overlap
-        state["appointment_event_code"] = rescheduler_response.event_code
-        state["appointment_proposed_slots"] = rescheduler_response.proposed_slots
-        state["appointment_favorite_day_unavailable"] = rescheduler_response.favorite_day_unavailable
-        state["scheduled_event_details"] = rescheduler_response.event_details
+            updates["status"] = "EVENT_RESCHEDULED"
+        updates["appointment_overlap"] = rescheduler_response.overlap
+        updates["appointment_event_code"] = rescheduler_response.event_code
+        updates["appointment_proposed_slots"] = rescheduler_response.proposed_slots
+        updates["appointment_favorite_day_unavailable"] = rescheduler_response.favorite_day_unavailable
+        updates["scheduled_event_details"] = rescheduler_response.event_details
         
         print(f"✅ [RESCHEDULER] Rescheduling completed successfully")
         print(f"   ✓ Scheduled: {rescheduler_response.scheduled}")
@@ -1788,12 +1788,12 @@ def rescheduler_node(state):
         print(f"   📅 Favorite day unavailable: {rescheduler_response.favorite_day_unavailable}")
         print(f"   📋 Event details: {'Yes' if rescheduler_response.event_details else 'No'}")
         
-        return state
+        return updates
         
     except Exception as e:
         print(f"❌ [RESCHEDULER] Error in appointment rescheduling: {e}")
         # TODO notification and save to db
-        return state
+        return {}
 
         
 def cancellation_node(state):
@@ -1815,12 +1815,10 @@ def cancellation_node(state):
     # Validate event_code
     if event_code is None:
         print(f"⚠️ [CANCELLATION] Missing event_code")
-        state["status"] = "EVENT_CODE_MISSING"
-        return state
+        return {"status": "EVENT_CODE_MISSING"}
     elif isinstance(event_code, str) and len(event_code) != 6:
         print(f"⚠️ [CANCELLATION] Invalid event_code: {event_code}")
-        state["status"] = "EVENT_CODE_INVALID"
-        return state
+        return {"status": "EVENT_CODE_INVALID"}
     
     # Check if event_code is present
     if event_code and isinstance(event_code, str) and len(event_code) == 6:
@@ -1832,10 +1830,11 @@ def cancellation_node(state):
             event_response = get_scheduled_event_by_code(event_code)
             
             if not event_response:
-                state["status"] = "EVENT_CODE_NOT_FOUND"
-                state["human_response"] = True
-                state["automation_executed"] = True
-                return state
+                return {
+                    "status": "EVENT_CODE_NOT_FOUND",
+                    "human_response": True,
+                    "automation_executed": True,
+                }
             
             event_data = event_response
             event_automation_id = event_data.get("event_automation_id")
@@ -1848,10 +1847,11 @@ def cancellation_node(state):
             service_data = get_calendar_service_data(service_id)
             
             if not service_data:
-                state["status"] = "CALENDAR_SERVICE_NOT_FOUND"
-                state["human_response"] = True
-                state["automation_executed"] = True
-                return state
+                return {
+                    "status": "CALENDAR_SERVICE_NOT_FOUND",
+                    "human_response": True,
+                    "automation_executed": True,
+                }
             
             calendar_provider = service_data.get("calendar_provider")
             access_token = service_data.get("access_token")
@@ -1873,23 +1873,24 @@ def cancellation_node(state):
             
             if db_delete_response and calendar_deleted:
                 print(f"   ✅ Event {event_code} successfully deleted")
-                state["status"] = "EVENT_DELETED"
-                return state
+                return {"status": "EVENT_DELETED"}
             else:
-                state["status"] = "EVENT_DELETION_FAILED"
-                state["human_response"] = True
-                state["automation_executed"] = True
-                return state
+                return {
+                    "status": "EVENT_DELETION_FAILED",
+                    "human_response": True,
+                    "automation_executed": True,
+                }
                 
         except Exception as e:
             #TODO: Send a notification and save in DB
             print(f"   ❌ Error processing cancellation: {e}")
-            return state
+            return {}
     else:
-        state["status"] = "EVENT_CODE_NOT_FOUND"
-        state["human_response"] = True
-        state["automation_executed"] = True
-        return state
+        return {
+            "status": "EVENT_CODE_NOT_FOUND",
+            "human_response": True,
+            "automation_executed": True,
+        }
 
 def extractor_company_info_node(state):
     """
@@ -1968,14 +1969,14 @@ def extractor_company_info_node(state):
                     )
                     
                     # Update state with extracted information
-                    state['chunked_company_informations'] = extraction_result.chunked_company_informations
+                    chunked_company_informations = extraction_result.chunked_company_informations
                     
-                    if not extraction_result.chunked_company_informations:
+                    if not chunked_company_informations:
                         print(f"⚠️ [EXTRACTOR_COMPANY_INFO] No relevant info extracted from chunks, falling back")
                         qdrant_collection = None  # Force fallback
                     else:
                         print(f"✅ [EXTRACTOR_COMPANY_INFO] Company info extracted from Qdrant successfully")
-                        return state
+                        return {"chunked_company_informations": chunked_company_informations}
                         
             except Exception as qdrant_error:
                 print(f"⚠️ [EXTRACTOR_COMPANY_INFO] Qdrant RAG failed: {str(qdrant_error)}, falling back to information field")
@@ -1992,11 +1993,11 @@ def extractor_company_info_node(state):
         # Step 4: Gestione caso information vuota o non presente
         if not company_information:
             print(f"⚠️ [EXTRACTOR_COMPANY_INFO] Company information not available - sending notification")
-            
-            state["human_response"] = True
-            state["automation_executed"] = True
-            state["status"] = "COMPANY_INFO_EXTRACTION_FAILED"
-            return state
+            return {
+                "human_response": True,
+                "automation_executed": True,
+                "status": "COMPANY_INFO_EXTRACTION_FAILED",
+            }
         
         # Step 5: Estrai informazioni rilevanti tramite LLM
         extraction_result = llm_client.extract_company_info(
@@ -2009,23 +2010,25 @@ def extractor_company_info_node(state):
         )
         
         # Aggiorna lo stato con le informazioni estratte
-        state['chunked_company_informations'] = extraction_result.chunked_company_informations
+        chunked_company_informations = extraction_result.chunked_company_informations
 
-        if extraction_result.chunked_company_informations is None or extraction_result.chunked_company_informations == []:
-            state["human_response"] = True
-            state["automation_executed"] = True
-            state["status"] = "COMPANY_INFO_EXTRACTION_FAILED"
-            return state
+        if chunked_company_informations is None or chunked_company_informations == []:
+            return {
+                "human_response": True,
+                "automation_executed": True,
+                "status": "COMPANY_INFO_EXTRACTION_FAILED",
+            }
 
         print(f"✅ [EXTRACTOR_COMPANY_INFO] Company information extracted successfully")
-        return state
+        return {"chunked_company_informations": chunked_company_informations}
         
     except Exception as e:
         print(f"❌ [EXTRACTOR_COMPANY_INFO] Error extracting company information: {str(e)}")
-        state["human_response"] = True
-        state["status"] = "COMPANY_INFO_EXTRACTION_FAILED"
-        state["automation_executed"] = True
-        return state
+        return {
+            "human_response": True,
+            "status": "COMPANY_INFO_EXTRACTION_FAILED",
+            "automation_executed": True,
+        }
 
 def writer_node(state):
     """
