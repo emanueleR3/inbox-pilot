@@ -2,7 +2,47 @@
 State definition for the email classification system.
 """
 
-from typing import Dict, List, Optional, TypedDict
+from __future__ import annotations
+
+from typing import Annotated, Dict, List, Optional, TypedDict
+
+
+def _merge_key_entities(left: Optional[dict], right: Optional[dict]) -> dict:
+    """Merge function for LangGraph concurrent updates.
+
+    LangGraph raises on concurrent writes to the same key unless the key is
+    Annotated with a reducer. Here we deep-merge dicts of lists and de-duplicate
+    items while preserving order.
+    """
+    merged: dict = {}
+
+    if isinstance(left, dict):
+        merged.update(left)
+
+    if not isinstance(right, dict):
+        return merged
+
+    for category, items in right.items():
+        if items is None:
+            continue
+
+        existing = merged.get(category)
+
+        if existing is None:
+            merged[category] = list(items) if isinstance(items, list) else items
+            continue
+
+        if isinstance(existing, list) and isinstance(items, list):
+            for item in items:
+                if item not in existing:
+                    existing.append(item)
+            merged[category] = existing
+            continue
+
+        # Fallback: keep existing unless empty-ish, otherwise overwrite
+        merged[category] = existing if existing not in (None, [], "") else items
+
+    return merged
 
 
 class EmailState(TypedDict):
@@ -31,8 +71,7 @@ class EmailState(TypedDict):
     must_see_attachments: Optional[bool]  # Flag indicating if attachments are essential for understanding/responding
     summary_attachments: Optional[str]  # Discursive summary of all attachment contents
     priority_score: Optional[float]  # Category-specific priority score (0.0-1.0)
-    key_entities: Optional[dict]  # Key entities extracted by Reader node (dates, locations, requests, etc.)
-    info_key_entities: Optional[dict]  # Key entities extracted by INFO_READER branch (INFO_REQUESTED_TASK)
+    key_entities: Annotated[Optional[dict], _merge_key_entities]  # Key entities extracted by Reader/InfoReader (merge-safe)
     needs_response: Optional[bool]  # Flag indicating if email requires a response
     automation_executed: bool  # Flag indicating if automation was executed
     # Appointment-specific fields (for REQUEST_APPOINTMENT subcategory)

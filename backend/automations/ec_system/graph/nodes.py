@@ -1200,7 +1200,7 @@ def info_reader_node(state):
         state: Current workflow state
         
     Returns:
-        Updated state with info_key_entities
+        Updated state with key_entities
     """
     try:
         print(f"📖 [INFO_READER] Starting email content analysis for INFO_REQUESTED_TASK...")
@@ -1217,7 +1217,7 @@ def info_reader_node(state):
         
         if not filtered_body or not filtered_body.strip():
             print(f"⚠️ [INFO_READER] Empty email body, using default analysis")
-            info_key_entities = {
+            key_entities = {
                 "dates": [],
                 "locations": [],
                 "people": [],
@@ -1228,7 +1228,7 @@ def info_reader_node(state):
                 "documents": [],
                 "other_info": []
             }
-            return {"info_key_entities": info_key_entities}
+            return {"key_entities": key_entities}
         
         # Standard email analysis - extract only key_entities
         reader_response = llm_client.read_email(
@@ -1237,16 +1237,16 @@ def info_reader_node(state):
             language
         )
 
-        info_key_entities = reader_response.key_entities
+        key_entities = reader_response.key_entities
         
         print(f"✅ [INFO_READER] Email analysis completed successfully")
         print(f"   📊 Entities extracted: {len(reader_response.key_entities)} categories")
 
-        return {"info_key_entities": info_key_entities}
+        return {"key_entities": key_entities}
         
     except Exception as e:
         print(f"❌ [INFO_READER] Error in email analysis: {e}")
-        info_key_entities = {
+        key_entities = {
             "dates": [],
             "locations": [],
             "people": [],
@@ -1257,7 +1257,7 @@ def info_reader_node(state):
             "documents": [],
             "other_info": []
         }
-        return {"info_key_entities": info_key_entities}
+        return {"key_entities": key_entities}
 
 
 def appointment_router_node(state):
@@ -1295,37 +1295,17 @@ def task_merger_node(state):
     
     # Log what we have from each branch
     if "INFO_REQUESTED_TASK" in list_of_tasks:
-        info_key_entities = state.get("info_key_entities", {}) or {}
+        key_entities = state.get("key_entities", {}) or {}
         chunked_info = state.get("chunked_company_informations")
-        print(f"   📊 INFO branch: info_key_entities={len(info_key_entities)} cats, company_info={'Yes' if chunked_info else 'No'}")
+        print(f"   📊 INFO branch: key_entities={len(key_entities)} cats, company_info={'Yes' if chunked_info else 'No'}")
     
     if "MANAGE_APPOINTMENT_TASK" in list_of_tasks:
         scheduled = state.get("appointment_scheduled")
         event_code = state.get("appointment_event_code")
         print(f"   📅 APPOINTMENT branch: scheduled={scheduled}, event_code={event_code}")
     
-    # Merge key entities from INFO branch into main key_entities for downstream consumers
-    merged_key_entities = (state.get("key_entities") or {}).copy()
-    info_key_entities = state.get("info_key_entities") or {}
-
-    if info_key_entities:
-        for category, items in info_key_entities.items():
-            if items is None:
-                continue
-            existing_items = merged_key_entities.get(category)
-            if existing_items is None:
-                merged_key_entities[category] = list(items)
-                continue
-            if not isinstance(existing_items, list):
-                merged_key_entities[category] = list(items)
-                continue
-
-            for item in items:
-                if item not in existing_items:
-                    existing_items.append(item)
-
     print(f"✅ [TASK_MERGER] Merge completed - proceeding to next node")
-    return {"key_entities": merged_key_entities}
+    return {}
 
 
 def reader_node(state):
