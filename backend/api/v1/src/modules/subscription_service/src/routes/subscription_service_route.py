@@ -638,30 +638,43 @@ async def get_quiz_save_status(
     return await forward_get(f"/save-status?{query}")
 
 @router.get(
-    "/quiz/session/{email}",
-    summary="Recupera la sessione di quiz più recente per una email",
-    description=(
-        "Restituisce la sessione di quiz più recente associata all'email fornita. "
-        "Se non esiste alcuna sessione, viene restituito un errore 404."
-    ),
+    "/quiz/sessions/{email}",
+    summary="Recupera le sessioni di quiz per un'email",
+    description="Restituisce tutte le sessioni di quiz associate all'email fornita.",
     responses={
         200: {
             "description": "Sessione di quiz recuperata con successo",
             "content": {
                 "application/json": {
-                    "example": {
-                        "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
-                        "service_id": "ecommerce",
-                        "phase": "collecting",
-                        "business_field": "Retail",
-                        "bullet_list": [
-                            "Vendita online",
-                            "Pagamenti digitali",
-                            "Gestione magazzino"
-                        ],
-                        "is_done": False,
-                        "has_context": True,
-                        "final_markdown": "## Analisi preliminare\nContenuto generato..."
+                    "examples": {
+                        {
+                                "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                                "service_id": "ecommerce",
+                                "phase": "collecting",
+                                "business_field": "Retail",
+                                "bullet_list": [
+                                    "Vendita online",
+                                    "Pagamenti digitali",
+                                    "Gestione magazzino"
+                                ],
+                                "is_done": False,
+                                "has_context": True,
+                                "final_markdown": "## Analisi preliminare\nContenuto generato..."
+                            },
+                            {
+                                "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                                "service_id": "ecommerce",
+                                "phase": "collecting",
+                                "business_field": "Retail",
+                                "bullet_list": [
+                                    "Vendita online",
+                                    "Pagamenti digitali",
+                                    "Gestione magazzino"
+                                ],
+                                "is_done": False,
+                                "has_context": True,
+                                "final_markdown": "## Analisi preliminare\nContenuto generato..."
+                            },
                     }
                 }
             },
@@ -694,9 +707,8 @@ async def get_quiz_save_status(
         },
     },
 )
-async def get_session(email: str):
-    return await forward_get(f"/session/{email}")
-
+async def get_sessions(email: str):
+    return await forward_get(f"/sessions/{email}")
 
 
 @router.get(

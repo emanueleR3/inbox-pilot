@@ -115,6 +115,6 @@ async def get_save_status(
 async def list_sessions():
     return controller.list_sessions()
 
-@router.get("/session/{email}")
-async def get_session(email: str):
-    return controller.get_session(email)
+@router.get("/sessions/{email}")
+async def get_sessions(email: str):
+    return controller.get_sessions(email)

@@ -129,6 +129,42 @@ def fetch_latest_quiz_session_row_for_email(
 
     except Exception:
         return None
+    
+def fetch_quiz_session_rows_for_email(
+    email: str,
+    status: Optional[str] = None,
+) -> List[dict[str, Any]]:
+    """Fetch all quiz session rows for an email.
+
+    Args:
+        email: User email.
+        status: Optional filter for quiz_sessions.status.
+                If None, no status filter is applied.
+
+    Returns:
+        A list of matching quiz_sessions rows (possibly empty).
+    """
+    supabase = get_supabase_client()
+    normalized_email = _normalize_email(email)
+    if not normalized_email:
+        return []
+
+    try:
+        query = (
+            supabase
+            .table(_QUIZ_SESSIONS_TABLE)
+            .select(_QUIZ_SESSION_COLUMNS)
+            .eq("email", normalized_email)
+        )
+
+        if status is not None:
+            query = query.eq("status", status)
+
+        result = query.order("updated_at", desc=True).execute()
+        return result.data or []
+
+    except Exception:
+        return []
 
 
 def _get_service_id_for_email(email: str) -> Optional[str]:

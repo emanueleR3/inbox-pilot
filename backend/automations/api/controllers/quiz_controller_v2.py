@@ -323,7 +323,7 @@ class QuizControllerV2:
                 detail=f"Errore durante il recupero dello stato di salvataggio: {str(e)}"
             )
         
-    def get_session(self, email: str) -> Dict[str, Any]:
+    def get_sessions(self, email: str) -> Dict[str, Any]:
         """
         Get the quiz session for a given email.
         
