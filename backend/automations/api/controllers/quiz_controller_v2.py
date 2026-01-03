@@ -322,3 +322,45 @@ class QuizControllerV2:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Errore durante il recupero dello stato di salvataggio: {str(e)}"
             )
+        
+    def get_session(self, email: str) -> Dict[str, Any]:
+        """
+        Get the quiz session for a given email.
+        
+        Args:
+            email: subscription_services.email
+        Returns:
+            Dictionary with session details
+        """
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="email è richiesto"
+            )
+        
+        try:
+            row = fetch_latest_quiz_session_row_for_email(email=email)
+            if not row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Nessuna sessione trovata per questa email"
+                )
+            
+            return {
+                "session_id": row.get("session_id"),
+                "service_id": row.get("service_id"),
+                "phase": row.get("phase"),
+                "business_field": row.get("business_field"),
+                "bullet_list": row.get("bullet_list"),
+                "is_done": row.get("is_done"),
+                "has_context": row.get("has_qdrant_collection", False),
+                "final_markdown": row.get("final_markdown"),
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Errore durante il recupero della sessione: {str(e)}"
+            )

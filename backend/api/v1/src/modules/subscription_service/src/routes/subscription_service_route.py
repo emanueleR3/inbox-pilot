@@ -637,6 +637,32 @@ async def get_quiz_save_status(
     query = urlencode(params)
     return await forward_get(f"/save-status?{query}")
 
+@router.get(
+    "/quiz/session/{email}",
+    summary="Recupera la sessione di quiz attiva per un servizio",
+    description="Restituisce una lista degli ID di sessione attualmente attivi nel sistema con quella email.",
+    responses={
+        200: {
+            "description": "Elenco delle sessioni recuperato con successo",
+            "content": {
+                "application/json": {
+                    "example": ["b6b3405a-e42f-42e3-9b29-0d5419481aba", "c7c4516b-f53g-53f4-0c3a-1e6520592bcb"]
+                }
+            },
+        },
+        500: {
+            "description": "Errore durante il recupero delle sessioni",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante il recupero delle sessioni"}
+                }
+            },
+        },
+    },
+)
+async def list_sessions(email: str):
+    return await forward_get(f"/session/{email}")
+
 
 @router.get(
     "/quiz/sessions",
@@ -663,6 +689,7 @@ async def get_quiz_save_status(
 )
 async def list_sessions():
     return await forward_get("/sessions")
+
 
 @router.get(
     "/information/{email}",

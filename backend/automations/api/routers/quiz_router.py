@@ -111,9 +111,10 @@ async def get_save_status(
     return controller.get_save_status(session_id=session_id, email=email)
 
 
-# @router.get("/sessions")
-# async def list_sessions():
-    # """
-    # List all active quiz sessions.
-    # """
+@router.get("/sessions")
+async def list_sessions():
     return controller.list_sessions()
+
+@router.get("/session/{email}")
+async def get_session(email: str):
+    return controller.get_session(email)
