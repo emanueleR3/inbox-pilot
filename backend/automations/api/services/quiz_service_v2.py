@@ -91,7 +91,7 @@ def _normalize_email(email: Optional[str]) -> str:
 
 def fetch_latest_quiz_session_row_for_email(
     email: str,
-    status: Optional[str],
+    status: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Fetch the latest quiz session row for an email.
 
@@ -99,7 +99,8 @@ def fetch_latest_quiz_session_row_for_email(
 
     Args:
         email: User email.
-        status: If provided, filters by quiz_sessions.status (default: in_progress).
+        status: Optional filter for quiz_sessions.status.
+                If None, no status filter is applied.
 
     Returns:
         The latest matching quiz_sessions row, or None if not found.
@@ -111,11 +112,13 @@ def fetch_latest_quiz_session_row_for_email(
 
     try:
         query = (
-            supabase.table(_QUIZ_SESSIONS_TABLE)
+            supabase
+            .table(_QUIZ_SESSIONS_TABLE)
             .select(_QUIZ_SESSION_COLUMNS)
             .eq("email", normalized_email)
         )
-        if status:
+
+        if status is not None:
             query = query.eq("status", status)
 
         result = query.order("updated_at", desc=True).limit(1).execute()
@@ -123,6 +126,7 @@ def fetch_latest_quiz_session_row_for_email(
         if not rows:
             return None
         return rows[0]
+
     except Exception:
         return None
 
