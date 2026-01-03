@@ -660,7 +660,7 @@ async def get_quiz_save_status(
         },
     },
 )
-async def list_sessions(email: str):
+async def get_session(email: str):
     return await forward_get(f"/session/{email}")
 
 
