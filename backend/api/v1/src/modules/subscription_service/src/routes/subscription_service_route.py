@@ -639,22 +639,56 @@ async def get_quiz_save_status(
 
 @router.get(
     "/quiz/session/{email}",
-    summary="Recupera la sessione di quiz attiva per un servizio",
-    description="Restituisce una lista degli ID di sessione attualmente attivi nel sistema con quella email.",
+    summary="Recupera la sessione di quiz più recente per una email",
+    description=(
+        "Restituisce la sessione di quiz più recente associata all'email fornita. "
+        "Se non esiste alcuna sessione, viene restituito un errore 404."
+    ),
     responses={
         200: {
-            "description": "Elenco delle sessioni recuperato con successo",
+            "description": "Sessione di quiz recuperata con successo",
             "content": {
                 "application/json": {
-                    "example": ["b6b3405a-e42f-42e3-9b29-0d5419481aba", "c7c4516b-f53g-53f4-0c3a-1e6520592bcb"]
+                    "example": {
+                        "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                        "service_id": "ecommerce",
+                        "phase": "collecting",
+                        "business_field": "Retail",
+                        "bullet_list": [
+                            "Vendita online",
+                            "Pagamenti digitali",
+                            "Gestione magazzino"
+                        ],
+                        "is_done": False,
+                        "has_context": True,
+                        "final_markdown": "## Analisi preliminare\nContenuto generato..."
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Email mancante o non valida",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "email è richiesto"}
+                }
+            },
+        },
+        404: {
+            "description": "Nessuna sessione trovata per l'email fornita",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Nessuna sessione trovata per questa email"}
                 }
             },
         },
         500: {
-            "description": "Errore durante il recupero delle sessioni",
+            "description": "Errore interno durante il recupero della sessione",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Errore durante il recupero delle sessioni"}
+                    "example": {
+                        "detail": "Errore durante il recupero della sessione: <dettagli>"
+                    }
                 }
             },
         },
@@ -662,6 +696,7 @@ async def get_quiz_save_status(
 )
 async def get_session(email: str):
     return await forward_get(f"/session/{email}")
+
 
 
 @router.get(
