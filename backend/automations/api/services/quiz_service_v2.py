@@ -91,7 +91,7 @@ def _normalize_email(email: Optional[str]) -> str:
 
 def fetch_latest_quiz_session_row_for_email(
     email: str,
-    status: Optional[str] = "in_progress",
+    status: Optional[str],
 ) -> Optional[dict[str, Any]]:
     """Fetch the latest quiz session row for an email.
 
