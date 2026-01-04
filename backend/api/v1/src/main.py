@@ -47,7 +47,7 @@ app.include_router(scraper_router, prefix="/scraper")
 
 @app.get("/health")
 async def health_check():
-    return {"status": "sei gay"}
+    return {"status": "ok"}
 
 if __name__ == "__main__":
     reload = settings.ENV == "development"
