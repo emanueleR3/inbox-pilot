@@ -646,35 +646,19 @@ async def get_quiz_save_status(
             "description": "Sessione di quiz recuperata con successo",
             "content": {
                 "application/json": {
-                    "examples": {
-                        {
-                            "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
-                            "service_id": "ecommerce",
-                            "phase": "collecting",
-                            "business_field": "Retail",
-                            "bullet_list": [
-                                "Vendita online",
-                                "Pagamenti digitali",
-                                "Gestione magazzino"
-                            ],
-                            "is_done": False,
-                            "has_context": True,
-                            "final_markdown": "## Analisi preliminare\nContenuto generato..."
-                        },
-                        {
-                            "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
-                            "service_id": "ecommerce",
-                            "phase": "collecting",
-                            "business_field": "Retail",
-                            "bullet_list": [
-                                "Vendita online",
-                                "Pagamenti digitali",
-                                "Gestione magazzino"
-                            ],
-                            "is_done": False,
-                            "has_context": True,
-                            "final_markdown": "## Analisi preliminare\nContenuto generato..."
-                        },
+                    "example": {
+                        "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                        "service_id": "ecommerce",
+                        "phase": "collecting",
+                        "business_field": "Retail",
+                        "bullet_list": [
+                            "Vendita online",
+                            "Pagamenti digitali",
+                            "Gestione magazzino"
+                        ],
+                        "is_done": False,
+                        "has_context": True,
+                        "final_markdown": "## Analisi preliminare\nContenuto generato..."
                     }
                 }
             },

@@ -14,6 +14,7 @@ from api.services.quiz_service_v2 import (
     delete_session,
     fetch_quiz_session_row,
     fetch_latest_quiz_session_row_for_email,
+    fetch_quiz_session_rows_for_email,
     list_quiz_sessions,
     start_quiz,
     submit_answer,
@@ -323,9 +324,9 @@ class QuizControllerV2:
                 detail=f"Errore durante il recupero dello stato di salvataggio: {str(e)}"
             )
         
-    def get_sessions(self, email: str) -> Dict[str, Any]:
+    def get_sessions(self, email: str) -> list[Dict[str, Any]]:
         """
-        Get the quiz session for a given email.
+        Get all quiz sessions for a given email.
         
         Args:
             email: subscription_services.email
@@ -339,23 +340,27 @@ class QuizControllerV2:
             )
         
         try:
-            row = fetch_latest_quiz_session_row_for_email(email=email)
-            if not row:
+            rows = fetch_quiz_session_rows_for_email(email=email)
+            if not rows:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Nessuna sessione trovata per questa email"
                 )
-            
-            return {
-                "session_id": row.get("session_id"),
-                "service_id": row.get("service_id"),
-                "phase": row.get("phase"),
-                "business_field": row.get("business_field"),
-                "bullet_list": row.get("bullet_list"),
-                "is_done": row.get("is_done"),
-                "has_context": row.get("has_qdrant_collection", False),
-                "final_markdown": row.get("final_markdown"),
-            }
+
+            return [
+                {
+                    "session_id": row.get("session_id"),
+                    "service_id": row.get("service_id"),
+                    "email": row.get("email"),
+                    "phase": row.get("phase"),
+                    "business_field": row.get("business_field"),
+                    "bullet_list": row.get("bullet_list") or [],
+                    "is_done": row.get("is_done"),
+                    "has_context": row.get("has_qdrant_collection", False),
+                    "final_markdown": row.get("final_markdown"),
+                }
+                for row in rows
+            ]
             
         except HTTPException:
             raise
