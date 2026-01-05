@@ -403,6 +403,14 @@ def save_email(email_data: Dict) -> Optional[str]:
     """
     try:
         supabase = get_supabase_client()
+
+        # Idempotency: if we already saved this message_id, don't insert again.
+        message_id = email_data.get("message_id")
+        if message_id:
+            existing = get_email_by_message_id(message_id)
+            if existing and existing.get("email_id"):
+                print(f"ℹ️ [DB] Email already exists for message_id={message_id} -> email_id: {existing.get('email_id')}")
+                return existing.get("email_id")
         
         # Cerca written_after_id basandosi su response_at_id
         response_at_id = email_data.get("response_at_id")
