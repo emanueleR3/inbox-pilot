@@ -306,3 +306,148 @@ def get_user_provider(user_email: str) -> Optional[str]:
     except Exception as e:
         print(f"❌ [DB] Error determining provider for {user_email}: {str(e)}")
         return None
+
+
+def get_service_id_by_email(email: str) -> Optional[str]:
+    """
+    Recupera il service_id per un'email dalla tabella subscription_services.
+    
+    Args:
+        email: Email address to lookup
+        
+    Returns:
+        service_id (UUID) se trovato, None altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select("service_id").eq("email", email.lower()).execute()
+        
+        if response.data:
+            return response.data[0].get("service_id")
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB] Error getting service_id for {email}: {e}")
+        return None
+
+
+def save_email(email_data: Dict) -> Optional[str]:
+    """
+    Salva una email nella tabella emails.
+    
+    Args:
+        email_data: Dizionario con i dati dell'email:
+            - thread_id: UUID del thread
+            - message_id: ID del messaggio
+            - response_at_id: In-Reply-To message ID
+            - datetime: Timestamp dell'email
+            - body: Corpo dell'email
+            - service_id: UUID del servizio
+            - outcome: Status dell'email (RECEIVED, SENT, etc.)
+            - direction: INBOUND o OUTBOUND
+            - has_attachment: Se ha allegati
+            - ai_generated: Se generata da AI (default False)
+            
+    Returns:
+        str: email_id se inserimento riuscito, None altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Cerca written_after_id basandosi su response_at_id
+        response_at_id = email_data.get("response_at_id")
+        written_after_id = None
+        if response_at_id and response_at_id.lower() != "no":
+            written_after = get_email_by_message_id(response_at_id)
+            if written_after:
+                written_after_id = written_after.get("email_id")
+        
+        emails_data = {
+            "thread_id": email_data.get("thread_id"),
+            "message_id": email_data.get("message_id"),
+            "response_at_id": email_data.get("response_at_id") if email_data.get("response_at_id", "").lower() != "no" else None,
+            "datetime": email_data.get("datetime"),
+            "body": email_data.get("body"),
+            "service_id": email_data.get("service_id"),
+            "outcome": email_data.get("outcome", "RECEIVED"),
+            "ai_generated": email_data.get("ai_generated", False),
+            "direction": email_data.get("direction", "INBOUND"),
+            "has_attachment": email_data.get("has_attachment", False),
+            "written_after_id": written_after_id
+        }
+        
+        # Rimuovi valori None
+        emails_data = {k: v for k, v in emails_data.items() if v is not None}
+        
+        response = supabase.table("emails").insert(emails_data).execute()
+        
+        if response.data:
+            email_id = response.data[0].get("email_id")
+            direction = email_data.get("direction", "INBOUND")
+            print(f"✅ [DB] {direction} email saved with email_id: {email_id}")
+            return email_id
+        else:
+            print(f"❌ [DB] Failed to save email")
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB] Error saving email: {e}")
+        return None
+
+
+def get_email_by_message_id(message_id: str) -> Optional[Dict]:
+    """
+    Recupera una email dalla tabella emails per message_id.
+    
+    Args:
+        message_id: ID del messaggio da cercare
+        
+    Returns:
+        Dict con i dati dell'email se trovata, None altrimenti
+    """
+    try:
+        if not message_id:
+            return None
+            
+        supabase = get_supabase_client()
+        
+        response = supabase.table("emails").select("*").eq("message_id", message_id).execute()
+        
+        if response.data:
+            return response.data[0]
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB] Error getting email by message_id: {e}")
+        return None
+
+
+def get_email_by_id(email_id: str) -> Optional[Dict]:
+    """
+    Recupera una email dalla tabella emails per email_id.
+    
+    Args:
+        email_id: UUID dell'email da cercare
+        
+    Returns:
+        Dict con i dati dell'email se trovata, None altrimenti
+    """
+    try:
+        if not email_id:
+            return None
+            
+        supabase = get_supabase_client()
+        
+        response = supabase.table("emails").select("*").eq("email_id", email_id).execute()
+        
+        if response.data:
+            return response.data[0]
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB] Error getting email by email_id: {e}")
+        return None

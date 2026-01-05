@@ -332,13 +332,13 @@ def insert_notification_sync(email: str, notification_type: str, message_id: str
         return False
 
 
-def get_email_attachments_sync(message_id: str) -> list:
+def get_email_attachments_sync(email_id: str) -> list:
     """
-    Recupera i file attachment associati a un message_id.
+    Recupera i file attachment associati a un email_id.
     Versione sincrona per i nodi del workflow.
     
     Args:
-        message_id (str): ID del messaggio email
+        email_id (str): UUID dell'email nel database
         
     Returns:
         list: Lista di attachment con file_name, file_path, mime_type, size_bytes
@@ -346,15 +346,15 @@ def get_email_attachments_sync(message_id: str) -> list:
     try:
         supabase = get_supabase_client()
         
-        print(f"📎 [DB_CLIENT] Retrieving attachments for message_id: {message_id}")
+        print(f"📎 [DB_CLIENT] Retrieving attachments for email_id: {email_id}")
         
-        # Query per ottenere i file attachment
+        # Query per ottenere i file attachment usando email_id
         response = supabase.table("email_attachments").select(
             "file_name, file_path, mime_type, size_bytes"
-        ).eq("message_id", message_id).execute()
+        ).eq("email_id", email_id).execute()
         
         if not response.data:
-            print(f"⚠️ [DB_CLIENT] No attachments found for message_id: {message_id}")
+            print(f"⚠️ [DB_CLIENT] No attachments found for email_id: {email_id}")
             return []
         
         attachment_files = []
@@ -370,6 +370,34 @@ def get_email_attachments_sync(message_id: str) -> list:
         
         print(f"✅ [DB_CLIENT] Retrieved {len(attachment_files)} attachments")
         return attachment_files
+        
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error retrieving attachments for email_id {email_id}: {str(e)}")
+        return []
+
+
+def get_email_attachments_by_message_id_sync(message_id: str) -> list:
+    """
+    Recupera i file attachment associati a un message_id.
+    Questa funzione cerca prima l'email_id corrispondente al message_id,
+    poi recupera gli allegati usando email_id.
+    Versione sincrona per i nodi del workflow.
+    
+    Args:
+        message_id (str): ID del messaggio email
+        
+    Returns:
+        list: Lista di attachment con file_name, file_path, mime_type, size_bytes
+    """
+    try:
+        # Prima trova l'email_id corrispondente
+        email = get_email_by_message_id(message_id)
+        if not email:
+            print(f"⚠️ [DB_CLIENT] No email found for message_id: {message_id}")
+            return []
+        
+        email_id = email.get("email_id")
+        return get_email_attachments_sync(email_id)
         
     except Exception as e:
         print(f"❌ [DB_CLIENT] Error retrieving attachments for message_id {message_id}: {str(e)}")
@@ -521,21 +549,269 @@ def delete_event_from_db(event_code: str):
         return False
 
 
-def save_ai_generated_email(email_data: Dict) -> bool:
+def save_ai_generated_email(email_data: Dict) -> Optional[str]:
+    """
+    Salva una email generata dall'AI nella tabella emails.
+    Ora utilizza la nuova tabella unificata 'emails' invece di 'ai_generated_emails'.
+    
+    Args:
+        email_data: Dizionario con i dati dell'email:
+            - thread_id: UUID del thread
+            - message_id: ID del messaggio (draft_id o message_id generato)
+            - response_at_id: ID del messaggio a cui si risponde
+            - processed_at: Timestamp di elaborazione
+            - duration: Durata elaborazione
+            - priority_score: Punteggio priorità
+            - body: Corpo dell'email
+            - service_id: UUID del servizio
+            - outcome: Stato dell'email (DRAFT, SENT, FAILED_TO_SEND)
+            
+    Returns:
+        str: email_id se inserimento riuscito, None altrimenti
+    """
     try:
         supabase = get_supabase_client()
         
-        response = supabase.table("ai_generated_emails").insert(email_data).execute()
+        # Mappa i campi dal vecchio formato al nuovo schema 'emails'
+        emails_data = {
+            "thread_id": email_data.get("thread_id"),
+            "message_id": email_data.get("message_id"),
+            "response_at_id": email_data.get("response_at_id"),
+            "datetime": email_data.get("processed_at"),
+            "body": email_data.get("body"),
+            "service_id": email_data.get("service_id"),
+            "outcome": email_data.get("outcome"),
+            "duration": email_data.get("duration", 0),
+            "ai_generated": True,  # Email generate dall'AI
+            "priority_score": email_data.get("priority_score"),
+            "direction": "OUTBOUND",  # Email AI sono sempre outbound
+            "has_attachment": False  # Default, può essere aggiornato se necessario
+        }
+        
+        # Cerca written_after_id basandosi su response_at_id
+        response_at_id = email_data.get("response_at_id")
+        if response_at_id:
+            written_after = get_email_by_message_id(response_at_id)
+            if written_after:
+                emails_data["written_after_id"] = written_after.get("email_id")
+        
+        # Rimuovi valori None per lasciare che il database gestisca i default
+        emails_data = {k: v for k, v in emails_data.items() if v is not None}
+        
+        response = supabase.table("emails").insert(emails_data).execute()
         
         if response.data:
-            print(f"✅ [DB_CLIENT] Email saved")
-            return True
+            email_id = response.data[0].get("email_id")
+            print(f"✅ [DB_CLIENT] Email saved with email_id: {email_id}")
+            return email_id
         else:
             print(f"❌ [DB_CLIENT] Failed to save email")
-            return False
+            return None
             
     except Exception as e:
         print(f"❌ [DB_CLIENT] Error saving email: {e}")
+        return None
+
+
+def save_inbound_email(email_data: Dict) -> Optional[str]:
+    """
+    Salva una email inbound (ricevuta) nella tabella emails.
+    
+    Args:
+        email_data: Dizionario con i dati dell'email:
+            - thread_id: UUID del thread
+            - message_id: ID del messaggio
+            - response_at_id: In-Reply-To message ID
+            - datetime: Timestamp dell'email
+            - body: Corpo dell'email
+            - service_id: UUID del servizio
+            - has_attachment: Se ha allegati
+            
+    Returns:
+        str: email_id se inserimento riuscito, None altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        emails_data = {
+            "thread_id": email_data.get("thread_id"),
+            "message_id": email_data.get("message_id"),
+            "response_at_id": email_data.get("response_at_id"),
+            "datetime": email_data.get("datetime"),
+            "body": email_data.get("body"),
+            "service_id": email_data.get("service_id"),
+            "outcome": "RECEIVED",  # Status per email inbound
+            "ai_generated": False,
+            "direction": "INBOUND",
+            "has_attachment": email_data.get("has_attachment", False)
+        }
+        
+        # Cerca written_after_id basandosi su response_at_id
+        response_at_id = email_data.get("response_at_id")
+        if response_at_id and response_at_id.lower() != "no":
+            written_after = get_email_by_message_id(response_at_id)
+            if written_after:
+                emails_data["written_after_id"] = written_after.get("email_id")
+        
+        # Rimuovi valori None
+        emails_data = {k: v for k, v in emails_data.items() if v is not None}
+        
+        response = supabase.table("emails").insert(emails_data).execute()
+        
+        if response.data:
+            email_id = response.data[0].get("email_id")
+            print(f"✅ [DB_CLIENT] Inbound email saved with email_id: {email_id}")
+            return email_id
+        else:
+            print(f"❌ [DB_CLIENT] Failed to save inbound email")
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error saving inbound email: {e}")
+        return None
+
+
+def save_outbound_email(email_data: Dict) -> Optional[str]:
+    """
+    Salva una email outbound (inviata dall'utente) nella tabella emails.
+    
+    Args:
+        email_data: Dizionario con i dati dell'email:
+            - thread_id: UUID del thread
+            - message_id: ID del messaggio
+            - response_at_id: In-Reply-To message ID
+            - datetime: Timestamp dell'email
+            - body: Corpo dell'email
+            - service_id: UUID del servizio
+            - has_attachment: Se ha allegati
+            
+    Returns:
+        str: email_id se inserimento riuscito, None altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        emails_data = {
+            "thread_id": email_data.get("thread_id"),
+            "message_id": email_data.get("message_id"),
+            "response_at_id": email_data.get("response_at_id"),
+            "datetime": email_data.get("datetime"),
+            "body": email_data.get("body"),
+            "service_id": email_data.get("service_id"),
+            "outcome": "SENT",  # Status per email outbound utente
+            "ai_generated": False,
+            "direction": "OUTBOUND",
+            "has_attachment": email_data.get("has_attachment", False)
+        }
+        
+        # Cerca written_after_id basandosi su response_at_id
+        response_at_id = email_data.get("response_at_id")
+        if response_at_id and response_at_id.lower() != "no":
+            written_after = get_email_by_message_id(response_at_id)
+            if written_after:
+                emails_data["written_after_id"] = written_after.get("email_id")
+        
+        # Rimuovi valori None
+        emails_data = {k: v for k, v in emails_data.items() if v is not None}
+        
+        response = supabase.table("emails").insert(emails_data).execute()
+        
+        if response.data:
+            email_id = response.data[0].get("email_id")
+            print(f"✅ [DB_CLIENT] Outbound email saved with email_id: {email_id}")
+            return email_id
+        else:
+            print(f"❌ [DB_CLIENT] Failed to save outbound email")
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error saving outbound email: {e}")
+        return None
+
+
+def get_email_by_message_id(message_id: str) -> Optional[Dict]:
+    """
+    Recupera una email dalla tabella emails per message_id.
+    
+    Args:
+        message_id: ID del messaggio da cercare
+        
+    Returns:
+        Dict con i dati dell'email se trovata, None altrimenti
+    """
+    try:
+        if not message_id:
+            return None
+            
+        supabase = get_supabase_client()
+        
+        response = supabase.table("emails").select("*").eq("message_id", message_id).execute()
+        
+        if response.data:
+            return response.data[0]
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error getting email by message_id: {e}")
+        return None
+
+
+def get_email_by_id(email_id: str) -> Optional[Dict]:
+    """
+    Recupera una email dalla tabella emails per email_id.
+    
+    Args:
+        email_id: UUID dell'email da cercare
+        
+    Returns:
+        Dict con i dati dell'email se trovata, None altrimenti
+    """
+    try:
+        if not email_id:
+            return None
+            
+        supabase = get_supabase_client()
+        
+        response = supabase.table("emails").select("*").eq("email_id", email_id).execute()
+        
+        if response.data:
+            return response.data[0]
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error getting email by email_id: {e}")
+        return None
+
+
+def update_email_outcome(email_id: str, outcome: str) -> bool:
+    """
+    Aggiorna l'outcome di un'email nella tabella emails.
+    
+    Args:
+        email_id: UUID dell'email da aggiornare
+        outcome: Nuovo outcome (es. FAILED_TO_SEND, SENT, DRAFT, etc.)
+        
+    Returns:
+        bool: True se aggiornamento riuscito, False altrimenti
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("emails").update({
+            "outcome": outcome
+        }).eq("email_id", email_id).execute()
+        
+        if response.data:
+            print(f"✅ [DB_CLIENT] Email outcome updated to '{outcome}' for email_id: {email_id}")
+            return True
+        else:
+            print(f"❌ [DB_CLIENT] Failed to update email outcome for email_id: {email_id}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error updating email outcome: {e}")
         return False
 
 def insert_new_mail_in_history_thread(thread_id: str, message_id: str) -> bool:
@@ -606,7 +882,8 @@ def update_thread(thread_id: str, thread_data: Dict) -> bool:
 
 def update_ai_generated_email_outcome(thread_id: str, outcome: str) -> bool:
     """
-    Aggiorna l'outcome di un'email AI generata nella tabella ai_generated_emails.
+    Aggiorna l'outcome di un'email AI generata nella tabella emails.
+    Cerca l'ultima email AI generata per il thread e aggiorna il suo outcome.
     
     Args:
         thread_id (str): Thread ID dell'email da aggiornare
@@ -618,9 +895,18 @@ def update_ai_generated_email_outcome(thread_id: str, outcome: str) -> bool:
     try:
         supabase = get_supabase_client()
         
-        response = supabase.table("ai_generated_emails").update({
+        # Trova l'ultima email AI generata per questo thread
+        find_response = supabase.table("emails").select("email_id").eq("thread_id", thread_id).eq("ai_generated", True).order("datetime", desc=True).limit(1).execute()
+        
+        if not find_response.data:
+            print(f"❌ [DB_CLIENT] No AI generated email found for thread_id: {thread_id}")
+            return False
+        
+        email_id = find_response.data[0].get("email_id")
+        
+        response = supabase.table("emails").update({
             "outcome": outcome
-        }).eq("thread_id", thread_id).execute()
+        }).eq("email_id", email_id).execute()
         
         if response.data:
             print(f"✅ [DB_CLIENT] AI generated email outcome updated to '{outcome}' for thread_id: {thread_id}")

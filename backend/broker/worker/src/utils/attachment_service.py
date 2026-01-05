@@ -66,7 +66,7 @@ class AttachmentService:
         # Se non trova nessun pattern email, ritorna la stringa originale
         return email_field.strip()
     
-    async def process_attachments(self, email_data: dict, thread_id: int) -> List[Dict]:
+    async def process_attachments(self, email_data: dict, thread_id: int, email_id: str = None) -> List[Dict]:
         """
         Process attachments for an email that has been added to a thread.
         Downloads attachments and saves metadata to database.
@@ -74,6 +74,7 @@ class AttachmentService:
         Args:
             email_data: Email data containing attachment metadata
             thread_id: Database thread ID where the email was added
+            email_id: Database email ID for linking attachments (new required field)
             
         Returns:
             List of processed attachment info
@@ -81,6 +82,14 @@ class AttachmentService:
         attachments_metadata = email_data.get("attachments", [])
         if not attachments_metadata:
             print(f"📎 [ATTACHMENT] No attachments found for email {email_data.get('message_id')}")
+            return []
+        
+        # Get email_id from parameter or from email_data
+        if not email_id:
+            email_id = email_data.get("email_id")
+        
+        if not email_id:
+            print(f"❌ [ATTACHMENT] No email_id provided - cannot save attachments without email_id")
             return []
         
         processed_attachments = []
@@ -117,11 +126,11 @@ class AttachmentService:
                         potential_hash = hashlib.sha256(payload).hexdigest()
                         print(f"🔍 [ATTACHMENT] Pre-calculated hash for {filename}: {potential_hash[:16]}...")
                 
-                # FASE 2: Controlla deduplicazione a livello di thread
+                # FASE 2: Controlla deduplicazione a livello di email
                 if potential_hash:
-                    existing_attachment_id = self.thread_repo.attachment_exists_in_thread_by_hash(thread_id, potential_hash)
+                    existing_attachment_id = self.thread_repo.attachment_exists_by_hash_and_email(potential_hash, email_id)
                     if existing_attachment_id:
-                        print(f"♻️ [ATTACHMENT] Skipping duplicate attachment {filename} in thread {thread_id}")
+                        print(f"♻️ [ATTACHMENT] Skipping duplicate attachment {filename} for email {email_id}")
                         # Aggiungi comunque alle attachments processate con l'ID esistente
                         processed_attachments.append({
                             "attachment_id": existing_attachment_id,
@@ -146,11 +155,11 @@ class AttachmentService:
                     # FASE 4: Controlla deduplicazione dopo download (per provider che non hanno payload pre-calcolato)
                     file_hash = stored_attachment.get("file_hash")
                     if file_hash and not potential_hash:  # Solo se non abbiamo già controllato con payload
-                        existing_attachment_id = self.thread_repo.attachment_exists_in_thread_by_hash(thread_id, file_hash)
+                        existing_attachment_id = self.thread_repo.attachment_exists_by_hash_and_email(file_hash, email_id)
                         if existing_attachment_id:
                             timestamped_filename = stored_attachment.get("timestamped_filename", filename)
-                            print(f"🔄 [DB] Found duplicate attachment in thread {thread_id} with hash {file_hash[:16]}...")
-                            print(f"♻️ [ATTACHMENT] Found duplicate after download {timestamped_filename} in thread {thread_id}")
+                            print(f"🔄 [DB] Found duplicate attachment for email {email_id} with hash {file_hash[:16]}...")
+                            print(f"♻️ [ATTACHMENT] Found duplicate after download {timestamped_filename} for email {email_id}")
                             # Rimuovi il file scaricato dato che è duplicato
                             try:
                                 os.remove(stored_attachment["file_path"])
@@ -171,7 +180,7 @@ class AttachmentService:
                     
                     # FASE 5: Save to database (attachment nuovo)
                     db_attachment = await self._save_attachment_to_db(
-                        stored_attachment, thread_id, email_data
+                        stored_attachment, thread_id, email_data, email_id
                     )
                     
                     if db_attachment:
@@ -649,15 +658,17 @@ class AttachmentService:
             return False
     
     async def _save_attachment_to_db(
-        self, attachment_info: dict, thread_id: int, email_data: dict
+        self, attachment_info: dict, thread_id: int, email_data: dict, email_id: str
     ) -> Optional[Dict]:
         """
         Save attachment metadata to database with deduplication check.
+        Now uses email_id instead of message_id for linking.
         
         Args:
             attachment_info: Processed attachment info
             thread_id: Thread ID where email was added
             email_data: Original email data
+            email_id: Database email ID for linking attachments
             
         Returns:
             Database attachment record or None if failed
@@ -667,12 +678,11 @@ class AttachmentService:
             sender_email = email_data.get("from", "")
             receiver_email = email_data.get("to", "")
             cc_emails = email_data.get("cc", [])
-            message_id = email_data.get("message_id")
             
             # Check if attachment already exists (deduplication)
             file_hash = attachment_info.get("file_hash")
-            if file_hash and message_id:
-                existing_attachment_id = self.thread_repo.attachment_exists_by_hash_and_message(file_hash, message_id)
+            if file_hash and email_id:
+                existing_attachment_id = self.thread_repo.attachment_exists_by_hash_and_email(file_hash, email_id)
                 if existing_attachment_id:
                     print(f"❎ [ATTACHMENT] Attachment already exists with ID: {existing_attachment_id}")
                     return {
@@ -723,7 +733,7 @@ class AttachmentService:
             
             attachment_data = {
                 "thread_id": thread_id,
-                "message_id": message_id,
+                "email_id": email_id,  # Now using email_id instead of message_id
                 "sender": sender,  # Normalized email address of sender
                 "receiver": receiver,  # Normalized primary receiver email
                 "cc": cc_emails,  # Array of normalized CC addresses
@@ -735,7 +745,7 @@ class AttachmentService:
                 "service_id": service_id
             }
             
-            print(f"📎 [ATTACHMENT] Saving with sender:{sender}, receiver:{receiver}, cc:{cc_emails}")
+            print(f"📎 [ATTACHMENT] Saving with email_id:{email_id}, sender:{sender}, receiver:{receiver}")
             
             # Save to database using thread repository
             attachment_id = self.thread_repo.save_attachment(attachment_data)

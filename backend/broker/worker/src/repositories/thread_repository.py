@@ -577,11 +577,12 @@ class ThreadRepository:
     def save_attachment(self, attachment_data: dict) -> Optional[str]:
         """
         Save attachment metadata to the email_attachments table.
+        Now uses email_id instead of message_id as the primary link to emails.
         
         Args:
             attachment_data: Dictionary containing attachment metadata with keys:
                 - thread_id: UUID of the thread
-                - message_id: ID of the email message
+                - email_id: UUID of the email in our database (required)
                 - sender: Email address of the sender
                 - receiver: Email address of the receiver
                 - cc: Array of CC email addresses
@@ -598,7 +599,7 @@ class ThreadRepository:
         try:
             # Map the attachment_data to the correct database fields
             db_data = {
-                "message_id": attachment_data.get("message_id"),
+                "email_id": attachment_data.get("email_id"),  # Now using email_id instead of message_id
                 "sender": attachment_data.get("sender"),  # Email address of sender
                 "receiver": attachment_data.get("receiver"),  # Email address of receiver
                 "cc": attachment_data.get("cc", []),  # Array of CC addresses
@@ -654,24 +655,24 @@ class ThreadRepository:
             print(f"❌ [DB] Error getting service_id for {email}: {e}")
             return None
     
-    def attachment_exists_by_hash_and_message(self, file_hash: str, message_id: str) -> Optional[str]:
+    def attachment_exists_by_hash_and_email(self, file_hash: str, email_id: str) -> Optional[str]:
         """
-        Check if an attachment with the same hash and message_id already exists.
+        Check if an attachment with the same hash and email_id already exists.
         This helps with deduplication when the same email is processed by multiple mailboxes.
         
         Args:
             file_hash: SHA-256 hash of the file
-            message_id: ID of the email message
+            email_id: UUID of the email in our database
             
         Returns:
             attachment_id (UUID) if found, None otherwise
         """
         try:
-            response = self.supabase.table("email_attachments").select("attachment_id").eq("file_hash", file_hash).eq("message_id", message_id).execute()
+            response = self.supabase.table("email_attachments").select("attachment_id").eq("file_hash", file_hash).eq("email_id", email_id).execute()
             
             if response.data and len(response.data) > 0:
                 attachment_id = response.data[0].get("attachment_id")
-                print(f"🔍 [DB] Found existing attachment with hash {file_hash[:16]}... and message_id {message_id}")
+                print(f"🔍 [DB] Found existing attachment with hash {file_hash[:16]}... and email_id {email_id}")
                 return attachment_id
             else:
                 return None
