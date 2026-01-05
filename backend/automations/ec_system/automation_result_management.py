@@ -458,6 +458,7 @@ def process_automation_result(workflow_result: dict):
     extracted_info = workflow_result.get('extracted_info', {})
     box_email = extracted_info.get('box_email', 'unknown')
     message_id = extracted_info.get('message_id', 'unknown')
+    email_id = workflow_result.get("email_id", None)  # Email UUID from emails table for notifications/events
     sender_email = extracted_info.get("from", "unknown")
     subject = extracted_info.get("subject", "No subject")
     thread_id = extracted_info.get("thread_id", None)
@@ -520,7 +521,7 @@ def process_automation_result(workflow_result: dict):
             notification_success = insert_notification_sync(
                 email=box_email,
                 notification_type="MAIL_NOT_PERMITTED",
-                message_id=message_id,
+                email_id=email_id,
                 text=None  # No text as requested
             )
             
@@ -554,7 +555,7 @@ def process_automation_result(workflow_result: dict):
             notification_success = insert_notification_sync(
                 email=box_email,
                 notification_type="LOW_CONFIDENCE_CLASSIFICATION_MAIL",
-                message_id=message_id,
+                email_id=email_id,
                 text=None
             )
             
@@ -604,7 +605,7 @@ def process_automation_result(workflow_result: dict):
                     sender_email=sender_email,
                     subject=subject,
                     response_body=response_body,
-                    message_id=message_id,
+                    email_id=email_id,
                     reply_to_id=reply_to_id,
                     original_thread_id=original_thread_id,
                     microsoft_message_id=microsoft_message_id,
@@ -635,7 +636,7 @@ def process_automation_result(workflow_result: dict):
             notification_success = insert_notification_sync(
                 email=box_email,
                 notification_type="HIGH_PRIORITY_MAIL",
-                message_id=message_id,
+                email_id=email_id,
                 text=None
             )
             
@@ -723,7 +724,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="EVENT_INVITE_MAIL",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
 
@@ -765,7 +766,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="NO_CALENDAR_PROVIDED",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
 
@@ -806,7 +807,7 @@ def process_automation_result(workflow_result: dict):
                 insert_notification_sync(
                     email=box_email,
                     notification_type="INFORMATION_NOT_PRESENT",
-                    message_id=message_id,
+                    email_id=email_id,
                     text=f"Error extracting company information: {str(e)}"
                 )
 
@@ -844,7 +845,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="EVENT_FOLLOWUP_MAIL",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -892,7 +893,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type=notification_type,
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -940,7 +941,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type=notification_type,
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -993,7 +994,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="EVENT_CODE_NOT_FOUND",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -1035,7 +1036,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="CALENDAR_SERVICE_NOT_FOUND",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -1077,7 +1078,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="EVENT_DELETION_FAILED",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -1125,7 +1126,7 @@ def process_automation_result(workflow_result: dict):
                         sender_email=sender_email,
                         subject=subject,
                         response_body=response_body,
-                        message_id=message_id,
+                        email_id=email_id,
                         reply_to_id=reply_to_id,
                         original_thread_id=original_thread_id,
                         microsoft_message_id=microsoft_message_id,
@@ -1161,7 +1162,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="LOW_CONFIDENCE_WRITER",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -1201,7 +1202,7 @@ def process_automation_result(workflow_result: dict):
                 notification_success = insert_notification_sync(
                     email=box_email,
                     notification_type="HUMAN_REVIEW",
-                    message_id=message_id,
+                    email_id=email_id,
                     text=None
                 )
                 
@@ -1360,7 +1361,7 @@ def process_automation_result(workflow_result: dict):
                         insert_notification_sync(
                             email=box_email,
                             notification_type="EMAIL_NOT_SENT",
-                            message_id=message_id,
+                            email_id=email_id,
                             text=None
                         )
                     except Exception as notif_error:

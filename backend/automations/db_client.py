@@ -243,14 +243,14 @@ async def test_database_connection() -> bool:
         return False
 
 
-async def insert_notification(email: str, notification_type: str, message_id: str, text: str = None) -> bool:
+async def insert_notification(email: str, notification_type: str, email_id: str = None, text: str = None) -> bool:
     """
     Inserisce una nuova notifica nella tabella notifications.
     
     Args:
         email (str): Email dell'utente (box_email)
         notification_type (str): Tipo di notifica (es. MAIL_NOT_PERMITTED)
-        message_id (str): ID del messaggio email
+        email_id (str): UUID dell'email dalla tabella emails
         text (str, optional): Testo aggiuntivo della notifica
         
     Returns:
@@ -262,9 +262,12 @@ async def insert_notification(email: str, notification_type: str, message_id: st
         # Prepara i dati da inserire
         notification_data = {
             "email": email,
-            "type": notification_type,
-            "message_id": message_id
+            "type": notification_type
         }
+        
+        # Aggiungi email_id se fornito
+        if email_id:
+            notification_data["email_id"] = email_id
         
         # Aggiungi il testo se fornito
         if text:
@@ -287,7 +290,7 @@ async def insert_notification(email: str, notification_type: str, message_id: st
         return False
 
 
-def insert_notification_sync(email: str, notification_type: str, message_id: str, text: str = None) -> bool:
+def insert_notification_sync(email: str, notification_type: str, email_id: str = None, text: str = None) -> bool:
     """
     Versione sincrona per inserire una notifica.
     Utilizzata dai nodi del workflow che non supportano async.
@@ -295,7 +298,7 @@ def insert_notification_sync(email: str, notification_type: str, message_id: str
     Args:
         email (str): Email dell'utente (box_email)
         notification_type (str): Tipo di notifica (es. MAIL_NOT_PERMITTED)  
-        message_id (str): ID del messaggio email
+        email_id (str): UUID dell'email dalla tabella emails
         text (str, optional): Testo aggiuntivo della notifica
         
     Returns:
@@ -307,9 +310,12 @@ def insert_notification_sync(email: str, notification_type: str, message_id: str
         # Prepara i dati da inserire
         notification_data = {
             "email": email,
-            "type": notification_type,
-            "message_id": message_id
+            "type": notification_type
         }
+        
+        # Aggiungi email_id se fornito
+        if email_id:
+            notification_data["email_id"] = email_id
         
         # Aggiungi il testo se fornito
         if text:
@@ -468,7 +474,7 @@ def insert_scheduled_event(event_data: Dict) -> bool:
     Inserisce un evento nella tabella scheduled_events.
     
     Args:
-        event_data: Dizionario con i dati dell'evento (title, service_id, thread_id, event_type, event_code, created_by, created_at)
+        event_data: Dizionario con i dati dell'evento (title, service_id, email_id, event_type, event_code, created_by, created_at, provider_event_id)
         
     Returns:
         bool: True se inserimento riuscito, False altrimenti

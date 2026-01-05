@@ -966,7 +966,7 @@ class LLMClient:
         service_id: str,
         event_type: str,
         created_by: str,
-        thread_id: Optional[str] = None,
+        email_id: Optional[str] = None,
         language: str = "ITA",
         favorite_day: Optional[str] = None
     ) -> SchedulerResponse:
@@ -982,7 +982,7 @@ class LLMClient:
             service_id: Service ID from subscription_services
             event_type: Type of event
             created_by: Email of the creator
-            thread_id: Optional thread ID
+            email_id: Optional email ID from emails table
             language: Language for prompts (ITA or ENG)
             favorite_day: Optional preferred day in YYYY-MM-DD format (pre-extracted by reader)
             
@@ -1116,7 +1116,7 @@ class LLMClient:
                             service_id=service_id,
                             event_type=event_type,
                             created_by=created_by,
-                            thread_id=thread_id,
+                            email_id=email_id,
                             attendees=appointment_info.get('attendees'),
                             place=appointment_info.get('place'),
                             additional_notes=appointment_info.get('additional_notes') + "\n\nScheduled via Corretto AI Assistant." if appointment_info.get('additional_notes') else "Scheduled via Corretto AI Assistant."
@@ -1672,7 +1672,7 @@ class LLMClient:
         service_id: str,
         event_type: str,
         created_by: str,
-        thread_id: Optional[str] = None,
+        email_id: Optional[str] = None,
         attendees: list = None,
         place: str = None,
         additional_notes: str = None
@@ -1687,7 +1687,7 @@ class LLMClient:
             service_id: Service ID from subscription_services
             event_type: Type of event
             created_by: Email of the creator
-            thread_id: Optional thread ID
+            email_id: Optional email ID from emails table
             attendees: List of attendee emails
             place: Location of the event
             additional_notes: Additional notes
@@ -1821,7 +1821,7 @@ class LLMClient:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "title": title_of_event,
             "service_id": service_id,
-            "thread_id": thread_id,
+            "email_id": email_id,
             "event_type": event_type,
             "event_code": event_code,
             "created_by": created_by,

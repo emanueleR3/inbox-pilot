@@ -59,6 +59,7 @@ class EmailState(TypedDict):
     dangerous_email: Optional[bool]  # Flag indicating if email is dangerous
     summarizer_only: Optional[bool]  # Flag to run only summarizer workflow
     human_response: Optional[bool]  # Flag indicating if human response is needed
+    email_id: Optional[str]  # Email UUID from emails table (for notifications and scheduled_events)
     original_thread_id: Optional[str]  # Original thread ID from email provider (e.g., Gmail thread ID)
     microsoft_message_id: Optional[str]  # Microsoft Graph internal message ID for replies
     high_priority_email: Optional[bool]  # Flag indicating if email is high priority

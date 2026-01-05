@@ -920,6 +920,7 @@ def run_workflow(email_data: dict = None):
                 "human_response": False,
                 "automation_executed": False,
                 "summarizer_only": email_data.get("summarizer_only", False),
+                "email_id": email_data.get("email_id", None),
                 "original_thread_id": email_data.get("original_thread_id", None),
                 "microsoft_message_id": email_data.get("microsoft_message_id", None),
                 "review_iteration": 0,

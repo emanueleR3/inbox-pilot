@@ -333,6 +333,7 @@ class EmailProcessor:
         payload = {
             "thread_id": thread_id,
             "message_id": email_data.get("message_id"),
+            "email_id": email_data.get("email_id"),  # Email UUID from emails table
             "microsoft_message_id": email_data.get("microsoft_message_id"),
             "reply_to_id": email_data.get("reply_to_id", "no"),
             "box_email": thread_data.get("box_email") or email_data.get("user_email"),
