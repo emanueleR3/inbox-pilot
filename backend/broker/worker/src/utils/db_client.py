@@ -7,11 +7,13 @@ Based on the same pattern used in listeners.
 import os
 from supabase import create_client, Client
 from threading import Lock
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
 import base64
 import hashlib
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 # Carica le variabili d'ambiente
 load_dotenv()
@@ -333,6 +335,52 @@ def get_service_id_by_email(email: str) -> Optional[str]:
         return None
 
 
+def _normalize_datetime_value(value: Any) -> str:
+    """Normalize various timestamp formats to ISO-8601 UTC string.
+
+    Accepts:
+    - epoch milliseconds/seconds (int/float or numeric string)
+    - ISO-8601 strings (with or without timezone, including trailing Z)
+    - RFC 2822 strings (email Date header)
+    - datetime objects
+    """
+    now_utc = datetime.now(timezone.utc)
+    if value is None or value == "":
+        return now_utc.isoformat()
+
+    dt: datetime
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, (int, float)):
+        ts = float(value)
+        if ts > 1e12:  # milliseconds
+            ts /= 1000.0
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    elif isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return now_utc.isoformat()
+        if s.isdigit():
+            ts = float(s)
+            if ts > 1e12:
+                ts /= 1000.0
+            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        else:
+            try:
+                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            except Exception:
+                try:
+                    dt = parsedate_to_datetime(s)
+                except Exception:
+                    return now_utc.isoformat()
+    else:
+        return now_utc.isoformat()
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
+
+
 def save_email(email_data: Dict) -> Optional[str]:
     """
     Salva una email nella tabella emails.
@@ -359,16 +407,18 @@ def save_email(email_data: Dict) -> Optional[str]:
         # Cerca written_after_id basandosi su response_at_id
         response_at_id = email_data.get("response_at_id")
         written_after_id = None
-        if response_at_id and response_at_id.lower() != "no":
+        if isinstance(response_at_id, str) and response_at_id and response_at_id.lower() != "no":
             written_after = get_email_by_message_id(response_at_id)
             if written_after:
                 written_after_id = written_after.get("email_id")
+
+        normalized_datetime = _normalize_datetime_value(email_data.get("datetime"))
         
         emails_data = {
             "thread_id": email_data.get("thread_id"),
             "message_id": email_data.get("message_id"),
-            "response_at_id": email_data.get("response_at_id") if email_data.get("response_at_id", "").lower() != "no" else None,
-            "datetime": email_data.get("datetime"),
+            "response_at_id": response_at_id if isinstance(response_at_id, str) and response_at_id.lower() != "no" else None,
+            "datetime": normalized_datetime,
             "body": email_data.get("body"),
             "service_id": email_data.get("service_id"),
             "outcome": email_data.get("outcome", "RECEIVED"),
