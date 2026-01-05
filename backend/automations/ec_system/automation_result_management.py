@@ -659,6 +659,34 @@ def process_automation_result(workflow_result: dict):
             print(f"❌ [PRIORITY_CONTROLLER] Error sending high priority notification: {e}")
         
         return
+
+    # ======= NO TASKS (NO REPLY) CHECK =======
+    # If TASKS_EXTRACTOR produced an empty task list, the workflow ends early.
+    # We still need to persist the computed fields on the thread.
+    list_of_tasks = workflow_result.get("list_of_tasks")
+    if isinstance(list_of_tasks, list) and len(list_of_tasks) == 0:
+        if not thread_id:
+            print(f"❌ [WORKFLOW] No thread_id found in workflow result (no tasks)")
+            return
+
+        # Normalize enum subcategory to string for DB consistency
+        subcategory_value = subcategory.value if hasattr(subcategory, "value") else subcategory
+
+        thread_data = {
+            "category": category,
+            "subcategory": subcategory_value,
+            "summary": summary,
+            "extended_summary": extended_summary,
+            "status": ThreadStatus.PROCESSED.value,
+        }
+
+        try:
+            update_thread(thread_id, thread_data)
+            print(f"✅ [WORKFLOW] No tasks extracted - thread updated as PROCESSED")
+        except Exception as e:
+            print(f"❌ [WORKFLOW] Error updating thread (no tasks): {e}")
+
+        return
     
     # ======= AUTOMATION EXECUTED CHECK =======
     if workflow_result.get("automation_executed", False):
