@@ -1500,10 +1500,10 @@ def reader_node(state):
             )
             
             # Update state with confirm appointment details
+            # Note: appointment_duration is NOT set here - it comes from user_config (DB)
             updates["key_entities"] = confirm_response.key_entities
             updates["appointment_title"] = confirm_response.title_of_event
             updates["appointment_date"] = confirm_response.date
-            updates["appointment_duration"] = confirm_response.duration
             updates["appointment_attendees"] = confirm_response.attendees
             updates["appointment_place"] = confirm_response.place
             updates["appointment_notes"] = confirm_response.additional_notes
@@ -1618,12 +1618,17 @@ def scheduler_node(state):
         # Get current timestamp with day of week
         now = datetime.now()
         current_timestamp = f"{now.strftime('%A')}, {now.isoformat()}"
+
+        # Always use appointment_duration from user_config (loaded from DB)
+        # This ensures consistent slot duration across all appointment operations
+        effective_duration = user_config.get("appointment_duration", 60)
+        print(f"   ⏱️ Duration (minutes): {effective_duration}")
         
         # Get appointment details from state (for booking)
         appointment_info = {
             "title_of_event": state.get("appointment_title"),
             "date": state.get("appointment_date"),
-            "duration": state.get("appointment_duration", 60),
+            "duration": effective_duration,
             "attendees": state.get("appointment_attendees"),
             "place": state.get("appointment_place"),
             "additional_notes": state.get("appointment_notes")

@@ -51,6 +51,7 @@ class UserConfiguration:
         self.config_completed = data.get("config_completed", False)
         self.calendar_provider = data.get("calendar_provider")  # None if no calendar connected
         self.draft = data.get("draft", False)  # If True, create drafts instead of sending emails
+        self.appointment_duration = data.get("appointment_duration", 60)  # Default 60 minutes
     
     def to_dict(self) -> Dict:
         """Convert configuration to dictionary for workflow state."""
@@ -65,7 +66,8 @@ class UserConfiguration:
             "activated": self.activated,
             "config_completed": self.config_completed,
             "calendar_provider": self.calendar_provider,
-            "draft": self.draft
+            "draft": self.draft,
+            "appointment_duration": self.appointment_duration
         }
     
     def __repr__(self) -> str:
@@ -163,7 +165,8 @@ def get_user_configuration_sync(box_email: str) -> Optional[UserConfiguration]:
             "activated, "
             "config_completed, "
             "calendar_provider, "
-            "draft"
+            "draft, "
+            "appointment_duration"
         ).eq("email", box_email).execute()
         
         if not response.data:
