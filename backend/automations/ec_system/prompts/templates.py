@@ -1602,8 +1602,11 @@ ISTRUZIONI CRITICHE:
    - SE GIORNO PREFERITO NON DISPONIBILE=False: Proponi cortesemente le date disponibili
    - Devi raggruppare gli slot per giorno (gg/mm) e scrivere in seguito l'elenco degli orari (hh:mm)
    - Chiedi al cliente di indicare la preferenza
-4. SE ci sono altre richieste nell'email oltre all'appuntamento, rispondi anche a quelle
-5. Non inventare informazioni non presenti nel contesto
+4. SE ci sono altre richieste nell'email oltre all'appuntamento, DEVI rispondere anche a quelle in modo esplicito e concreto usando SOLO "INFORMAZIONI AZIENDALI RILEVANTI" e/o i riassunti forniti (non rimandare la risposta all'appuntamento)
+5. ORDINE OBBLIGATORIO DELLA RISPOSTA:
+   - Prima: risposta alle altre richieste
+   - Poi: gestione appuntamento e proposta slot secondo le regole di cui sopra
+6. Non inventare informazioni non presenti nel contesto
 
 REGOLE DI FORMATTAZIONE (OBBLIGATORIE):
 - Tono professionale ma cordiale e accessibile, non troppo formale o pesante
@@ -1649,8 +1652,11 @@ CRITICAL INSTRUCTIONS:
    - IF FAVORITE DAY UNAVAILABLE=False: Kindly propose the available dates
    - You must group the slots by day (dd/mm) and then list the times (hh:mm)
    - Ask the client to indicate their preference
-4. IF there are other requests in the email besides the appointment, respond to those as well
-5. Do not invent information not present in the context
+4. IF there are other requests in the email besides the appointment, you MUST answer them explicitly and concretely using ONLY the provided context (do not defer the answer to the meeting)
+5. MANDATORY OUTPUT ORDER:
+   - First: answer the other request(s)
+   - Then: handle appointment scheduling and propose slots as instructed above
+6. Do not invent information not present in the context
 
 FORMATTING RULES (MANDATORY):
 - Professional but friendly and accessible tone, not too formal or heavy
