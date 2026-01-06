@@ -1159,8 +1159,9 @@ def tasks_extractor_node(state):
         summary_attachments = state.get("summary_attachments", "")
         language = state.get("language", "ITA")
         subcategory = state.get("subcategory", "")
+        subcategory_value = subcategory.value if hasattr(subcategory, "value") else subcategory
         
-        print(f"   🏷️ Subcategory: {subcategory}")
+        print(f"   🏷️ Subcategory: {subcategory_value}")
         print(f"   📧 Subject: {subject[:50]}...")
         print(f"   🔒 Language: {language}")
         
@@ -1175,6 +1176,20 @@ def tasks_extractor_node(state):
         
         # Convert TaskType enum values to strings for storage
         list_of_tasks = [task.value for task in tasks_response.list_of_tasks]
+
+        # Deterministic override: appointment subcategories must always run the
+        # appointment flow, even if the LLM misses the task.
+        appointment_subcategories = {
+            "REQUEST_APPOINTMENT",
+            "CONFIRM_APPOINTMENT",
+            "REQUEST_APPOINTMENT_CHANGE",
+            "CANCEL_APPOINTMENT",
+        }
+        if subcategory_value in appointment_subcategories and "MANAGE_APPOINTMENT_TASK" not in list_of_tasks:
+            print(
+                "⚠️ [TASKS_EXTRACTOR] LLM returned no MANAGE_APPOINTMENT_TASK for an appointment subcategory; forcing it"
+            )
+            list_of_tasks.append("MANAGE_APPOINTMENT_TASK")
         
         # Update state with extracted tasks
         state["list_of_tasks"] = list_of_tasks
