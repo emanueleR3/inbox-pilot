@@ -132,6 +132,49 @@ class ThreadRepository:
         except Exception as e:
             print(f"❌ Error retrieving thread {thread_id}: {e}")
             return None
+
+    def append_email_id_to_history_internal(self, thread_id: str, email_id: str) -> bool:
+        """Append an email UUID to threads.history_internal (idempotent).
+
+        This is used to keep an internal ordered list of email_ids in the thread,
+        independent from the public-facing message-id history.
+        """
+        try:
+            if not thread_id or not email_id:
+                return False
+
+            response = (
+                self.supabase.table("threads")
+                .select("history_internal")
+                .eq("thread_id", thread_id)
+                .execute()
+            )
+
+            if not response.data:
+                print(f"❌ [THREAD] Thread {thread_id} not found for history_internal update")
+                return False
+
+            current_history_internal = response.data[0].get("history_internal") or []
+            if not isinstance(current_history_internal, list):
+                current_history_internal = list(current_history_internal)
+
+            if email_id in current_history_internal:
+                return True
+
+            current_history_internal.append(email_id)
+
+            update_response = (
+                self.supabase.table("threads")
+                .update({"history_internal": current_history_internal})
+                .eq("thread_id", thread_id)
+                .execute()
+            )
+
+            return bool(update_response.data)
+
+        except Exception as e:
+            print(f"❌ [THREAD] Error updating history_internal for thread {thread_id}: {e}")
+            return False
     
     def update_thread_history(self, thread_id: str, new_message_id: str) -> bool:
         """

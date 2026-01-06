@@ -799,6 +799,33 @@ def update_email_outcome(email_id: str, outcome: str) -> bool:
         print(f"❌ [DB_CLIENT] Error updating email outcome: {e}")
         return False
 
+
+def update_email_priority_score(email_id: str, priority_score: int) -> bool:
+    """Update priority_score for an existing email (typically the inbound email that was processed)."""
+    try:
+        if not email_id:
+            return False
+
+        supabase = get_supabase_client()
+
+        response = (
+            supabase.table("emails")
+            .update({"priority_score": priority_score})
+            .eq("email_id", email_id)
+            .execute()
+        )
+
+        if response.data:
+            print(f"✅ [DB_CLIENT] Email priority_score updated to '{priority_score}' for email_id: {email_id}")
+            return True
+        else:
+            print(f"❌ [DB_CLIENT] Failed to update email priority_score for email_id: {email_id}")
+            return False
+
+    except Exception as e:
+        print(f"❌ [DB_CLIENT] Error updating email priority_score: {e}")
+        return False
+
 def insert_new_mail_in_history_thread(thread_id: str, message_id: str, email_id: str = None) -> bool:
     """
     Adds a new message_id to thread's history array and optionally adds email_id to history_internal.

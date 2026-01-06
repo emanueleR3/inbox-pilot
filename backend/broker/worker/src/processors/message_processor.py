@@ -271,6 +271,14 @@ class EmailProcessor:
                 log(f"[PROCESSOR] Email saved to database with email_id: {email_id}")
                 # Store email_id in email_data for later use (e.g., attachments)
                 email_data["email_id"] = email_id
+
+                # Keep threads.history_internal in sync for BOTH inbound and outbound.
+                try:
+                    updated = self.thread_repo.append_email_id_to_history_internal(thread_id, email_id)
+                    if not updated:
+                        log(f"[PROCESSOR] Warning: failed to append email_id to history_internal for thread {thread_id}")
+                except Exception as e:
+                    log(f"[PROCESSOR] Warning: history_internal update failed for thread {thread_id}: {e}")
             else:
                 log(f"[PROCESSOR] Failed to save email to database")
                 

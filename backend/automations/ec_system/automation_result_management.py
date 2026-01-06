@@ -5,7 +5,8 @@ from db_client import (
     update_thread,
     get_email_service_data,
     insert_new_mail_in_history_thread,
-    get_calendar_service_data
+    get_calendar_service_data,
+    update_email_priority_score
 )
 import os
 import requests
@@ -481,6 +482,13 @@ def process_automation_result(workflow_result: dict):
     # Get timestamp in user's timezone for notification formatting
     notification_timestamp = _get_timestamp_in_user_timezone(box_email)
 
+    # Persist priority_score on the INBOUND email that was processed (not on the outbound AI email).
+    if email_id is not None:
+        try:
+            update_email_priority_score(email_id, priority_score)
+        except Exception as e:
+            print(f"❌ [WORKFLOW] Error updating inbound email priority_score: {e}")
+
     # ======= SUMMARIZER ONLY CHECK ======= ✅
     if workflow_result.get("summarizer_only", False):   
         print(f"⚠️ [WORKFLOW] Summarizer only. - Saving summary and extended summary")
@@ -618,7 +626,6 @@ def process_automation_result(workflow_result: dict):
                     "response_at_id": message_id,
                     "processed_at": now_tz,
                     "duration": 0, #TODO calculate duration
-                    "priority_score": priority_score,
                     "body": response_body,
                     "service_id": service_id,
                     "outcome": EmailOutcome.DRAFT.value
@@ -1139,7 +1146,6 @@ def process_automation_result(workflow_result: dict):
                         "response_at_id": message_id,
                         "processed_at": now_tz,
                         "duration": 0, #TODO calculate duration
-                        "priority_score": priority_score,
                         "body": response_body,
                         "service_id": service_id,
                         "outcome": EmailOutcome.DRAFT.value
@@ -1374,7 +1380,6 @@ def process_automation_result(workflow_result: dict):
                             "response_at_id": message_id,
                             "processed_at": now_tz,
                             "duration": 0, #TODO calculate duration
-                            "priority_score": priority_score,
                             "body": response_body,
                             "service_id": service_id,
                             "outcome": EmailOutcome.FAILED_TO_SEND.value
@@ -1406,7 +1411,6 @@ def process_automation_result(workflow_result: dict):
                     "response_at_id": message_id,
                     "processed_at": now_tz,
                     "duration": 0, #TODO calculate duration
-                    "priority_score": priority_score,
                     "body": response_body,
                     "service_id": service_id,
                     "outcome": EmailOutcome.DRAFT.value if draft_mode else EmailOutcome.SENT.value
