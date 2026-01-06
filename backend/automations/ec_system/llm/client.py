@@ -2683,9 +2683,6 @@ class LLMClient:
             print(f"❌ [LLM] Error in task extraction: {e}")
             # Return empty list on error
             return TasksExtractorResponse(list_of_tasks=[])
-
-        
-
         
 
 # Global LLM client instance

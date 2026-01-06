@@ -198,14 +198,6 @@ class AttachmentService:
         
         print(f"📎 [ATTACHMENT] Successfully processed {len(processed_attachments)}/{len(attachments_metadata)} attachments")
         
-        # Update thread has_attachments flag if any attachments were processed
-        if processed_attachments:
-            try:
-                self.thread_repo.set_thread_has_attachments(thread_id, True)
-                print(f"📎 [ATTACHMENT] Updated has_attachments=True for thread {thread_id}")
-            except Exception as e:
-                print(f"❌ [ATTACHMENT] Failed to update has_attachments flag: {e}")
-        
         return processed_attachments
     
     def _create_storage_directory(self, provider: str, user_email: str, email_date: str) -> str:

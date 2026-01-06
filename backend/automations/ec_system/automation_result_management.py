@@ -491,8 +491,7 @@ def process_automation_result(workflow_result: dict):
         thread_data = {
             "summary": summary,
             "extended_summary": extended_summary,
-            "cc_emails": cc_emails,
-            "has_attachments": has_attachments
+            "cc_emails": cc_emails
         }
 
         try:
@@ -1429,8 +1428,12 @@ def process_automation_result(workflow_result: dict):
 
                 try:
                     if not draft_mode:
-                        insert_new_mail_in_history_thread(thread_id, new_message_id)
-                    save_ai_generated_email(ai_email_data)
+                        # Save the email first to get the email_id
+                        saved_email_id = save_ai_generated_email(ai_email_data)
+                        # Update history with both message_id and email_id
+                        insert_new_mail_in_history_thread(thread_id, new_message_id, saved_email_id)
+                    else:
+                        save_ai_generated_email(ai_email_data)
                     update_thread(thread_id, thread_data)
                 except Exception as e:
                     print(f"❌ [WORKFLOW] Error saving AI generated email: {e}")

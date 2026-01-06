@@ -594,13 +594,6 @@ def save_ai_generated_email(email_data: Dict) -> Optional[str]:
             "has_attachment": False  # Default, può essere aggiornato se necessario
         }
         
-        # Cerca written_after_id basandosi su response_at_id
-        response_at_id = email_data.get("response_at_id")
-        if response_at_id:
-            written_after = get_email_by_message_id(response_at_id)
-            if written_after:
-                emails_data["written_after_id"] = written_after.get("email_id")
-        
         # Rimuovi valori None per lasciare che il database gestisca i default
         emails_data = {k: v for k, v in emails_data.items() if v is not None}
         
@@ -652,13 +645,6 @@ def save_inbound_email(email_data: Dict) -> Optional[str]:
             "has_attachment": email_data.get("has_attachment", False)
         }
         
-        # Cerca written_after_id basandosi su response_at_id
-        response_at_id = email_data.get("response_at_id")
-        if response_at_id and response_at_id.lower() != "no":
-            written_after = get_email_by_message_id(response_at_id)
-            if written_after:
-                emails_data["written_after_id"] = written_after.get("email_id")
-        
         # Rimuovi valori None
         emails_data = {k: v for k, v in emails_data.items() if v is not None}
         
@@ -709,13 +695,6 @@ def save_outbound_email(email_data: Dict) -> Optional[str]:
             "direction": "OUTBOUND",
             "has_attachment": email_data.get("has_attachment", False)
         }
-        
-        # Cerca written_after_id basandosi su response_at_id
-        response_at_id = email_data.get("response_at_id")
-        if response_at_id and response_at_id.lower() != "no":
-            written_after = get_email_by_message_id(response_at_id)
-            if written_after:
-                emails_data["written_after_id"] = written_after.get("email_id")
         
         # Rimuovi valori None
         emails_data = {k: v for k, v in emails_data.items() if v is not None}
@@ -820,33 +799,55 @@ def update_email_outcome(email_id: str, outcome: str) -> bool:
         print(f"❌ [DB_CLIENT] Error updating email outcome: {e}")
         return False
 
-def insert_new_mail_in_history_thread(thread_id: str, message_id: str) -> bool:
+def insert_new_mail_in_history_thread(thread_id: str, message_id: str, email_id: str = None) -> bool:
+    """
+    Adds a new message_id to thread's history array and optionally adds email_id to history_internal.
+    
+    Args:
+        thread_id: The thread to update
+        message_id: The message ID to add to history
+        email_id: Optional email UUID to add to history_internal
+        
+    Returns:
+        True if update successful, False otherwise
+    """
     try:
         supabase = get_supabase_client()
 
-        # 1. Fetch current history
-        response = supabase.table("threads").select("history").eq("thread_id", thread_id).execute()
+        # 1. Fetch current history and history_internal
+        response = supabase.table("threads").select("history, history_internal").eq("thread_id", thread_id).execute()
         
         if not response.data:
             print(f"❌ [DB_CLIENT] Thread not found: {thread_id}")
             return False
             
         current_history = response.data[0].get("history") or []
+        current_history_internal = response.data[0].get("history_internal") or []
         
-        # 2. Append new message_id
+        update_data = {}
+        
+        # 2. Append new message_id to history if not already present
         if message_id not in current_history:
             current_history.append(message_id)
+            update_data["history"] = current_history
+        else:
+            print(f"ℹ️ [DB_CLIENT] Message ID already in history")
             
-            # 3. Update thread
-            response = supabase.table("threads").update({"history": current_history}).eq("thread_id", thread_id).execute()
-
+        # 3. Append email_id to history_internal if provided and not already present
+        if email_id and email_id not in current_history_internal:
+            current_history_internal.append(email_id)
+            update_data["history_internal"] = current_history_internal
+            print(f"📧 [DB_CLIENT] Added email_id {email_id} to history_internal for thread {thread_id}")
+        
+        # 4. Update thread if there are changes
+        if update_data:
+            response = supabase.table("threads").update(update_data).eq("thread_id", thread_id).execute()
             if response.data:
                 return True
             else:
                 return False
         else:
-             print(f"ℹ️ [DB_CLIENT] Message ID already in history")
-             return True
+            return True
 
     except Exception as e:
         print(f"❌ [DB_CLIENT] Error inserting new mail in history thread: {e}")

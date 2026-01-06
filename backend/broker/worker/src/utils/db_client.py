@@ -411,16 +411,9 @@ def save_email(email_data: Dict) -> Optional[str]:
             if existing and existing.get("email_id"):
                 print(f"ℹ️ [DB] Email already exists for message_id={message_id} -> email_id: {existing.get('email_id')}")
                 return existing.get("email_id")
-        
-        # Cerca written_after_id basandosi su response_at_id
-        response_at_id = email_data.get("response_at_id")
-        written_after_id = None
-        if isinstance(response_at_id, str) and response_at_id and response_at_id.lower() != "no":
-            written_after = get_email_by_message_id(response_at_id)
-            if written_after:
-                written_after_id = written_after.get("email_id")
 
         normalized_datetime = _normalize_datetime_value(email_data.get("datetime"))
+        response_at_id = email_data.get("response_at_id")
         
         emails_data = {
             "thread_id": email_data.get("thread_id"),
@@ -432,8 +425,7 @@ def save_email(email_data: Dict) -> Optional[str]:
             "outcome": email_data.get("outcome", "RECEIVED"),
             "ai_generated": email_data.get("ai_generated", False),
             "direction": email_data.get("direction", "INBOUND"),
-            "has_attachment": email_data.get("has_attachment", False),
-            "written_after_id": written_after_id
+            "has_attachment": email_data.get("has_attachment", False)
         }
         
         # Rimuovi valori None
