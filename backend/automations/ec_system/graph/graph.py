@@ -6,6 +6,7 @@ The workflow handles email classification, information extraction, and storage.
 """
 
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()  
@@ -949,9 +950,14 @@ def run_workflow(email_data: dict = None):
         
         # Compile and execute the workflow
         compiled_graph = graph.compile()
+        start_time = time.monotonic()
         result = compiled_graph.invoke(initial_state)
+        duration_seconds = max(0, int(time.monotonic() - start_time))
+
+        if isinstance(result, dict):
+            result["duration"] = duration_seconds
         
-        print(f"🏁 [WORKFLOW] Completed with result: {result}")
+        print(f"🏁 [WORKFLOW] Completed in {duration_seconds}s with result: {result}")
         return result
         
     except Exception as e:
