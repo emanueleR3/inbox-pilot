@@ -478,6 +478,7 @@ def process_automation_result(workflow_result: dict):
     original_thread_id = workflow_result.get("original_thread_id", None)
     microsoft_message_id = workflow_result.get("microsoft_message_id", None)  # Microsoft Graph internal ID for replies
     scheduled_event_details = workflow_result.get("scheduled_event_details", None)  # Event details for ICS attachment
+    duration = int(workflow_result.get("duration") or 0)
 
     # Get timestamp in user's timezone for notification formatting
     notification_timestamp = _get_timestamp_in_user_timezone(box_email)
@@ -625,7 +626,7 @@ def process_automation_result(workflow_result: dict):
                     "message_id": draft_id,
                     "response_at_id": message_id,
                     "processed_at": now_tz,
-                    "duration": 0, #TODO calculate duration
+                    "duration": duration,
                     "body": response_body,
                     "service_id": service_id,
                     "outcome": EmailOutcome.DRAFT.value
@@ -1145,7 +1146,7 @@ def process_automation_result(workflow_result: dict):
                         "message_id": draft_id,
                         "response_at_id": message_id,
                         "processed_at": now_tz,
-                        "duration": 0, #TODO calculate duration
+                        "duration": duration,
                         "body": response_body,
                         "service_id": service_id,
                         "outcome": EmailOutcome.DRAFT.value
@@ -1379,7 +1380,7 @@ def process_automation_result(workflow_result: dict):
                             "message_id": None,
                             "response_at_id": message_id,
                             "processed_at": now_tz,
-                            "duration": 0, #TODO calculate duration
+                            "duration": duration,
                             "body": response_body,
                             "service_id": service_id,
                             "outcome": EmailOutcome.FAILED_TO_SEND.value
@@ -1396,6 +1397,7 @@ def process_automation_result(workflow_result: dict):
                             "subcategory": subcategory,
                             "summary": summary,
                             "extended_summary": extended_summary,
+                            "human_response": True,
                             "status": ThreadStatus.HUMAN_REVIEW.value,
                         }
                         update_thread(thread_id, thread_data)
@@ -1410,7 +1412,7 @@ def process_automation_result(workflow_result: dict):
                     "message_id": new_message_id,
                     "response_at_id": message_id,
                     "processed_at": now_tz,
-                    "duration": 0, #TODO calculate duration
+                    "duration": duration,
                     "body": response_body,
                     "service_id": service_id,
                     "outcome": EmailOutcome.DRAFT.value if draft_mode else EmailOutcome.SENT.value
@@ -1421,6 +1423,7 @@ def process_automation_result(workflow_result: dict):
                     "subcategory": subcategory,
                     "summary": summary,
                     "extended_summary": extended_summary,
+                    "human_response": draft_mode,
                     "status": ThreadStatus.HUMAN_REVIEW.value if draft_mode else ThreadStatus.PROCESSED.value,
                 }
                 

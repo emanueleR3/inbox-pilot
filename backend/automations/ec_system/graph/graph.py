@@ -6,6 +6,7 @@ The workflow handles email classification, information extraction, and storage.
 """
 
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()  
@@ -487,11 +488,26 @@ def create_email_classification_graph():
         """Route based on extracted tasks for parallel execution."""
         tasks = state.get("list_of_tasks", [])
         high_priority = state.get("high_priority_email", False)
+        subcategory = state.get("subcategory", "")
+        subcategory_value = subcategory.value if hasattr(subcategory, "value") else subcategory
         
         print(f"🔀 [TASKS_EXTRACTOR] Routing based on tasks: {tasks}, high_priority={high_priority}")
         
         # If no tasks, end workflow
         if not tasks:
+            appointment_subcategories = {
+                "REQUEST_APPOINTMENT",
+                "CONFIRM_APPOINTMENT",
+                "REQUEST_APPOINTMENT_CHANGE",
+                "CANCEL_APPOINTMENT",
+            }
+
+            if (not high_priority) and (subcategory_value in appointment_subcategories):
+                print(
+                    "   → No tasks from LLM, but appointment subcategory detected; routing to APPOINTMENT_ROUTER"
+                )
+                return NodeNames.APPOINTMENT_ROUTER
+
             print(f"   → No tasks to execute, ending workflow")
             state["automation_executed"] = True
             return END
@@ -934,9 +950,14 @@ def run_workflow(email_data: dict = None):
         
         # Compile and execute the workflow
         compiled_graph = graph.compile()
+        start_time = time.monotonic()
         result = compiled_graph.invoke(initial_state)
+        duration_seconds = max(0, int(time.monotonic() - start_time))
+
+        if isinstance(result, dict):
+            result["duration"] = duration_seconds
         
-        print(f"🏁 [WORKFLOW] Completed with result: {result}")
+        print(f"🏁 [WORKFLOW] Completed in {duration_seconds}s with result: {result}")
         return result
         
     except Exception as e:
