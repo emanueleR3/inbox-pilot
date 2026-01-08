@@ -11,7 +11,7 @@ class CalendarController:
         self._validate_required_fields(req)
         
         provider = req.get("provider", "").lower()
-        token = req.get("token")
+        email = req.get("email")
         calendar_id = req.get("calendar_id", "primary")
         max_results = req.get("max_results", 100)
         
@@ -38,7 +38,7 @@ class CalendarController:
         
         if provider == "google":
             return await self.calendar_dao.fetch_google_calendar_events(
-                token=token,
+                email=email,
                 calendar_id=calendar_id,
                 time_min=time_min,
                 time_max=time_max,
@@ -46,7 +46,7 @@ class CalendarController:
             )
         else:
             return await self.calendar_dao.fetch_microsoft_calendar_events(
-                token=token,
+                email=email,
                 calendar_id=calendar_id,
                 time_min=time_min,
                 time_max=time_max,
@@ -54,7 +54,7 @@ class CalendarController:
             )
 
     def _validate_required_fields(self, request_data: dict) -> None:
-        required_fields = ["provider", "token"]
+        required_fields = ["provider", "email"]
         missing_fields = [field for field in required_fields if not request_data.get(field)]
         
         if missing_fields:

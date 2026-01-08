@@ -199,7 +199,7 @@ async def get_events(
         ...,
         example={
             "provider": "google",
-            "token": "ya29.a0AfH6SMBx...",
+            "email": "user@example.it",
             "time_min": "2025-01-01T00:00:00Z",
             "time_max": "2025-01-31T23:59:59Z",
             "max_results": 50,

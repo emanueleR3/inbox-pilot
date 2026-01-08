@@ -16,12 +16,21 @@ class CalendarDAO:
 
     async def fetch_google_calendar_events(
         self,
-        token: str,
+        email: str,
         calendar_id: str = "primary",
         time_min: Optional[datetime] = None,
         time_max: Optional[datetime] = None,
         max_results: int = 100
     ) -> list[CalendarEvent]:
+
+        token = (
+            self.supabase
+            .table("subscription_services")
+            .select("hashed_access_token")
+            .eq("email", email)
+            .execute()
+        )
+
         decrypted_token = decrypt_token(token, "token")
         url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
 
@@ -53,39 +62,38 @@ class CalendarDAO:
                         reason=f"Status code {response.status_code}: {response.text}"
                     )
 
-                data = response.json()
-                events = data.get("items", [])
-
-                normalized_events = [normalize_google_event(event) for event in events]
+                events = response.json().get("items", [])
+                normalized_events = [normalize_google_event(e) for e in events]
 
                 if not normalized_events:
-                    return normalized_events
+                    return []
 
-                event_ids = [event.id for event in normalized_events]
+                event_ids = [e.id for e in normalized_events]
 
-                summaries = {}
+                # 🔹 JOIN scheduled_events → emails
+                email_bodies = {}
                 try:
                     supabase_response = (
-                        self.supabase.table("scheduled_events")
-                        .select("provider_event_id, threads(summary)")
+                        self.supabase
+                        .table("scheduled_events")
+                        .select("provider_event_id, emails(body)")
                         .in_("provider_event_id", event_ids)
                         .execute()
                     )
 
                     for record in supabase_response.data or []:
                         provider_event_id = record.get("provider_event_id")
-                        thread_data = record.get("threads")
+                        email_data = record.get("emails")
 
-                        if provider_event_id and thread_data:
-                            summary = thread_data.get("summary")
-                            if summary:
-                                summaries[provider_event_id] = summary
+                        if provider_event_id and email_data:
+                            body = email_data.get("body")
+                            if body:
+                                email_bodies[provider_event_id] = body
                 except Exception:
-                    summaries = {}
+                    email_bodies = {}
 
                 for event in normalized_events:
-                    if event.id in summaries:
-                        event.thread_summary = summaries[event.id]
+                    event.email_body = email_bodies.get(event.id)
 
                 return normalized_events
 
@@ -99,21 +107,31 @@ class CalendarDAO:
             raise
         except Exception as e:
             raise GmailAPIException(reason=f"Errore inaspettato: {str(e)}")
-        
+
     async def fetch_microsoft_calendar_events(
         self,
-        token: str,
+        email: str,
         calendar_id: str = "primary",
         time_min: Optional[datetime] = None,
         time_max: Optional[datetime] = None,
         max_results: int = 100
     ) -> list[CalendarEvent]:
+
+        token = (
+            self.supabase
+            .table("subscription_services")
+            .select("hashed_access_token")
+            .eq("email", email)
+            .execute()
+        )
+
         decrypted_token = decrypt_token(token, "token")
 
-        if calendar_id == "primary":
-            url = "https://graph.microsoft.com/v1.0/me/calendar/events"
-        else:
-            url = f"https://graph.microsoft.com/v1.0/me/calendars/{calendar_id}/events"
+        url = (
+            "https://graph.microsoft.com/v1.0/me/calendar/events"
+            if calendar_id == "primary"
+            else f"https://graph.microsoft.com/v1.0/me/calendars/{calendar_id}/events"
+        )
 
         params = {
             "$top": max_results,
@@ -146,39 +164,38 @@ class CalendarDAO:
                         reason=f"Status code {response.status_code}: {response.text}"
                     )
 
-                data = response.json()
-                events = data.get("value", [])
-
-                normalized_events = [normalize_microsoft_event(event) for event in events]
+                events = response.json().get("value", [])
+                normalized_events = [normalize_microsoft_event(e) for e in events]
 
                 if not normalized_events:
-                    return normalized_events
+                    return []
 
-                event_ids = [event.id for event in normalized_events]
+                event_ids = [e.id for e in normalized_events]
 
-                summaries = {}
+                # 🔹 JOIN scheduled_events → emails
+                email_bodies = {}
                 try:
                     supabase_response = (
-                        self.supabase.table("scheduled_events")
-                        .select("provider_event_id, threads(summary)")
+                        self.supabase
+                        .table("scheduled_events")
+                        .select("provider_event_id, emails(body)")
                         .in_("provider_event_id", event_ids)
                         .execute()
                     )
 
                     for record in supabase_response.data or []:
                         provider_event_id = record.get("provider_event_id")
-                        thread_data = record.get("threads")
+                        email_data = record.get("emails")
 
-                        if provider_event_id and thread_data:
-                            summary = thread_data.get("summary")
-                            if summary:
-                                summaries[provider_event_id] = summary
+                        if provider_event_id and email_data:
+                            body = email_data.get("body")
+                            if body:
+                                email_bodies[provider_event_id] = body
                 except Exception:
-                    summaries = {}
+                    email_bodies = {}
 
                 for event in normalized_events:
-                    if event.id in summaries:
-                        event.thread_summary = summaries[event.id]
+                    event.email_body = email_bodies.get(event.id)
 
                 return normalized_events
 
@@ -192,4 +209,3 @@ class CalendarDAO:
             raise
         except Exception as e:
             raise GraphAPIException(reason=f"Errore inaspettato: {str(e)}")
-    
