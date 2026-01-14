@@ -242,8 +242,8 @@ def create_email_classification_graph():
         attachments as essential for understanding/responding, go to the extractor.
         Otherwise continue to the router.
         """
-        #if state.get("low_confidence_classification"): NOTE
-        #    return END
+        if state.get("low_confidence_classification"):
+            return END
 
         # Route to attachment extractor only when classifier determined attachments
         # are necessary for correct handling of the message.
@@ -284,8 +284,8 @@ def create_email_classification_graph():
     
     def should_continue_after_evaluator(state):
         """Check if workflow should continue after evaluator."""
-        #if state.get("low_confidence_classification"): NOTE
-        #    return END
+        if state.get("low_confidence_classification"):
+            return END
         return NodeNames.PRIORITY_CONTROLLER
     
     graph.add_conditional_edges(
