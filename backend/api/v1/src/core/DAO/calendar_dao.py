@@ -31,7 +31,9 @@ class CalendarDAO:
             .execute()
         )
 
-        decrypted_token = decrypt_token(token, "token")
+        encrypted_token = token.get("hashed_access_token")
+
+        decrypted_token = decrypt_token(encrypted_token, "token")
         url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
 
         params = {
@@ -125,7 +127,9 @@ class CalendarDAO:
             .execute()
         )
 
-        decrypted_token = decrypt_token(token, "token")
+        encrypted_token = token.get("hashed_access_token")
+
+        decrypted_token = decrypt_token(encrypted_token, "token")
 
         url = (
             "https://graph.microsoft.com/v1.0/me/calendar/events"
