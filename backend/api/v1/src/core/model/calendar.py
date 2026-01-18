@@ -26,7 +26,7 @@ class CalendarEvent(BaseModel):
     is_all_day: bool = False
     status: Optional[str] = None
     html_link: Optional[str] = None
-    thread_summary: str = "Evento non generato da email gestita da AI"
+    email_body: str = "Evento non generato da email gestita da AI"
 
 
 class CalendarEventsRequest(BaseModel):
