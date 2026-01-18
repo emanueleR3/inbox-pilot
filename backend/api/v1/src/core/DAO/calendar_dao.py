@@ -31,7 +31,7 @@ class CalendarDAO:
             .execute()
         )
 
-        encrypted_token = token.get("hashed_access_token")
+        encrypted_token = token.data["hashed_access_token"]
 
         decrypted_token = decrypt_token(encrypted_token, "token")
         url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
@@ -127,7 +127,7 @@ class CalendarDAO:
             .execute()
         )
 
-        encrypted_token = token.get("hashed_access_token")
+        encrypted_token = token.data["hashed_access_token"]
 
         decrypted_token = decrypt_token(encrypted_token, "token")
 
