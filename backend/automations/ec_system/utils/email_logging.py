@@ -53,19 +53,20 @@ def format_timestamp_for_filename(dt: Optional[datetime] = None) -> str:
     return dt.strftime("%H_%M_%S")
 
 
-def get_log_file_path(box_email: str, timestamp: Optional[datetime] = None) -> str:
+def get_log_file_path(box_email: str, timestamp: Optional[datetime] = None, suffix: str = "") -> str:
     """
     Generate the full path for the log file.
     
     Args:
         box_email: The user's mailbox email
         timestamp: The timestamp for the log file (defaults to now)
+        suffix: Suffix to add to filename (e.g., "_A" for automations, "_B" for broker)
         
     Returns:
-        Full path like: /app/logs/emanuele_romano_03_at_gmail_com/14_32_45.txt
+        Full path like: /app/logs/emanuele_romano_03_at_gmail_com/14_32_45_A.txt
     """
     email_dir = sanitize_email_for_path(box_email)
-    filename = format_timestamp_for_filename(timestamp) + ".txt"
+    filename = format_timestamp_for_filename(timestamp) + suffix + ".txt"
     
     return os.path.join(LOGS_DIR, email_dir, filename)
 
@@ -99,11 +100,13 @@ class EmailLogContext:
         """
         self.box_email = box_email
         self.timestamp = timestamp or datetime.now(ZoneInfo("Europe/Rome"))
-        self.log_path = get_log_file_path(box_email, self.timestamp)
+        self.service_name = service_name
+        # Add suffix based on service: _B for BROKER, _A for AUTOMATIONS
+        suffix = "_A" if service_name == "AUTOMATIONS" else "_B"
+        self.log_path = get_log_file_path(box_email, self.timestamp, suffix)
         self.buffer = io.StringIO()
         self._old_stdout = None
         self._started = False
-        self.service_name = service_name
         
     def __enter__(self):
         """Start capturing output."""
