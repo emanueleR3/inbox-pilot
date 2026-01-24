@@ -93,13 +93,14 @@ class EmailLogContext:
     # Thread-local storage for nested contexts
     _local = threading.local()
     
-    def __init__(self, box_email: str, timestamp: Optional[datetime] = None):
+    def __init__(self, box_email: str, timestamp: Optional[datetime] = None, service_name: str = "BROKER"):
         """
         Initialize the log context.
         
         Args:
             box_email: The user's mailbox email (used for directory naming)
             timestamp: The timestamp for this log session (defaults to now)
+            service_name: Name of the service (BROKER or AUTOMATIONS)
         """
         self.box_email = box_email
         self.timestamp = timestamp or datetime.now(ZoneInfo("Europe/Rome"))
@@ -107,6 +108,7 @@ class EmailLogContext:
         self.buffer = io.StringIO()
         self._old_stdout = None
         self._started = False
+        self.service_name = service_name
         
     def __enter__(self):
         """Start capturing output."""
@@ -124,7 +126,7 @@ class EmailLogContext:
         
         # Log session start
         self.log(f"\n{'='*80}")
-        self.log(f"📧 [BROKER] EMAIL PROCESSING LOG SESSION STARTED")
+        self.log(f"📧 [{self.service_name}] EMAIL PROCESSING LOG SESSION STARTED")
         self.log(f"📬 Mailbox: {self.box_email}")
         self.log(f"🕐 Timestamp: {self.timestamp.isoformat()}")
         self.log(f"{'='*80}\n")
@@ -136,11 +138,11 @@ class EmailLogContext:
         # Log session end
         if exc_type:
             self.log(f"\n{'='*80}")
-            self.log(f"❌ [BROKER] SESSION ENDED WITH ERROR: {exc_type.__name__}: {exc_val}")
+            self.log(f"❌ [{self.service_name}] SESSION ENDED WITH ERROR: {exc_type.__name__}: {exc_val}")
             self.log(f"{'='*80}\n")
         else:
             self.log(f"\n{'='*80}")
-            self.log(f"✅ [BROKER] EMAIL PROCESSING LOG SESSION COMPLETED")
+            self.log(f"✅ [{self.service_name}] EMAIL PROCESSING LOG SESSION COMPLETED")
             self.log(f"{'='*80}\n")
         
         # Restore stdout
@@ -176,9 +178,9 @@ class EmailLogContext:
             log_dir = os.path.dirname(self.log_path)
             os.makedirs(log_dir, exist_ok=True)
             
-            # Write the log content
+            # Write the log content (append mode to allow both broker and automations to write)
             log_content = self.buffer.getvalue()
-            with open(self.log_path, 'w', encoding='utf-8') as f:
+            with open(self.log_path, 'a', encoding='utf-8') as f:
                 f.write(log_content)
             
             # Print to original stdout (for container logs)
