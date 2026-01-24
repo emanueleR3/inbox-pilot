@@ -45,6 +45,8 @@ spec:
               mountPath: /app/attachments
             - name: scrapings
               mountPath: /app/scrapings
+            - name: logs
+              mountPath: /app/logs
           resources:
             requests:
               memory: "256Mi"
@@ -76,6 +78,10 @@ spec:
         - name: scrapings
           hostPath:
             path: /home/deploy/corretto/data/scrapings
+            type: DirectoryOrCreate
+        - name: logs
+          hostPath:
+            path: /home/deploy/corretto/logs
             type: DirectoryOrCreate
       imagePullSecrets:
         - name: ghcr-secret
