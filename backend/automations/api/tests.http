@@ -190,7 +190,7 @@ POST {{baseUrl}}/internal-quiz/start
 Content-Type: application/json
 
 {
-	"service_id": "99f58669-8763-4580-82a0-77e21b2091da"
+	"email": "student2@example.com"
 }
 
 ### Submit an answer
@@ -203,7 +203,7 @@ Content-Type: application/json
 }
 
 ### Get quiz state
-GET {{baseUrl}}/internal-quiz/561339a9-6041-4f03-8ba5-2822cec8245d/state
+GET {{baseUrl}}/internal-quiz/student2@example.com/state
 Accept: application/json
 
 ### Finish quiz (force extraction)

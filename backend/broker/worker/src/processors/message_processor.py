@@ -8,15 +8,52 @@ from src.managers.thread_manager import ThreadManager
 from src.utils.attachment_service import AttachmentService
 from src.utils.email_cleaner import EmailCleaner
 from src.repositories.thread_repository import ThreadRepository
+from src.utils.db_client import (
+    save_email,
+    get_service_id_by_email,
+    find_ai_draft_for_thread,
+    update_draft_to_sent,
+    update_thread_status,
+    update_thread_human_response,
+)
 from typing import Optional
 import aiohttp
 import os
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 load_dotenv()
 
 def log(msg):
     print(msg)
+
+
+def _extract_email_address(raw: str) -> str:
+    if not raw:
+        return ""
+    raw = raw.strip()
+    if "<" in raw and ">" in raw:
+        start = raw.find("<")
+        end = raw.find(">", start + 1)
+        if end != -1:
+            return raw[start + 1 : end].strip()
+    return raw
+
+
+def _parse_timestamp_to_datetime(value: str) -> datetime:
+    try:
+        if not value:
+            return datetime.now(timezone.utc)
+        s = value.strip()
+        # Handle common ISO Zulu suffix.
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return datetime.now(timezone.utc)
 
 class EmailProcessor:
     """
@@ -55,6 +92,11 @@ class EmailProcessor:
             
             log(f"[PROCESSOR] Action decided: {action}")
             
+            # Determine direction based on is_sent flag
+            is_sent = email_data.get("is_sent", False)
+            direction = "OUTBOUND" if is_sent else "INBOUND"
+            outcome = "SENT" if is_sent else "RECEIVED"
+            
             if action == "send_to_summarizer":
                 needs_ai = filter_result.get("needs_ai", False)
                 reply_to_id = email_data.get("reply_to_id")
@@ -77,13 +119,16 @@ class EmailProcessor:
                         "needs_ai_processing": False
                     }
                 
+                # Save email to database and get email_id
+                email_id = await self._save_email_to_db(email_data, thread_id, direction, outcome)
+                
                 try:
                     processed_attachments = []
                     if thread_id and email_data.get("attachments"):
                         log(f"[PROCESSOR] Processing attachments for summarizer in thread {thread_id}")
                         try:
                             processed_attachments = await self.attachment_service.process_attachments(
-                                email_data, thread_id
+                                email_data, thread_id, email_id
                             )
                         except Exception as e:
                             log(f"[PROCESSOR] Attachment processing failed: {e}")
@@ -100,6 +145,7 @@ class EmailProcessor:
                 return {
                     "status": "sent_to_summarizer",
                     "thread_id": thread_id,
+                    "email_id": email_id,
                     "needs_ai_processing": False,
                 }
 
@@ -109,12 +155,15 @@ class EmailProcessor:
                 needs_ai = filter_result.get("needs_ai", False)
                 thread_id = thread_data.get("thread_id")
                 
+                # Save email to database and get email_id
+                email_id = await self._save_email_to_db(email_data, thread_id, direction, outcome)
+                
                 processed_attachments = []
                 if thread_id and email_data.get("attachments"):
                     log(f"[PROCESSOR] Processing attachments for new thread {thread_id}")
                     try:
                         processed_attachments = await self.attachment_service.process_attachments(
-                            email_data, thread_id
+                            email_data, thread_id, email_id
                         )
                         thread_data["attachments_processed"] = len(processed_attachments)
                     except Exception as e:
@@ -135,6 +184,7 @@ class EmailProcessor:
                 return {
                     "status": "thread_created",
                     "thread_id": thread_data.get("thread_id"),
+                    "email_id": email_id,
                     "needs_ai_processing": needs_ai,
                     "attachments_processed": thread_data.get("attachments_processed", 0)
                 }
@@ -149,13 +199,16 @@ class EmailProcessor:
             elif action == "thread_updated":
                 thread_id = filter_result.get("thread_id")
                 
+                # Save email to database and get email_id
+                email_id = await self._save_email_to_db(email_data, thread_id, direction, outcome)
+                
                 processed_attachments = []
                 attachments_count = 0
                 if thread_id and email_data.get("attachments"):
                     log(f"[PROCESSOR] Processing attachments for updated thread {thread_id}")
                     try:
                         processed_attachments = await self.attachment_service.process_attachments(
-                            email_data, thread_id
+                            email_data, thread_id, email_id
                         )
                         attachments_count = len(processed_attachments)
                     except Exception as e:
@@ -173,16 +226,22 @@ class EmailProcessor:
                 return {
                     "status": "thread_updated",
                     "thread_id": thread_id,
+                    "email_id": email_id,
                     "needs_ai_processing": True,
                     "attachments_processed": attachments_count
                 }
             
             elif action == "human_response_marked":
                 thread_id = filter_result.get("thread_id")
+                
+                # Save email to database (human response)
+                email_id = await self._save_email_to_db(email_data, thread_id, direction, outcome)
+                
                 log(f"[PROCESSOR] Human response marked for thread {thread_id}")
                 return {
                     "status": "human_response_needed",
                     "thread_id": thread_id,
+                    "email_id": email_id,
                     "needs_ai_processing": False
                 }
             
@@ -201,6 +260,140 @@ class EmailProcessor:
                 
         except Exception as e:
             log(f"[PROCESSOR] Error processing message: {e}")
+            return None
+    
+    async def _save_email_to_db(self, email_data: dict, thread_id: str, direction: str, outcome: str) -> Optional[str]:
+        """
+        Save email to the emails table in the database.
+        For OUTBOUND emails, first check if there's an existing AI draft that should be updated
+        instead of creating a new record.
+        
+        Args:
+            email_data: Email data from listeners
+            thread_id: UUID of the thread this email belongs to
+            direction: INBOUND or OUTBOUND
+            outcome: Status of the email (RECEIVED, SENT, etc.)
+            
+        Returns:
+            email_id (UUID) if saved successfully, None otherwise
+        """
+        try:
+            box_email = email_data.get("user_email")
+            service_id = get_service_id_by_email(box_email)
+            
+            if not service_id:
+                log(f"[PROCESSOR] Warning: No service_id found for {box_email}, email will be saved without service_id")
+            
+            # Parse datetime
+            timestamp_str = email_data.get("timestamp") or email_data.get("date")
+            email_datetime = timestamp_str if timestamp_str else datetime.now(timezone.utc).isoformat()
+            
+            message_id = email_data.get("message_id")
+            reply_to_id = email_data.get("reply_to_id")
+            sender_email = _extract_email_address(email_data.get("from", ""))
+            cc_emails = email_data.get("cc")
+            if cc_emails is None:
+                cc_emails = []
+            elif not isinstance(cc_emails, list):
+                cc_emails = [cc_emails]
+            
+            # For OUTBOUND emails, check if this is a manually sent draft
+            # If there's an AI draft for the same thread responding to the same message,
+            # update it instead of creating a new record
+            if direction == "OUTBOUND" and reply_to_id and reply_to_id.lower() != "no":
+                existing_draft = find_ai_draft_for_thread(thread_id, reply_to_id)
+                if existing_draft:
+                    draft_email_id = existing_draft.get("email_id")
+                    log(f"[PROCESSOR] Found existing AI draft {draft_email_id} - updating to SENT with new message_id: {message_id}")
+                    
+                    if update_draft_to_sent(draft_email_id, message_id, email_datetime):
+                        log(f"[PROCESSOR] Successfully updated draft to SENT: email_id={draft_email_id}")
+                        email_data["email_id"] = draft_email_id
+                        
+                        # Update thread status from HUMAN_REVIEW to PROCESSED since draft was sent
+                        try:
+                            update_thread_status(thread_id, "PROCESSED")
+                            update_thread_human_response(thread_id, False)
+                            log(f"[PROCESSOR] Thread {thread_id} status updated to PROCESSED after draft sent")
+                        except Exception as e:
+                            log(f"[PROCESSOR] Warning: failed to update thread status: {e}")
+
+                        # Ensure thread history (message_ids) and history_internal (email_ids) are consistent.
+                        try:
+                            self.thread_repo.update_thread_with_new_message(
+                                thread_id=thread_id,
+                                message_id=message_id,
+                                message_timestamp=_parse_timestamp_to_datetime(email_datetime),
+                                sender_email=sender_email,
+                                cc_emails=cc_emails,
+                                reply_to_id=reply_to_id,
+                                email_id=draft_email_id,
+                            )
+                        except Exception as e:
+                            log(f"[PROCESSOR] Warning: thread history sync failed for sent draft: {e}")
+                        
+                        # Update history_internal with the email_id (should already be there from draft creation)
+                        # but ensure it's tracked
+                        try:
+                            updated = self.thread_repo.append_email_id_to_history_internal(thread_id, draft_email_id)
+                            if not updated:
+                                log(f"[PROCESSOR] Note: email_id {draft_email_id} may already be in history_internal")
+                        except Exception as e:
+                            log(f"[PROCESSOR] Warning: history_internal update for draft: {e}")
+                        
+                        return draft_email_id
+                    else:
+                        log(f"[PROCESSOR] Failed to update draft - will create new record")
+            
+            # Prepare email data for database (standard flow)
+            db_email_data = {
+                "thread_id": thread_id,
+                "message_id": message_id,
+                "response_at_id": reply_to_id,
+                "datetime": email_datetime,
+                "body": email_data.get("body_text", email_data.get("body", "")),
+                "service_id": service_id,
+                "outcome": outcome,
+                "direction": direction,
+                "ai_generated": False,
+                "has_attachment": bool(email_data.get("attachments"))
+            }
+            
+            email_id = save_email(db_email_data)
+            
+            if email_id:
+                log(f"[PROCESSOR] Email saved to database with email_id: {email_id}")
+                # Store email_id in email_data for later use (e.g., attachments)
+                email_data["email_id"] = email_id
+
+                # Keep thread history (message_ids) and history_internal (email_ids) in sync.
+                try:
+                    self.thread_repo.update_thread_with_new_message(
+                        thread_id=thread_id,
+                        message_id=message_id,
+                        message_timestamp=_parse_timestamp_to_datetime(email_datetime),
+                        sender_email=sender_email,
+                        cc_emails=cc_emails,
+                        reply_to_id=reply_to_id,
+                        email_id=email_id,
+                    )
+                except Exception as e:
+                    log(f"[PROCESSOR] Warning: thread history sync failed after save_email: {e}")
+
+                # Keep threads.history_internal in sync for BOTH inbound and outbound.
+                try:
+                    updated = self.thread_repo.append_email_id_to_history_internal(thread_id, email_id)
+                    if not updated:
+                        log(f"[PROCESSOR] Warning: failed to append email_id to history_internal for thread {thread_id}")
+                except Exception as e:
+                    log(f"[PROCESSOR] Warning: history_internal update failed for thread {thread_id}: {e}")
+            else:
+                log(f"[PROCESSOR] Failed to save email to database")
+                
+            return email_id
+            
+        except Exception as e:
+            log(f"[PROCESSOR] Error saving email to database: {e}")
             return None
     
     async def send_to_automation(self, automation_payload: dict) -> bool:
@@ -256,6 +449,7 @@ class EmailProcessor:
         payload = {
             "thread_id": thread_id,
             "message_id": email_data.get("message_id"),
+            "email_id": email_data.get("email_id"),  # Email UUID from emails table
             "microsoft_message_id": email_data.get("microsoft_message_id"),
             "reply_to_id": email_data.get("reply_to_id", "no"),
             "box_email": thread_data.get("box_email") or email_data.get("user_email"),

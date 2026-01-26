@@ -59,7 +59,7 @@ class UserDAO:
         subs_response = (
             self.supabase
             .table("subscriptions")
-            .select("subscription_id, name, vat_number, city, address, active, current_period_end, plan")
+            .select("subscription_id, name, vat_number, city, address, active, current_period_end, plan, website, industry")
             .in_("subscription_id", subscription_ids)
             .execute()
         )
@@ -90,7 +90,10 @@ class UserDAO:
                 active=sub["active"],
                 current_period_end=sub["current_period_end"],
                 plan=sub.get("plan"),
-                is_configurated=config_map.get(sub["subscription_id"], False),
+                website=sub.get("website"),
+                industry=sub.get("industry"),
+                is_configurated=config_map.get(sub["subscription_id"], False), # TODO: monitorare se funziona sempre
+
             )
             for sub in subs_response.data
         ]

@@ -2,7 +2,47 @@
 State definition for the email classification system.
 """
 
-from typing import Dict, List, Optional, TypedDict
+from __future__ import annotations
+
+from typing import Annotated, Dict, List, Optional, TypedDict
+
+
+def _merge_key_entities(left: Optional[dict], right: Optional[dict]) -> dict:
+    """Merge function for LangGraph concurrent updates.
+
+    LangGraph raises on concurrent writes to the same key unless the key is
+    Annotated with a reducer. Here we deep-merge dicts of lists and de-duplicate
+    items while preserving order.
+    """
+    merged: dict = {}
+
+    if isinstance(left, dict):
+        merged.update(left)
+
+    if not isinstance(right, dict):
+        return merged
+
+    for category, items in right.items():
+        if items is None:
+            continue
+
+        existing = merged.get(category)
+
+        if existing is None:
+            merged[category] = list(items) if isinstance(items, list) else items
+            continue
+
+        if isinstance(existing, list) and isinstance(items, list):
+            for item in items:
+                if item not in existing:
+                    existing.append(item)
+            merged[category] = existing
+            continue
+
+        # Fallback: keep existing unless empty-ish, otherwise overwrite
+        merged[category] = existing if existing not in (None, [], "") else items
+
+    return merged
 
 
 class EmailState(TypedDict):
@@ -19,6 +59,7 @@ class EmailState(TypedDict):
     dangerous_email: Optional[bool]  # Flag indicating if email is dangerous
     summarizer_only: Optional[bool]  # Flag to run only summarizer workflow
     human_response: Optional[bool]  # Flag indicating if human response is needed
+    email_id: Optional[str]  # Email UUID from emails table (for notifications and scheduled_events)
     original_thread_id: Optional[str]  # Original thread ID from email provider (e.g., Gmail thread ID)
     microsoft_message_id: Optional[str]  # Microsoft Graph internal message ID for replies
     high_priority_email: Optional[bool]  # Flag indicating if email is high priority
@@ -31,9 +72,12 @@ class EmailState(TypedDict):
     must_see_attachments: Optional[bool]  # Flag indicating if attachments are essential for understanding/responding
     summary_attachments: Optional[str]  # Discursive summary of all attachment contents
     priority_score: Optional[float]  # Category-specific priority score (0.0-1.0)
-    key_entities: Optional[dict]  # Key entities extracted by Reader node (dates, locations, requests, etc.)
+    key_entities: Annotated[Optional[dict], _merge_key_entities]  # Key entities extracted by Reader/InfoReader (merge-safe)
     needs_response: Optional[bool]  # Flag indicating if email requires a response
     automation_executed: bool  # Flag indicating if automation was executed
+    # Parallel task barrier flags
+    info_task_done: Optional[bool]  # INFO_REQUESTED_TASK branch completed
+    appointment_task_done: Optional[bool]  # MANAGE_APPOINTMENT_TASK branch completed
     # Appointment-specific fields (for REQUEST_APPOINTMENT subcategory)
     appointment_title: Optional[str]  # Title of the appointment
     appointment_date: Optional[str]  # Date and time of the appointment (YYYY-MM-DDThh:mm:ss)
@@ -65,67 +109,11 @@ class EmailState(TypedDict):
     # Extract info and write email
     guidelines: Optional[List[str]]  # Guidelines for writing the email
     written_email_body: Optional[str]  # Body of the email to write
-    chunked_company_informations: Optional[dict]  # Filtered company information  TODO decidere se dict, list o string
+    chunked_company_informations: Optional[dict]  # Filtered company information
     correctness_score: Optional[float]  # Correctness score of the email
     needs_review: Optional[bool]  # Flag indicating if email needs review
     low_confidence_classification: Optional[bool]  # Flag for low confidence classification
     review_iteration: Optional[int]  # Counter for writer-reviewer loop iterations
     edit_history: Optional[List[str]]  # History of modification summaries from writer (text descriptions of changes made)
-
-
-def create_initial_state() -> EmailState:
-    """Create initial state with default values."""
-    return {
-        "email_body": None,
-        "attachments": [],
-        "language": None,
-        "category": None,
-        "subcategory": None,
-        "extracted_info": None,
-        "notification": None,
-        "user_config": None,
-        "summarizer_only": False,
-        "human_response": False,
-        "original_thread_id": None,
-        "microsoft_message_id": None,
-        "mail_summary": None,
-        "extended_summary": None,
-        "confidence_score": None,
-        "attachment_contents": None,
-        "attachments_too_large": False,
-        "must_see_attachments": False,
-        "summary_attachments": None,
-        "priority_score": None,
-        "high_priority_email": False,
-        "workflow_decision": None,
-        "key_entities": None,
-        "needs_response": None,
-        "appointment_title": None,
-        "appointment_date": None,
-        "appointment_duration": None,
-        "appointment_attendees": None,
-        "appointment_place": None,
-        "appointment_notes": None,
-        "appointment_scheduled": None,
-        "appointment_overlap": None,
-        "appointment_event_code": None,
-        "appointment_proposed_slots": None,
-        "appointment_favorite_day_unavailable": None,
-        "scheduled_event_details": None,
-        "already_scheduled": None,
-        "confirm_event_code": None,
-        "change_event_code": None,
-        "change_new_title": None,
-        "change_new_date": None,
-        "change_new_duration": None,
-        "change_new_attendees": None,
-        "change_new_place": None,
-        "change_additional_notes": None,
-        "guidelines": None,
-        "written_email_body": None,
-        "chunked_company_informations": None,
-        "correctness_score": None,
-        "needs_review": None,
-        "review_iteration": 0,
-        "edit_history": []
-    }
+    # Tasks Extractor fields
+    list_of_tasks: Optional[List[str]]  # List of tasks extracted from email (INFO_REQUESTED_TASK, MANAGE_APPOINTMENT_TASK)

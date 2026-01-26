@@ -9,6 +9,7 @@ project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from ec_system.graph.graph import run_workflow
+from ec_system.utils.email_logging import EmailLogContext
 
 router = APIRouter(tags=["workflows"])
 
@@ -17,6 +18,7 @@ class EmailWorkflowPayload(BaseModel):
     """Email workflow payload received from broker"""
     thread_id: str = Field(..., description="Thread UUID from database")
     message_id: str = Field(..., description="Email message ID")
+    email_id: Optional[str] = Field(None, description="Email UUID from emails table")
     microsoft_message_id: Optional[str] = Field(None, description="Microsoft Graph internal message ID for replies")
     reply_to_id: str = Field(default="no", description="ID of message being replied to")
     box_email: str = Field(..., description="Mailbox email receiving the message")
@@ -58,46 +60,56 @@ async def process_email_workflow(payload: EmailWorkflowPayload):
     - AI response generation
     - Action dispatching based on category
     """
-    try:
-        print(f"📧 [NEW WORKFLOW] Received email workflow request")
-        # Convert payload to dict for workflow
-        email_data = {
-            "thread_id": payload.thread_id,
-            "message_id": payload.message_id,
-            "microsoft_message_id": payload.microsoft_message_id,
-            "reply_to_id": payload.reply_to_id,
-            "box_email": payload.box_email,
-            "from": payload.from_,
-            "to": payload.to,
-            "cc": payload.cc,
-            "subject": payload.subject,
-            "subcategory": payload.subcategory,
-            "category": payload.category,
-            "body": payload.body,
-            "provider": payload.provider,
-            "attachment_ids": payload.attachment_ids,
-            "has_attachments": payload.has_attachments,
-            "extended_summary": payload.extended_summary,
-            "no_reply": payload.no_reply,
-            "action": payload.action,
-            "summarizer_only": payload.summarizer_only,
-            "original_thread_id": payload.original_thread_id
-        }
-        
-        # Execute the email classification workflow
-        run_workflow(email_data)
-        
-        return WorkflowResponse(
-            status="processed",
-            message="Email workflow processed successfully"
-        )
-        
-    except Exception as e:
-        print(f"❌ [WORKFLOW] Error processing email workflow: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process email workflow: {str(e)}"
-        )
+    # Wrap all workflow processing in log context
+    with EmailLogContext(box_email=payload.box_email) as log_ctx:
+        try:
+            print(f"📧 [AUTOMATIONS] Received email workflow request")
+            print(f"📬 Mailbox: {payload.box_email}")
+            print(f"📨 From: {payload.from_}")
+            print(f"📋 Subject: {payload.subject}")
+            print(f"🧵 Thread ID: {payload.thread_id}")
+            
+            # Convert payload to dict for workflow
+            email_data = {
+                "thread_id": payload.thread_id,
+                "message_id": payload.message_id,
+                "email_id": payload.email_id,
+                "microsoft_message_id": payload.microsoft_message_id,
+                "reply_to_id": payload.reply_to_id,
+                "box_email": payload.box_email,
+                "from": payload.from_,
+                "to": payload.to,
+                "cc": payload.cc,
+                "subject": payload.subject,
+                "subcategory": payload.subcategory,
+                "category": payload.category,
+                "body": payload.body,
+                "provider": payload.provider,
+                "attachment_ids": payload.attachment_ids,
+                "has_attachments": payload.has_attachments,
+                "extended_summary": payload.extended_summary,
+                "no_reply": payload.no_reply,
+                "action": payload.action,
+                "summarizer_only": payload.summarizer_only,
+                "original_thread_id": payload.original_thread_id
+            }
+            
+            # Execute the email classification workflow
+            run_workflow(email_data)
+            
+            print(f"✅ [AUTOMATIONS] Workflow completed successfully")
+            
+            return WorkflowResponse(
+                status="processed",
+                message="Email workflow processed successfully"
+            )
+            
+        except Exception as e:
+            print(f"❌ [WORKFLOW] Error processing email workflow: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to process email workflow: {str(e)}"
+            )
 
 
 @router.post("/test")

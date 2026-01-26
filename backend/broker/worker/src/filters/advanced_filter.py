@@ -237,11 +237,11 @@ class AdvancedEmailFilter:
                 thread_box_email = thread.get("box_email")
                 is_cross_mailbox = thread_box_email != box_email
                 
-                # Check if this email has attachments
-                has_attachments = bool(email_data.get("attachments"))
+                # Get email_id if available for history_internal tracking
+                email_id = email_data.get("email_id")
                 
                 if self.thread_repo.update_thread_with_new_message(
-                    thread_id, message_id, message_datetime, sender_email, cc_emails, reply_to_id, has_attachments
+                    thread_id, message_id, message_datetime, sender_email, cc_emails, reply_to_id, email_id
                 ):
                     if is_cross_mailbox:
                         print(f"📝 [FILTER] Thread {thread_id} updated with cross-mailbox message from {box_email} to {thread_box_email}")
@@ -319,20 +319,21 @@ class AdvancedEmailFilter:
             # For external emails, sender_email is the 'from' field, not user_email
             sender_email = self._extract_email_address(email_data.get("from"))
             
-            # Check if this email has attachments
-            has_attachments = bool(email_data.get("attachments"))
+            # Get email_id if available for history_internal tracking
+            email_id = email_data.get("email_id")
+            history_internal = [email_id] if email_id else []
             
             # Create the thread with minimal data as requested
             thread_data = self.thread_repo.create_thread(
                 started_at=message_datetime,
                 history=[email_data.get("message_id")],  # Start with this message
+                history_internal=history_internal,  # Track email UUIDs internally
                 subject=email_data.get("subject"),
                 sender_email=sender_email,  # External user who sent the email
                 cc_emails=cc_emails,
                 summary=None,  # Will be filled later by AI
                 last_message_id=email_data.get("message_id"),
                 last_message_at=message_datetime,
-                has_attachments=has_attachments,  # Boolean flag for attachments
                 category=None,  # Set to None as requested
                 subcategory=None,  # Default null for external threads
                 human_response=False,  # External user initiated, no human response yet
@@ -365,20 +366,21 @@ class AdvancedEmailFilter:
             # Extract CC emails if present
             cc_emails = self._extract_cc_emails(email_data.get("cc"))
             
-            # Check if this email has attachments
-            has_attachments = bool(email_data.get("attachments"))
+            # Get email_id if available for history_internal tracking
+            email_id = email_data.get("email_id")
+            history_internal = [email_id] if email_id else []
             
             # Create the thread
             thread_data = self.thread_repo.create_thread(
                 started_at=message_datetime,
                 history=[email_data.get("message_id")],  # Start with this message
+                history_internal=history_internal,  # Track email UUIDs internally
                 subject=email_data.get("subject"),
                 sender_email=email_data.get("user_email"),  # User who sent the email
                 cc_emails=cc_emails,
                 summary=None,  # Will be filled later by AI
                 last_message_id=email_data.get("message_id"),
                 last_message_at=message_datetime,
-                has_attachments=has_attachments,  # Boolean flag for attachments
                 category="STARTED_BY_HUMAN",  # Category for user-initiated conversations
                 subcategory=None,  # Default null for human-initiated threads
                 human_response=True,  # User initiated, so it's a human response TODO agganciare un sistema di configurazione per cui è l'utente che decide se l'ai può rispondere o meno

@@ -1,4 +1,5 @@
 from src.core.database import get_supabase_client
+from src.core.utils.utils import encrypt_token, decrypt_token
 from cryptography.fernet import Fernet
 import base64
 import hashlib
@@ -14,59 +15,6 @@ load_dotenv()
 class SubscriptionServiceDAO:
     def __init__(self):
         self.supabase = get_supabase_client()
-
-        encryption_key_token = os.getenv("ENCRYPTION_KEY_TOKEN")
-        encryption_key_pass = os.getenv("ENCRYPTION_KEY_PASS")
-
-        if not encryption_key_token:
-            raise ValueError("ENCRYPTION_KEY_TOKEN non trovata nelle variabili d'ambiente")
-        if not encryption_key_pass:
-            raise ValueError("ENCRYPTION_KEY_PASS non trovata nelle variabili d'ambiente")
-        
-        self._encryption_key_token = encryption_key_token.encode()
-        key_hash_token = hashlib.sha256(self._encryption_key_token).digest()
-        self._fernet_key_token = base64.urlsafe_b64encode(key_hash_token)
-        self._cipher_token = Fernet(self._fernet_key_token)
-
-        self._encryption_key_pass = encryption_key_pass.encode()
-        key_hash_pass = hashlib.sha256(self._encryption_key_pass).digest()
-        self._fernet_key_pass = base64.urlsafe_b64encode(key_hash_pass)
-        self._cipher_pass = Fernet(self._fernet_key_pass)
-
-    def _encrypt(self, token: str, cond: str) -> str:
-        """
-        Cifra un token usando Fernet (AES-256).
-        """
-        if not token:
-            return ""
-
-        if cond not in ("token", "pass"):
-            raise ValueError("cond deve essere 'token' o 'pass'")
-
-        cipher_attr = f"_cipher_{cond}"
-        cipher = getattr(self, cipher_attr, None)
-
-        if cipher is None:
-            raise ValueError(f"Cifrario {cipher_attr} non trovato nella classe")
-
-        return cipher.encrypt(token.encode()).decode()
-
-    def _decrypt(self, encrypted_token: str, cond: str) -> str:
-        if not encrypted_token:
-            return ""
-        if not encrypted_token:
-            return ""
-
-        if cond not in ("token", "pass"):
-            raise ValueError("cond deve essere 'token' o 'pass'")
-
-        cipher_attr = f"_cipher_{cond}"
-        cipher = getattr(self, cipher_attr, None)
-
-        if cipher is None:
-            raise ValueError(f"Cifrario {cipher_attr} non trovato nella classe")
-
-        return cipher.decrypt(encrypted_token.encode()).decode()
     
     def save_custom_provider_credentials(
         self,
@@ -80,7 +28,7 @@ class SubscriptionServiceDAO:
         calendar_provider: str
     ) -> SubscriptionServiceRead:
         try:
-            encrypted_password = self._encrypt(password, "pass")
+            encrypted_password = encrypt_token(password, "pass")
 
             data = {
                 "email_provider": "imap",
@@ -179,8 +127,8 @@ class SubscriptionServiceDAO:
         """
         try:
             # Cifra i token prima del salvataggio
-            encrypted_access_token = self._encrypt(access_token, "token")
-            encrypted_refresh_token = self._encrypt(refresh_token, "token")
+            encrypted_access_token = encrypt_token(access_token, "token")
+            encrypted_refresh_token = encrypt_token(refresh_token, "token")
 
             # Converti expiry (expires_in in secondi) in oggetto datetime
             expiry_datetime = None
@@ -286,8 +234,8 @@ class SubscriptionServiceDAO:
         """
         try:
             # Cifra i token prima del salvataggio
-            encrypted_access_token = self._encrypt(access_token, "token")
-            encrypted_refresh_token = self._encrypt(refresh_token, "token")
+            encrypted_access_token = encrypt_token(access_token, "token")
+            encrypted_refresh_token = encrypt_token(refresh_token, "token")
             
             # controllo se esiste già un record con questa email
             email_exists = self.email_exists(email)
@@ -358,8 +306,8 @@ class SubscriptionServiceDAO:
             credential = response.data[0]
 
             # Decifra i token
-            decrypted_access_token = self._decrypt(credential["hashed_access_token"], cond="token")
-            decrypted_refresh_token = self._decrypt(credential["hashed_refresh_token"], cond="token")
+            decrypted_access_token = decrypt_token(credential["hashed_access_token"], cond="token")
+            decrypted_refresh_token = decrypt_token(credential["hashed_refresh_token"], cond="token")
             
             # Converti expiry_token da string a datetime se necessario
             expiry_datetime = credential["expiry_token"]
@@ -503,7 +451,7 @@ class SubscriptionServiceDAO:
 
     def get_configuration(self, subscription_id: str):
         result = self.supabase.table("subscription_services").select(
-            "subscription_id, confidence_response_threshold, confidence_review_mail, priority_threshold, confidence_classification_threshold, urgent_meeting_threshold"
+            "subscription_id, confidence_response_threshold, confidence_review_mail, priority_threshold, confidence_classification_threshold, urgent_meeting_threshold, draft"
         ).eq("subscription_id", subscription_id).execute()
 
         if not result.data:
@@ -545,10 +493,10 @@ class SubscriptionServiceDAO:
             refresh_token = ""
             
             if user_data.get("hashed_access_token"):
-                access_token = self._decrypt(user_data["hashed_access_token"], "token")
+                access_token = decrypt_token(user_data["hashed_access_token"], "token")
             
             if user_data.get("hashed_refresh_token"):
-                refresh_token = self._decrypt(user_data["hashed_refresh_token"], "token")
+                refresh_token = decrypt_token(user_data["hashed_refresh_token"], "token")
             
             return {
                 "email": user_data.get("email"),
@@ -582,10 +530,10 @@ class SubscriptionServiceDAO:
             refresh_token = ""
             
             if user_data.get("hashed_access_token"):
-                access_token = self._decrypt(user_data["hashed_access_token"], "token")
+                access_token = decrypt_token(user_data["hashed_access_token"], "token")
             
             if user_data.get("hashed_refresh_token"):
-                refresh_token = self._decrypt(user_data["hashed_refresh_token"], "token")
+                refresh_token = decrypt_token(user_data["hashed_refresh_token"], "token")
             
             return {
                 "email": user_data.get("email"),
@@ -619,10 +567,10 @@ class SubscriptionServiceDAO:
             refresh_token = ""
             
             if user_data.get("hashed_access_token"):
-                access_token = self._decrypt(user_data["hashed_access_token"], "token")
+                access_token = decrypt_token(user_data["hashed_access_token"], "token")
             
             if user_data.get("hashed_refresh_token"):
-                refresh_token = self._decrypt(user_data["hashed_refresh_token"], "token")
+                refresh_token = decrypt_token(user_data["hashed_refresh_token"], "token")
             
             return {
                 "email": user_data.get("email"),
@@ -641,20 +589,19 @@ class SubscriptionServiceDAO:
             print(f"Errore nel recupero delle credenziali Microsoft per email {email}: {str(e)}")
             return None
 
-    def get_services_by_subscription(self, subscription_id: str, email: str) -> SubscriptionServiceRead | None:
+    def get_services_by_subscription(self, subscription_id: str) -> List[SubscriptionServiceRead]:
         resp = (
             self.supabase
             .table("subscription_services")
             .select("*")
             .eq("subscription_id", subscription_id)
-            .eq("email", email)
             .execute()
         )
 
         if not resp.data:
-            return None
+            return []
 
-        return SubscriptionServiceRead(**resp.data[0])
+        return [SubscriptionServiceRead(**service) for service in resp.data]
 
     def update_qdrant_collection(self, service_id: str, collection_name: str) -> bool:
         """
@@ -779,20 +726,6 @@ class SubscriptionServiceDAO:
         except Exception as e:
             print(f"Error getting service by email: {e}")
             return None
-        
-    def setup_calendar_information(self, email: str, business_hours: dict, appointment_duration: int) -> bool:
-        result = (
-            self.supabase
-            .table("subscription_services")
-            .update({
-                "business_hours": business_hours,
-                "appointment_duration": appointment_duration
-            })
-            .eq("email", email)
-            .execute()
-        )
-
-        return bool(result.data)
     
     def get_calendar_information(self, email: str) -> dict | None:
         try:
@@ -897,4 +830,69 @@ class SubscriptionServiceDAO:
             return resp.data[0].get("information")
         except Exception as e:
             print(f"Errore nell'aggiornamento di information: {e}")
+            return None
+    
+    def get_service_settings(self, email: str) -> dict | None:
+        try:
+            result = (
+                self.supabase
+                .table("subscription_services")
+                .select("business_hours, appointment_duration, email_signature, tone_of_voice, phone_numbers")
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not result.data:
+                return None
+            
+            return result.data[0]
+        except Exception as e:
+            print(f"Errore nel recupero settings servizio: {e}")
+            return None
+    
+    def update_service_settings(self, email: str, updates: dict) -> dict | None:
+        try:
+            allowed_fields = {"business_hours", "appointment_duration", "email_signature", "tone_of_voice", "phone_numbers"}
+            filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+            
+            if not filtered_updates:
+                raise ValueError("Nessun campo valido da aggiornare")
+            
+            result = (
+                self.supabase
+                .table("subscription_services")
+                .update(filtered_updates)
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not result.data:
+                return None
+            
+            return result.data[0]
+        except Exception as e:
+            print(f"Errore nell'aggiornamento settings servizio: {e}")
+            return None
+    
+    def static_quiz(self, email: str, payload: dict) -> bool:
+        try:
+            update_data = {k: v for k, v in payload.items() if v is not None}
+            
+            if not update_data:
+                return None
+            
+            resp = (
+                self.supabase
+                .table("subscription_services")
+                .update(update_data)
+                .eq("email", email)
+                .execute()
+            )
+            
+            if not resp.data:
+                return False
+            
+            return True
+        except Exception as e:
+            print(f"Errore nell'aggiornamento dei dati static quiz: {e}")
             return None

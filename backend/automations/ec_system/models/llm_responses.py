@@ -7,14 +7,6 @@ from typing import Literal, Optional, List
 from enum import Enum
 
 
-class LanguageDetectionResponse(BaseModel):
-    """Response model for language detection."""
-    language: Literal["ITA", "ENG"] = Field(
-        ..., 
-        description="Lingua del testo: ITA per Italiano, ENG per Inglese"
-    )
-
-
 class CategoryClassificationResponse(BaseModel):
     """Response model for email category classification."""
     category: str = Field(..., description="Detected email category")
@@ -118,14 +110,10 @@ class AttachmentSummaryResponse(BaseModel):
 
 
 class ReaderResponse(BaseModel):
-    """Response model for Reader node analysis."""
+    """Response model for Reader node analysis - extracts key entities only."""
     key_entities: dict = Field(
         ...,
         description="Entità chiave estratte dalla mail e allegati (date, informazioni, richieste, luoghi, ecc.)"
-    )
-    needs_response: bool = Field(
-        ...,
-        description="Se true, la mail richiede una risposta; se false, è conclusiva"
     )
 
 
@@ -499,4 +487,18 @@ class ReviewerResponse(BaseModel):
     guidelines: Optional[List[str]] = Field(
         None,
         description="Lista di linee guida per correggere l'email, nel formato 'parte da correggere : correzione'"
+    )
+
+
+class TaskType(str, Enum):
+    """Enum for supported task types in TASKS_EXTRACTOR."""
+    INFO_REQUESTED_TASK = "INFO_REQUESTED_TASK"
+    MANAGE_APPOINTMENT_TASK = "MANAGE_APPOINTMENT_TASK"
+
+
+class TasksExtractorResponse(BaseModel):
+    """Response model for Tasks Extractor node - determines required tasks from email."""
+    list_of_tasks: List[TaskType] = Field(
+        ...,
+        description="Lista delle task da eseguire basata sul contenuto dell'email"
     )

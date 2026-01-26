@@ -99,3 +99,4 @@ yarl==1.22.0
 zstandard==0.25.0
 PyMuPDF==1.25.5
 pdfminer.six==20250416
+lingua-language-detector==2.1.1

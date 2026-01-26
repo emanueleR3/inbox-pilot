@@ -92,7 +92,7 @@ Content-Type: application/json
 ### Get State (debug)
 ### ============================================================================
 
-GET {{baseUrl}}/internal-quiz/{{sessionId}}/state
+GET {{baseUrl}}/internal-quiz/{{email}}/state
 
 ### ============================================================================
 ### Review / Edit Context (NEW FLOW)

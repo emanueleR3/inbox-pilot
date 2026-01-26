@@ -110,3 +110,92 @@ class SendEmailController:
             )
         except Exception as e:
             raise SmtpSendFailedException(e)
+
+    def create_draft_gmail(self, req: dict):
+        """Create a draft in Gmail instead of sending."""
+        try:
+            email = req.get("email")
+            subject = req.get("subject")
+            body = req.get("body")
+            hashed_access_token = req.get("hashed_access_token")
+
+            if not email:
+                raise EmailRequiredException()
+            if not subject:
+                raise SubjectRequiredException()
+            if not body:
+                raise BodyRequiredException()
+            if not hashed_access_token:
+                raise HashedAccessTokenRequiredException()
+
+            thread_id = req.get("original_thread_id")
+            message_id = req.get("message_id")
+            attachments = req.get("attachments")
+            
+            return self.send_email_service.create_draft_gmail(
+                email, subject, body, hashed_access_token, thread_id, message_id, attachments
+            )
+
+        except Exception as e:
+            raise GmailSendFailedException(e)
+        
+    def create_draft_microsoft(self, req: dict):
+        """Create a draft in Microsoft Outlook instead of sending."""
+        try:
+            email = req.get("email")
+            subject = req.get("subject")
+            body = req.get("body")
+            hashed_access_token = req.get("hashed_access_token")
+
+            if not email:
+                raise EmailRequiredException()
+            if not subject:
+                raise SubjectRequiredException()
+            if not body:
+                raise BodyRequiredException()
+            if not hashed_access_token:
+                raise HashedAccessTokenRequiredException()
+
+            reply_to_id = req.get("message_id")
+            attachments = req.get("attachments")
+
+            return self.send_email_service.create_draft_microsoft(
+                email, subject, body, hashed_access_token, reply_to_id, attachments
+            )
+        except Exception as e:
+            raise MicrosoftSendFailedException(e)
+        
+    def create_draft_imap(self, req: dict):
+        """Create a draft in IMAP Drafts folder instead of sending via SMTP."""
+        try:
+            email = req.get("email")
+            subject = req.get("subject")
+            body = req.get("body")
+            imap_server = req.get("imap_server")
+            imap_port = req.get("imap_port", 993)
+            imap_email = req.get("imap_email") or req.get("smtp_email")
+            password = req.get("password")
+
+            if not email:
+                raise EmailRequiredException()
+            if not subject:
+                raise SubjectRequiredException()
+            if not body:
+                raise BodyRequiredException()
+            if not imap_server:
+                raise SmtpServerRequiredException()
+            if not imap_email:
+                raise SmtpEmailRequiredException()
+            if not password:
+                raise SmtpPasswordRequiredException()
+
+            reply_to_id = req.get("reply_to_id")
+            message_id = req.get("message_id")
+            attachments = req.get("attachments")
+
+            return self.send_email_service.create_draft_imap(
+                email, subject, body, imap_server, imap_port, imap_email, password, 
+                reply_to_id, message_id, attachments
+            )
+        except Exception as e:
+            raise SmtpSendFailedException(e)

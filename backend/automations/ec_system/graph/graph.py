@@ -6,6 +6,7 @@ The workflow handles email classification, information extraction, and storage.
 """
 
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()  
@@ -46,6 +47,10 @@ from .nodes import (
     extractor_company_info_node,
     writer_node,
     reviewer_node,
+    tasks_extractor_node,
+    info_reader_node,
+    appointment_router_node,
+    task_merger_node,
     # Subcategory handler nodes
     handle_offer_promotion_node,
     handle_newsletter_node,
@@ -116,6 +121,10 @@ def create_email_classification_graph():
     graph.add_node(NodeNames.EXTRACTOR_COMPANY_INFO, extractor_company_info_node)
     graph.add_node(NodeNames.WRITER, writer_node)
     graph.add_node(NodeNames.REVIEWER, reviewer_node)
+    graph.add_node(NodeNames.TASKS_EXTRACTOR, tasks_extractor_node)
+    graph.add_node(NodeNames.INFO_READER, info_reader_node)
+    graph.add_node(NodeNames.APPOINTMENT_ROUTER, appointment_router_node)
+    graph.add_node(NodeNames.TASK_MERGER, task_merger_node)
     
     # Add subcategory handler nodes
     graph.add_node(NodeNames.HANDLE_OFFER_PROMOTION, handle_offer_promotion_node)
@@ -401,18 +410,15 @@ def create_email_classification_graph():
         subcategory_destinations
     )
     
-    # Conditional edges for nodes that may route to READER
-    # These nodes return state (go to READER) or AutomationExecutedResponse (go to END)
-    def should_route_to_reader_or_end(state):
-        """Check if node returned state (needs Reader) or response (automation executed)."""
+    # Nodes with conditional logic that may need TASKS_EXTRACTOR
+    # These check category first, then route to TASKS_EXTRACTOR or END
+    def should_route_to_tasks_extractor_or_end(state):
+        """Check if node returned state (needs Tasks Extractor) or response (automation executed)."""
         if state.get("automation_executed"):
             return END
-        # Otherwise, the node returned state and needs Reader processing
-        return NodeNames.READER
+        return NodeNames.TASKS_EXTRACTOR
     
-    # Nodes with conditional logic that may need Reader
-    conditional_nodes = [
-        NodeNames.HANDLE_EVENT_INVITE,
+    conditional_nodes_to_tasks_extractor = [
         NodeNames.HANDLE_PRODUCT_UPDATE,
         NodeNames.HANDLE_CONNECTION_REQUEST,
         NodeNames.HANDLE_SENT_DOCUMENTS,
@@ -424,19 +430,20 @@ def create_email_classification_graph():
         NodeNames.HANDLE_TICKET_UPDATE
     ]
     
-    # Add conditional edges for these nodes
-    for node_name in conditional_nodes:
+    # Add conditional edges for nodes that go to TASKS_EXTRACTOR
+    for node_name in conditional_nodes_to_tasks_extractor:
         graph.add_conditional_edges(
             node_name,
-            should_route_to_reader_or_end,
+            should_route_to_tasks_extractor_or_end,
             {
-                NodeNames.READER: NodeNames.READER,
+                NodeNames.TASKS_EXTRACTOR: NodeNames.TASKS_EXTRACTOR,
                 END: END
             }
         )
     
     # Nodes that always automate (always return AutomationExecutedResponse)
     always_automate_nodes = [
+        NodeNames.HANDLE_EVENT_INVITE,
         NodeNames.HANDLE_OFFER_PROMOTION,
         NodeNames.HANDLE_NEWSLETTER,
         NodeNames.HANDLE_NEW_MESSAGE, 
@@ -457,8 +464,8 @@ def create_email_classification_graph():
     for node_name in always_automate_nodes:
         graph.add_edge(node_name, END)
     
-    # Nodes that always need Reader or manual handling (return state)
-    always_need_manual_nodes = [
+    # Nodes that always go to TASKS_EXTRACTOR (no category check needed)
+    always_to_tasks_extractor_nodes = [
         NodeNames.HANDLE_CONFIRM_APPOINTMENT,
         NodeNames.HANDLE_FORWARD_INFO,
         NodeNames.HANDLE_RESPONSE_TO_REQUEST,
@@ -470,11 +477,144 @@ def create_email_classification_graph():
         NodeNames.HANDLE_CANCEL_APPOINTMENT
     ]
     
-    # These nodes always go to READER for analysis
-    for node_name in always_need_manual_nodes:
-        graph.add_edge(node_name, NodeNames.READER)
+    # These nodes always go to TASKS_EXTRACTOR
+    for node_name in always_to_tasks_extractor_nodes:
+        graph.add_edge(node_name, NodeNames.TASKS_EXTRACTOR)
     
-    # Conditional logic for Reader node based on needs_response and subcategory
+    # === PARALLEL TASK EXECUTION ROUTING ===
+    
+    # Route after TASKS_EXTRACTOR based on extracted tasks
+    def route_after_tasks_extractor(state):
+        """Route based on extracted tasks for parallel execution."""
+        tasks = state.get("list_of_tasks", [])
+        high_priority = state.get("high_priority_email", False)
+        subcategory = state.get("subcategory", "")
+        subcategory_value = subcategory.value if hasattr(subcategory, "value") else subcategory
+        
+        print(f"🔀 [TASKS_EXTRACTOR] Routing based on tasks: {tasks}, high_priority={high_priority}")
+        
+        # If no tasks, end workflow
+        if not tasks:
+            appointment_subcategories = {
+                "REQUEST_APPOINTMENT",
+                "CONFIRM_APPOINTMENT",
+                "REQUEST_APPOINTMENT_CHANGE",
+                "CANCEL_APPOINTMENT",
+            }
+
+            if (not high_priority) and (subcategory_value in appointment_subcategories):
+                print(
+                    "   → No tasks from LLM, but appointment subcategory detected; routing to APPOINTMENT_ROUTER"
+                )
+                return NodeNames.APPOINTMENT_ROUTER
+
+            print(f"   → No tasks to execute, ending workflow")
+            state["automation_executed"] = True
+            return END
+        
+        # Determine which branches to execute
+        has_info_task = "INFO_REQUESTED_TASK" in tasks
+        has_appointment_task = "MANAGE_APPOINTMENT_TASK" in tasks and not high_priority
+
+        # Return list of nodes for parallel execution
+        if has_info_task and has_appointment_task:
+            print(f"   → Executing BOTH branches in parallel")
+            return [NodeNames.INFO_READER, NodeNames.APPOINTMENT_ROUTER]
+        elif has_info_task:
+            print(f"   → Executing INFO_READER branch only")
+            return NodeNames.INFO_READER
+        elif has_appointment_task:
+            print(f"   → Executing APPOINTMENT_ROUTER branch only")
+            return NodeNames.APPOINTMENT_ROUTER
+        else:
+            # MANAGE_APPOINTMENT_TASK with high_priority goes to END
+            print(f"   → No applicable tasks (high_priority appointment), ending workflow")
+            state["automation_executed"] = True
+            return END
+    
+    graph.add_conditional_edges(
+        NodeNames.TASKS_EXTRACTOR,
+        route_after_tasks_extractor,
+        {
+            NodeNames.INFO_READER: NodeNames.INFO_READER,
+            NodeNames.APPOINTMENT_ROUTER: NodeNames.APPOINTMENT_ROUTER,
+            END: END
+        }
+    )
+
+    # INFO branch: INFO_READER -> EXTRACTOR_COMPANY_INFO -> TASK_MERGER
+    graph.add_edge(NodeNames.INFO_READER, NodeNames.EXTRACTOR_COMPANY_INFO)
+    
+    # APPOINTMENT_ROUTER routes to specialized READER based on subcategory
+    def route_appointment_by_subcategory(state):
+        """Route to appropriate appointment flow based on subcategory."""
+        subcategory = state.get("subcategory", "")
+        
+        appointment_subcategories = [
+            "REQUEST_APPOINTMENT",
+            "CONFIRM_APPOINTMENT", 
+            "REQUEST_APPOINTMENT_CHANGE",
+            "CANCEL_APPOINTMENT"
+        ]
+        
+        if subcategory in appointment_subcategories:
+            print(f"   → Routing to READER for {subcategory}")
+            return NodeNames.READER
+        else:
+            # Default: go directly to TASK_MERGER
+            print(f"   → Subcategory {subcategory} not appointment-related, going to TASK_MERGER")
+            return NodeNames.TASK_MERGER
+    
+    graph.add_conditional_edges(
+        NodeNames.APPOINTMENT_ROUTER,
+        route_appointment_by_subcategory,
+        {
+            NodeNames.READER: NodeNames.READER,
+            NodeNames.TASK_MERGER: NodeNames.TASK_MERGER
+        }
+    )
+    
+    # TASK_MERGER is a barrier: only proceed once all required branches finished.
+    def should_continue_after_task_merger(state):
+        tasks = state.get("list_of_tasks", []) or []
+        high_priority = state.get("high_priority_email", False)
+
+        has_info_task = "INFO_REQUESTED_TASK" in tasks
+        has_appointment_task = "MANAGE_APPOINTMENT_TASK" in tasks and not high_priority
+
+        info_done = (not has_info_task) or bool(state.get("info_task_done"))
+
+        if not has_appointment_task:
+            appointment_done = True
+        else:
+            # If subcategory isn't appointment-related, the appointment task is effectively a no-op.
+            subcategory = state.get("subcategory", "")
+            appointment_subcategories = {
+                "REQUEST_APPOINTMENT",
+                "CONFIRM_APPOINTMENT",
+                "REQUEST_APPOINTMENT_CHANGE",
+                "CANCEL_APPOINTMENT",
+            }
+            appointment_done = (subcategory not in appointment_subcategories) or bool(state.get("appointment_task_done"))
+
+        if info_done and appointment_done:
+            return NodeNames.WRITER
+
+        print(
+            f"⏳ [TASK_MERGER] Waiting for branches: info_done={info_done}, appointment_done={appointment_done}"
+        )
+        return END
+
+    graph.add_conditional_edges(
+        NodeNames.TASK_MERGER,
+        should_continue_after_task_merger,
+        {
+            NodeNames.WRITER: NodeNames.WRITER,
+            END: END,
+        },
+    )
+    
+    # Conditional logic for Reader node based on subcategory
     def should_continue_after_reader(state):
         """
         Check if workflow should end with automation or continue based on needs_response.
@@ -515,7 +655,7 @@ def create_email_classification_graph():
                     state["automation_executed"] = True
                     return END
                 else:
-                    return NodeNames.EXTRACTOR_COMPANY_INFO
+                    return NodeNames.TASK_MERGER
             else:
                 # Appointment not yet scheduled - check if we have an event_code for rescheduling
                 if confirm_event_code and len(confirm_event_code) == 6 and confirm_event_code.isdigit():
@@ -556,7 +696,7 @@ def create_email_classification_graph():
             return END
         
         # For all other cases (needs_response=True or other subcategories), continue manually
-        return NodeNames.EXTRACTOR_COMPANY_INFO
+        return NodeNames.TASK_MERGER
     
     # Add conditional edge from READER
     graph.add_conditional_edges(
@@ -566,7 +706,7 @@ def create_email_classification_graph():
             NodeNames.SCHEDULER: NodeNames.SCHEDULER,
             NodeNames.RESCHEDULER: NodeNames.RESCHEDULER,
             NodeNames.CANCELLATION: NodeNames.CANCELLATION,
-            NodeNames.EXTRACTOR_COMPANY_INFO: NodeNames.EXTRACTOR_COMPANY_INFO,
+            NodeNames.TASK_MERGER: NodeNames.TASK_MERGER,
             END: END
         }
     )
@@ -588,7 +728,7 @@ def create_email_classification_graph():
             return END    
 
         if state.get("status") in ["EVENT_CODE_INVALID", "EVENT_CODE_NOT_FOUND", "EVENT_CODE_MISSING"]:
-            return NodeNames.EXTRACTOR_COMPANY_INFO
+            return NodeNames.TASK_MERGER
 
         # Case 1: propose_new_slots was called (proposed_slots is not None)
         if proposed_slots is not None:
@@ -601,16 +741,16 @@ def create_email_classification_graph():
                 state["automation_executed"] = True
                 return END
             else:
-                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to Extractor Company Info")
-                return NodeNames.EXTRACTOR_COMPANY_INFO
+                print(f"✅ [RESCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to TASK_MERGER")
+                return NodeNames.TASK_MERGER
             
         # Case 2: book_appointment was called (scheduled is not None and proposed_slots is None)
         else:
             print(f"📅 [RESCHEDULER] Tool reschedule_appointment called - checking scheduled status")
             
             if scheduled:
-                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code} - Routing to Extractor Company Info")
-                return NodeNames.EXTRACTOR_COMPANY_INFO
+                print(f"✅ [RESCHEDULER] Appointment successfully rescheduled - event_code: {event_code} - Routing to TASK_MERGER")
+                return NodeNames.TASK_MERGER
             else:
                 state["status"] = "APPOINTMENT_NOT_SCHEDULED"
                 state["human_response"] = True
@@ -622,7 +762,7 @@ def create_email_classification_graph():
         NodeNames.RESCHEDULER,
         should_continue_after_rescheduler,
         {
-            NodeNames.EXTRACTOR_COMPANY_INFO: NodeNames.EXTRACTOR_COMPANY_INFO,
+            NodeNames.TASK_MERGER: NodeNames.TASK_MERGER,
             END: END
         }
     )
@@ -650,16 +790,16 @@ def create_email_classification_graph():
                 state["automation_executed"] = True
                 return END
             else:
-                print(f"✅ [SCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to Extractor Company Info")
-                return NodeNames.EXTRACTOR_COMPANY_INFO
+                print(f"✅ [SCHEDULER] propose_new_slots returned {len(proposed_slots)} slots - Routing to TASK_MERGER")
+                return NodeNames.TASK_MERGER
             
         # Case 2: book_appointment was called (scheduled is not None and proposed_slots is None)
         else:
             print(f"📅 [SCHEDULER] Tool book_appointment called - checking scheduled status")
             
             if scheduled:
-                print(f"✅ [SCHEDULER] Appointment successfully scheduled - event_code: {event_code} - Routing to Extractor Company Info")
-                return NodeNames.EXTRACTOR_COMPANY_INFO
+                print(f"✅ [SCHEDULER] Appointment successfully scheduled - event_code: {event_code} - Routing to TASK_MERGER")
+                return NodeNames.TASK_MERGER
             else:
                 state["status"] = "APPOINTMENT_NOT_SCHEDULED"
                 state["human_response"] = True
@@ -671,7 +811,7 @@ def create_email_classification_graph():
         NodeNames.SCHEDULER,
         should_continue_after_scheduler,
         {
-            NodeNames.EXTRACTOR_COMPANY_INFO: NodeNames.EXTRACTOR_COMPANY_INFO,
+            NodeNames.TASK_MERGER: NodeNames.TASK_MERGER,
             END: END
         }
     )
@@ -685,32 +825,38 @@ def create_email_classification_graph():
         """
         if state.get("automation_executed"):
             return END
-        return NodeNames.EXTRACTOR_COMPANY_INFO
+        return NodeNames.TASK_MERGER
 
     graph.add_conditional_edges(
         NodeNames.CANCELLATION, 
         should_continue_after_cancellation,
         {
-            NodeNames.EXTRACTOR_COMPANY_INFO: NodeNames.EXTRACTOR_COMPANY_INFO,
+            NodeNames.TASK_MERGER: NodeNames.TASK_MERGER,
             END: END
         }
     )
 
 
     def should_continue_after_extractor_company_info(state):
+        """Route after company info extraction.
+
+        In the parallel tasks flow, company info extraction is part of the INFO
+        branch and must converge to TASK_MERGER.
         """
-        Check extractor company info results and create appropriate AutomationExecutedResponse.
-        Routes based on which tool was called (propose_new_slots vs reschedule_appointment)
-        and the results obtained.
-        """
+        tasks = state.get("list_of_tasks", []) or []
+        in_tasks_flow = "INFO_REQUESTED_TASK" in tasks
+
         if state.get("status") == "COMPANY_INFO_EXTRACTION_FAILED":
-            return END
-        return NodeNames.WRITER
+            # In tasks flow, allow other tasks (e.g., appointment) to continue.
+            return NodeNames.TASK_MERGER if in_tasks_flow else END
+
+        return NodeNames.TASK_MERGER if in_tasks_flow else NodeNames.WRITER
 
     graph.add_conditional_edges(
         NodeNames.EXTRACTOR_COMPANY_INFO,
         should_continue_after_extractor_company_info,
         {
+            NodeNames.TASK_MERGER: NodeNames.TASK_MERGER,
             NodeNames.WRITER: NodeNames.WRITER,
             END: END
         }
@@ -790,6 +936,7 @@ def run_workflow(email_data: dict = None):
                 "human_response": False,
                 "automation_executed": False,
                 "summarizer_only": email_data.get("summarizer_only", False),
+                "email_id": email_data.get("email_id", None),
                 "original_thread_id": email_data.get("original_thread_id", None),
                 "microsoft_message_id": email_data.get("microsoft_message_id", None),
                 "review_iteration": 0,
@@ -803,9 +950,14 @@ def run_workflow(email_data: dict = None):
         
         # Compile and execute the workflow
         compiled_graph = graph.compile()
+        start_time = time.monotonic()
         result = compiled_graph.invoke(initial_state)
+        duration_seconds = max(0, int(time.monotonic() - start_time))
+
+        if isinstance(result, dict):
+            result["duration"] = duration_seconds
         
-        print(f"🏁 [WORKFLOW] Completed with result: {result}")
+        print(f"🏁 [WORKFLOW] Completed in {duration_seconds}s with result: {result}")
         return result
         
     except Exception as e:
@@ -815,7 +967,10 @@ def run_workflow(email_data: dict = None):
     finally:
         print(f"==== Processing result for automation management...")
         try:
-            process_automation_result(result)
+            if result is not None:
+                process_automation_result(result)
+            else:
+                print("❌ [WORKFLOW] Skipping automation result processing: result is None")
         except Exception as e:
             print(f"❌ [WORKFLOW] Error processing automation result: {e}")
 

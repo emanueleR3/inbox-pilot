@@ -2,7 +2,11 @@ name: CI/CD Deploy to k3s
 
 on:
   push:
-    branches: [ main, test-workflow, k8s, backend ]
+    branches: [ main, backend ]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -44,6 +48,11 @@ jobs:
           else
             echo "k8s_changed=false" >> $GITHUB_OUTPUT
           fi
+
+          # Track which k8s subfolders changed (e.g., k8s/api, k8s/qdrant)
+          # Note: files directly under k8s/ (like k8s/secrets.yaml) are intentionally not auto-applied.
+          K8S_DIRS=$(echo "$CHANGED_FILES" | awk -F/ '/^k8s\/[^/]+\// {print $2}' | sort -u | tr '\n' ' ' | xargs)
+          echo "k8s_dirs=${K8S_DIRS}" >> $GITHUB_OUTPUT
 
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -136,29 +145,51 @@ jobs:
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           SHA_TAG=${{ github.sha }}
 
-          # API
-          if [ "${{ steps.changes.outputs.api_changed }}" = "true" ]; then
-            echo "Updating API..."
-            kubectl -n $NAMESPACE set image deployment/api api=ghcr.io/${REPO_LOWER}/api:${SHA_TAG}
-            # Ensure Deployment spec (env, mounts, etc.) is kept in sync.
-            kubectl apply -f k8s/api/
-          else
-            echo "API unchanged, skipping"
-          fi
+          apply_and_wait() {
+            local deploy_name="$1"
+            echo "Waiting rollout for $deploy_name..."
+            kubectl -n "$NAMESPACE" rollout status "deployment/${deploy_name}" --timeout=300s
+          }
+
+          apply_k8s_dir_if_exists() {
+            local dir="$1"
+            if [ -d "$dir" ]; then
+              echo "Applying manifests: $dir"
+              kubectl apply -f "$dir"
+            fi
+          }
 
           # Apply other K8s manifests if they changed (services, storage, etc.)
           if [ "${{ steps.changes.outputs.k8s_changed }}" = "true" ]; then
-            echo "K8s manifests changed, applying..."
-            # Apply only the affected service manifests to avoid unintended changes.
-            kubectl apply -f k8s/qdrant/
+            if [ -n "${{ steps.changes.outputs.k8s_dirs }}" ]; then
+              echo "K8s manifests changed, applying: ${{ steps.changes.outputs.k8s_dirs }}"
+              for d in ${{ steps.changes.outputs.k8s_dirs }}; do
+                apply_k8s_dir_if_exists "k8s/${d}/"
+              done
+            else
+              echo "K8s changed, but no subfolder changes detected (likely root files like k8s/secrets.yaml). Skipping auto-apply."
+            fi
           else
             echo "K8s manifests unchanged, skipping apply"
+          fi
+
+          # API
+          if [ "${{ steps.changes.outputs.api_changed }}" = "true" ]; then
+            echo "Updating API..."
+            # First apply manifests (env, mounts, strategy, etc.), then set image to the immutable SHA.
+            apply_k8s_dir_if_exists "k8s/api/"
+            kubectl -n "$NAMESPACE" set image deployment/api api=ghcr.io/${REPO_LOWER}/api:${SHA_TAG}
+            apply_and_wait "api"
+          else
+            echo "API unchanged, skipping"
           fi
 
           # broker worker
           if [ "${{ steps.changes.outputs.broker_changed }}" = "true" ]; then
             echo "Updating broker-worker..."
-            kubectl -n $NAMESPACE set image deployment/broker-worker broker-worker=ghcr.io/${REPO_LOWER}/broker:${SHA_TAG}
+            apply_k8s_dir_if_exists "k8s/broker-worker/"
+            kubectl -n "$NAMESPACE" set image deployment/broker-worker broker-worker=ghcr.io/${REPO_LOWER}/broker:${SHA_TAG}
+            apply_and_wait "broker-worker"
           else
             echo "Broker unchanged, skipping"
           fi
@@ -166,7 +197,9 @@ jobs:
           # listeners
           if [ "${{ steps.changes.outputs.listeners_changed }}" = "true" ]; then
             echo "Updating listeners..."
-            kubectl -n $NAMESPACE set image deployment/listeners listeners=ghcr.io/${REPO_LOWER}/listeners:${SHA_TAG}
+            apply_k8s_dir_if_exists "k8s/listeners/"
+            kubectl -n "$NAMESPACE" set image deployment/listeners listeners=ghcr.io/${REPO_LOWER}/listeners:${SHA_TAG}
+            apply_and_wait "listeners"
           else
             echo "Listeners unchanged, skipping"
           fi
@@ -174,7 +207,9 @@ jobs:
           # refreshers
           if [ "${{ steps.changes.outputs.refreshers_changed }}" = "true" ]; then
             echo "Updating refreshers..."
-            kubectl -n $NAMESPACE set image deployment/refreshers refreshers=ghcr.io/${REPO_LOWER}/refreshers:${SHA_TAG}
+            apply_k8s_dir_if_exists "k8s/refreshers/"
+            kubectl -n "$NAMESPACE" set image deployment/refreshers refreshers=ghcr.io/${REPO_LOWER}/refreshers:${SHA_TAG}
+            apply_and_wait "refreshers"
           else
             echo "Refreshers unchanged, skipping"
           fi
@@ -182,7 +217,9 @@ jobs:
           # automations
           if [ "${{ steps.changes.outputs.automations_changed }}" = "true" ]; then
             echo "Updating automations..."
-            kubectl -n $NAMESPACE set image deployment/automations automations=ghcr.io/${REPO_LOWER}/automations:${SHA_TAG}
+            apply_k8s_dir_if_exists "k8s/automations/"
+            kubectl -n "$NAMESPACE" set image deployment/automations automations=ghcr.io/${REPO_LOWER}/automations:${SHA_TAG}
+            apply_and_wait "automations"
           else
             echo "Automations unchanged, skipping"
           fi
@@ -190,7 +227,9 @@ jobs:
           # senders
           if [ "${{ steps.changes.outputs.senders_changed }}" = "true" ]; then
             echo "Updating senders..."
-            kubectl -n $NAMESPACE set image deployment/senders senders=ghcr.io/${REPO_LOWER}/senders:${SHA_TAG}
+            apply_k8s_dir_if_exists "k8s/senders/"
+            kubectl -n "$NAMESPACE" set image deployment/senders senders=ghcr.io/${REPO_LOWER}/senders:${SHA_TAG}
+            apply_and_wait "senders"
           else
             echo "Senders unchanged, skipping"
           fi

@@ -49,6 +49,10 @@ k8s/
 │   ├── deployment.yaml
 │   ├── service.yaml
 │   └── pvc.yaml
+├── redis/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   └── pvc.yaml
 ├── api/
 │   ├── deployment.yaml
 │   ├── service.yaml
@@ -191,3 +195,14 @@ kubectl top pods -n corretto
 2. Le variabili d'ambiente vengono ora gestite tramite Secrets Kubernetes
 
 3. I volumi sono gestiti tramite PersistentVolumeClaims
+
+## Redis
+
+Redis è esposto nel namespace `corretto` come Service `redis` sulla porta `6379`.
+
+Se vuoi Redis protetto da password, aggiungi queste variabili nel file `.env` (che viene importato in `corretto-secrets`):
+
+```bash
+REDIS_URL=redis://redis:6379/0
+REDIS_PASSWORD=your-strong-password
+```

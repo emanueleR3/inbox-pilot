@@ -23,6 +23,7 @@ class ThreadRepository:
         self,
         started_at: datetime = None,
         history: List[str] = None,
+        history_internal: List[str] = None,
         subject: str = None,
         sender_email: str = None,
         cc_emails: List[str] = None,
@@ -30,7 +31,6 @@ class ThreadRepository:
         extended_summary: str = None,
         last_message_id: str = None,
         last_message_at: datetime = None,
-        has_attachments: bool = False,
         category: str = None,
         subcategory: str = None,
         human_response: bool = None,
@@ -46,6 +46,7 @@ class ThreadRepository:
         Args:
             started_at: When the thread started
             history: Array of message IDs in the thread
+            history_internal: Array of email UUIDs in the thread (internal tracking)
             subject: Thread subject
             sender_email: Email of the thread initiator
             cc_emails: Array of CC email addresses
@@ -53,7 +54,6 @@ class ThreadRepository:
             extended_summary: Extended thread summary (più dettagliato)
             last_message_id: ID of the last message
             last_message_at: Timestamp of last message
-            has_attachments: Boolean flag indicating if thread has attachments
             category: Thread category
             subcategory: Thread subcategory (default null)
             human_response: Whether human response is needed
@@ -74,6 +74,7 @@ class ThreadRepository:
             data = {
                 "started_at": started_at.isoformat() if started_at else None,
                 "history": history if history is not None else [],
+                "history_internal": history_internal if history_internal is not None else [],
                 "subject": subject,
                 "sender_email": sender_email,
                 "cc_emails": cc_emails if cc_emails is not None else [],
@@ -81,7 +82,6 @@ class ThreadRepository:
                 "extended_summary": extended_summary,  # Can be None (default)
                 "last_message_id": last_message_id,
                 "last_message_at": last_message_at.isoformat() if last_message_at else None,
-                "has_attachments": has_attachments,
                 "category": category if category is not None else "",  # Default to empty string if not provided
                 "subcategory": subcategory,  # Can be None (default null in DB)
                 "human_response": human_response if human_response is not None else False,
@@ -109,181 +109,178 @@ class ThreadRepository:
             return None
     
     def get_thread_by_id(self, thread_id: str) -> Optional[dict]:
-        """
-        Retrieves a thread by its ID.
-        
-        Args:
-            thread_id: Thread ID to retrieve
-            
-        Returns:
-            Thread record if found, None otherwise
-        """
+        """Retrieves a thread by its ID."""
         try:
-            # Get thread from database
-            response = self.supabase.table("threads").select("*").eq("thread_id", thread_id).execute()
-            
+            response = (
+                self.supabase.table("threads").select("*").eq("thread_id", thread_id).execute()
+            )
             if response.data:
                 print(f"🔍 [THREAD] Thread found: {thread_id}")
                 return response.data[0]
-            else:
-                print(f"🔍 [THREAD] Thread not found: {thread_id}")
-                return None
-            
+            print(f"🔍 [THREAD] Thread not found: {thread_id}")
+            return None
         except Exception as e:
             print(f"❌ Error retrieving thread {thread_id}: {e}")
             return None
-    
-    def update_thread_history(self, thread_id: str, new_message_id: str) -> bool:
-        """
-        Adds a new message ID to the thread history.
-        
-        Args:
-            thread_id: Thread ID to update
-            new_message_id: Message ID to add to history
-            
-        Returns:
-            True if updated successfully
-        """
+
+    def append_email_id_to_history_internal(self, thread_id: str, email_id: str) -> bool:
+        """Adds an email UUID to threads.history_internal if missing."""
         try:
-            # Get current thread data
-            current_thread = self.get_thread_by_id(thread_id)
-            if not current_thread:
+            thread = self.get_thread_by_id(thread_id)
+            if not thread:
+                print(f"❌ [THREAD] Thread {thread_id} not found for history_internal update")
+                return False
+
+            current_history_internal = thread.get("history_internal") or []
+            if not isinstance(current_history_internal, list):
+                current_history_internal = list(current_history_internal)
+            if email_id in current_history_internal:
+                return True
+
+            updated_history_internal = list(current_history_internal) + [email_id]
+            update_response = (
+                self.supabase.table("threads")
+                .update({"history_internal": updated_history_internal})
+                .eq("thread_id", thread_id)
+                .execute()
+            )
+            return bool(update_response.data)
+        except Exception as e:
+            print(f"❌ [THREAD] Error updating history_internal for thread {thread_id}: {e}")
+            return False
+
+    def update_thread_history(self, thread_id: str, new_message_id: str) -> bool:
+        """Adds a message_id to threads.history if missing."""
+        try:
+            thread = self.get_thread_by_id(thread_id)
+            if not thread:
                 print(f"❌ [THREAD] Thread {thread_id} not found for history update")
                 return False
-            
-            # Get current history and append new message
-            current_history = current_thread.get("history") or []
+
+            current_history = thread.get("history") or []
             if not isinstance(current_history, list):
                 current_history = list(current_history)
-            if new_message_id not in current_history:
-                updated_history = current_history + [new_message_id]
-                
-                # Update the thread
-                response = self.supabase.table("threads").update({
-                    "history": updated_history,
-                    "last_message_id": new_message_id,
-                    "last_message_at": datetime.now(timezone.utc).isoformat()
-                }).eq("thread_id", thread_id).execute()
-                
-                if response.data:
-                    print(f"📝 [THREAD] Message {new_message_id} added to thread {thread_id} history")
-                    return True
-                else:
-                    print(f"❌ [THREAD] Failed to update thread {thread_id} history")
-                    return False
-            else:
-                print(f"⚠️ [THREAD] Message {new_message_id} already exists in thread {thread_id} history")
+
+            if new_message_id in current_history:
+                print(
+                    f"⚠️ [THREAD] Message {new_message_id} already exists in thread {thread_id} history"
+                )
                 return True
-            
+
+            updated_history = list(current_history) + [new_message_id]
+            update_response = (
+                self.supabase.table("threads")
+                .update({"history": updated_history})
+                .eq("thread_id", thread_id)
+                .execute()
+            )
+            return bool(update_response.data)
         except Exception as e:
             print(f"❌ Error updating thread history: {e}")
             return False
-    
-    def find_thread_by_reply_to(self, reply_to_id: str, box_email: str = None) -> Optional[dict]:
-        """
-        Finds a thread that contains the replied-to message ID in its history.
-        Optionally filters by box_email for optimization.
-        
-        Args:
-            reply_to_id: Message ID that this email is replying to
-            box_email: Optional box email to filter threads first
-            
-        Returns:
-            Thread record if found, None otherwise
-        """
+
+    def is_message_in_thread_history(self, thread_id: str, message_id: str) -> bool:
+        """Returns True if message_id is already associated to the thread."""
+        try:
+            thread = self.get_thread_by_id(thread_id)
+            if not thread:
+                return False
+            if thread.get("last_message_id") == message_id:
+                return True
+            history = thread.get("history") or []
+            return message_id in history
+        except Exception:
+            return False
+
+    def message_exists_in_thread(self, thread_id: str, message_id: str) -> bool:
+        """Alias for is_message_in_thread_history (kept for older call sites)."""
+        return self.is_message_in_thread_history(thread_id, message_id)
+
+    def add_message_to_thread(
+        self,
+        thread_id: str,
+        message_id: str,
+        message_timestamp: datetime,
+        sender_email: str,
+        cc_emails: List[str] = None,
+        reply_to_id: str = None,
+        email_id: str = None,
+    ) -> bool:
+        """Adds a message to a thread (delegates to update_thread_with_new_message)."""
+        return self.update_thread_with_new_message(
+            thread_id=thread_id,
+            message_id=message_id,
+            message_timestamp=message_timestamp,
+            sender_email=sender_email,
+            cc_emails=cc_emails,
+            reply_to_id=reply_to_id,
+            email_id=email_id,
+        )
+
+    def find_thread_by_message_id(self, message_id: str, box_email: str = None) -> Optional[dict]:
+        """Find a thread containing message_id in last_message_id or history."""
         try:
             query = self.supabase.table("threads").select("*")
-            
-            # Pre-filter by box_email for optimization
             if box_email:
                 query = query.eq("box_email", box_email)
-            
-            # Search for threads where history array contains the reply_to_id
-            response = query.contains("history", [reply_to_id]).execute()
-            
-            if response.data:
-                thread = response.data[0]  # Return first match
-                print(f"🔍 [THREAD] Found thread {thread.get('thread_id')} containing message: {reply_to_id}")
-                return thread
-            else:
-                print(f"🔍 [THREAD] No thread found containing message: {reply_to_id}")
-                return None
-            
-        except Exception as e:
-            print(f"❌ Error finding thread by reply_to: {e}")
+            response = query.execute()
+
+            for thread in response.data or []:
+                if thread.get("last_message_id") == message_id:
+                    return thread
+                history = thread.get("history") or []
+                if message_id in history:
+                    return thread
+
             return None
-    
-    def is_message_in_thread_history(self, thread_id: str, message_id: str) -> bool:
-        """
-        Checks if a message ID is already present in a thread's history.
-        
-        Args:
-            thread_id: Thread ID to check
-            message_id: Message ID to look for
-            
-        Returns:
-            True if message is in history, False otherwise
-        """
-        try:
-            response = self.supabase.table("threads").select("history").eq("thread_id", thread_id).execute()
-            
-            if response.data:
-                history = response.data[0].get("history", [])
-                is_present = message_id in history
-                print(f"🔍 [THREAD] Message {message_id} {'found' if is_present else 'not found'} in thread {thread_id} history")
-                return is_present
-            else:
-                print(f"❌ [THREAD] Thread {thread_id} not found for history check")
-                return False
-            
         except Exception as e:
-            print(f"❌ Error checking message in thread history: {e}")
-            return False
-    
-    def update_thread_with_new_message(self, thread_id: str, message_id: str, message_timestamp: datetime, 
-                                     sender_email: str, cc_emails: List[str] = None, reply_to_id: str = None, 
-                                     has_new_attachments: bool = False) -> bool:
-        """
-        Updates a thread with a new message (for received emails).
-        Ensures reply_to_id is in history before adding the new message_id.
-        
-        Args:
-            thread_id: Thread ID to update
-            message_id: New message ID to add
-            message_timestamp: Timestamp of the new message
-            sender_email: Email of the sender
-            cc_emails: Optional CC emails to add
-            reply_to_id: Optional reply-to message ID to ensure is in history
-            has_new_attachments: If True, sets has_attachments flag to True for the thread
-            
-        Returns:
-            True if updated successfully
-        """
+            print(f"❌ Error finding thread by message_id: {e}")
+            return None
+
+    def find_thread_by_reply_to(self, reply_to_id: str, box_email: str = None) -> Optional[dict]:
+        """Find a thread that contains reply_to_id in last_message_id or history."""
+        return self.find_thread_by_message_id(reply_to_id, box_email)
+
+    def update_thread_with_new_message(
+        self,
+        thread_id: str,
+        message_id: str,
+        message_timestamp: datetime,
+        sender_email: str,
+        cc_emails: List[str] = None,
+        reply_to_id: str = None,
+        email_id: str = None,
+    ) -> bool:
+        """Updates thread metadata and appends message/email ids to history arrays."""
         try:
-            # Get current thread data
             current_thread = self.get_thread_by_id(thread_id)
             if not current_thread:
                 print(f"❌ [THREAD] Thread {thread_id} not found for message update")
                 return False
-            
-            # Prepare updated history with reply_to_id check
+
             current_history = current_thread.get("history") or []
             if not isinstance(current_history, list):
                 current_history = list(current_history)
             updated_history = list(current_history)
-            
-            # Ensure reply_to_id is in history (if provided and missing)
+
             if reply_to_id and reply_to_id != "no" and reply_to_id not in updated_history:
                 print(f"⚠️ [THREAD] Reply-to message {reply_to_id} missing from history, adding it")
                 updated_history.append(reply_to_id)
-            
-            # Add new message_id if not already present
+
             if message_id not in updated_history:
                 updated_history.append(message_id)
             else:
                 print(f"🔄 [THREAD] Message {message_id} already in history for thread {thread_id}")
+
+            current_history_internal = current_thread.get("history_internal") or []
+            if not isinstance(current_history_internal, list):
+                current_history_internal = list(current_history_internal)
+            updated_history_internal = list(current_history_internal)
             
-            # Merge CC emails if provided
+            if email_id and email_id not in updated_history_internal:
+                updated_history_internal.append(email_id)
+                print(f"📧 [THREAD] Added email_id {email_id} to history_internal for thread {thread_id}")
+
             current_cc_emails = current_thread.get("cc_emails") or []
             if not isinstance(current_cc_emails, list):
                 current_cc_emails = list(current_cc_emails)
@@ -292,30 +289,24 @@ class ThreadRepository:
                 for cc in cc_emails:
                     if cc not in updated_cc_emails:
                         updated_cc_emails.append(cc)
-            
+
             update_data = {
                 "history": updated_history,
+                "history_internal": updated_history_internal,
                 "last_message_id": message_id,
                 "last_message_at": message_timestamp.isoformat(),
                 "last_sender_email": sender_email,
-                "cc_emails": updated_cc_emails
+                "cc_emails": updated_cc_emails,
             }
-            
-            # If this message has attachments, set has_attachments to True
-            if has_new_attachments:
-                update_data["has_attachments"] = True
-                print(f"📎 [THREAD] Setting has_attachments=True for thread {thread_id} due to new attachments")
-            
-            # Update the thread
-            response = self.supabase.table("threads").update(update_data).eq("thread_id", thread_id).execute()
-            
+
+            response = (
+                self.supabase.table("threads").update(update_data).eq("thread_id", thread_id).execute()
+            )
             if response.data:
                 print(f"📝 [THREAD] Thread {thread_id} updated with new message {message_id}")
                 return True
-            else:
-                print(f"❌ [THREAD] Failed to update thread {thread_id}")
-                return False
-            
+            print(f"❌ [THREAD] Failed to update thread {thread_id}")
+            return False
         except Exception as e:
             print(f"❌ Error updating thread with new message: {e}")
             return False
@@ -529,12 +520,12 @@ class ThreadRepository:
             new_thread = self.create_thread(
                 started_at=message_timestamp,
                 history=[reply_to_id, message_id],  # Include il reply_to_id per collegare la conversazione
+                history_internal=[],  # Will be populated when email_id is available
                 subject=subject,
                 sender_email=sender_email,
                 cc_emails=cc_emails or [],
                 last_message_id=message_id,
                 last_message_at=message_timestamp,
-                has_attachments=False,  # Will be updated if attachments are processed
                 category="CROSS_MAILBOX_REPLY",
                 subcategory=None,  # Default null for cross-mailbox threads
                 human_response=False,
@@ -577,11 +568,12 @@ class ThreadRepository:
     def save_attachment(self, attachment_data: dict) -> Optional[str]:
         """
         Save attachment metadata to the email_attachments table.
+        Now uses email_id instead of message_id as the primary link to emails.
         
         Args:
             attachment_data: Dictionary containing attachment metadata with keys:
                 - thread_id: UUID of the thread
-                - message_id: ID of the email message
+                - email_id: UUID of the email in our database (required)
                 - sender: Email address of the sender
                 - receiver: Email address of the receiver
                 - cc: Array of CC email addresses
@@ -598,7 +590,7 @@ class ThreadRepository:
         try:
             # Map the attachment_data to the correct database fields
             db_data = {
-                "message_id": attachment_data.get("message_id"),
+                "email_id": attachment_data.get("email_id"),  # Now using email_id instead of message_id
                 "sender": attachment_data.get("sender"),  # Email address of sender
                 "receiver": attachment_data.get("receiver"),  # Email address of receiver
                 "cc": attachment_data.get("cc", []),  # Array of CC addresses
@@ -654,24 +646,24 @@ class ThreadRepository:
             print(f"❌ [DB] Error getting service_id for {email}: {e}")
             return None
     
-    def attachment_exists_by_hash_and_message(self, file_hash: str, message_id: str) -> Optional[str]:
+    def attachment_exists_by_hash_and_email(self, file_hash: str, email_id: str) -> Optional[str]:
         """
-        Check if an attachment with the same hash and message_id already exists.
+        Check if an attachment with the same hash and email_id already exists.
         This helps with deduplication when the same email is processed by multiple mailboxes.
         
         Args:
             file_hash: SHA-256 hash of the file
-            message_id: ID of the email message
+            email_id: UUID of the email in our database
             
         Returns:
             attachment_id (UUID) if found, None otherwise
         """
         try:
-            response = self.supabase.table("email_attachments").select("attachment_id").eq("file_hash", file_hash).eq("message_id", message_id).execute()
+            response = self.supabase.table("email_attachments").select("attachment_id").eq("file_hash", file_hash).eq("email_id", email_id).execute()
             
             if response.data and len(response.data) > 0:
                 attachment_id = response.data[0].get("attachment_id")
-                print(f"🔍 [DB] Found existing attachment with hash {file_hash[:16]}... and message_id {message_id}")
+                print(f"🔍 [DB] Found existing attachment with hash {file_hash[:16]}... and email_id {email_id}")
                 return attachment_id
             else:
                 return None
@@ -750,66 +742,6 @@ class ThreadRepository:
         except Exception as e:
             print(f"❌ [DB] Error getting attachment by ID: {e}")
             return None
-    
-    def update_thread_attachment_status(self, thread_id: str) -> bool:
-        """
-        Update has_attachments status based on actual attachments count.
-        Call this after adding/removing attachments.
-        
-        Args:
-            thread_id: ID of the thread to update
-            
-        Returns:
-            True if update successful, False otherwise
-        """
-        try:
-            # Check if thread has any attachments
-            response = self.supabase.table("email_attachments").select("attachment_id").eq("thread_id", thread_id).limit(1).execute()
-            has_attachments = len(response.data) > 0
-            
-            # Update thread with the has_attachments flag
-            update_response = self.supabase.table("threads").update({
-                "has_attachments": has_attachments
-            }).eq("thread_id", thread_id).execute()
-            
-            if update_response.data:
-                print(f"📎 [THREAD] Updated has_attachments={has_attachments} for thread {thread_id}")
-                return True
-            else:
-                print(f"❌ [THREAD] Failed to update has_attachments for thread {thread_id}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ [THREAD] Error updating thread attachment status: {e}")
-            return False
-    
-    def set_thread_has_attachments(self, thread_id: str, has_attachments: bool = True) -> bool:
-        """
-        Directly set the has_attachments flag for a thread.
-        Use this when you know a thread has attachments without checking the database.
-        
-        Args:
-            thread_id: ID of the thread to update
-            has_attachments: Boolean flag to set
-            
-        Returns:
-            True if update successful, False otherwise
-        """
-        try:
-            update_response = self.supabase.table("threads").update({
-                "has_attachments": has_attachments
-            }).eq("thread_id", thread_id).execute()
-            
-            if update_response.data:
-                print(f"📎 [THREAD] Set has_attachments={has_attachments} for thread {thread_id}")
-                return True
-            else:
-                print(f"❌ [THREAD] Failed to set has_attachments for thread {thread_id}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ [THREAD] Error setting thread attachment flag: {e}")
-            return False
 
     def update_extended_summary(self, thread_id: str, extended_summary: str) -> bool:
         """
@@ -864,4 +796,49 @@ class ThreadRepository:
                 
         except Exception as e:
             print(f"❌ Error updating subcategory: {e}")
+            return False
+
+    def update_thread_status(self, thread_id: str, status: str) -> bool:
+        """
+        Update the status field for a thread.
+        
+        Args:
+            thread_id: ID of the thread to update
+            status: New status value (e.g., TO_PROCESS, PROCESSED, HUMAN_REVIEW, etc.)
+            
+        Returns:
+            True if update successful, False otherwise
+        """
+        try:
+            response = self.supabase.table("threads").update({
+                "status": status
+            }).eq("thread_id", thread_id).execute()
+            
+            if response.data:
+                print(f"✅ [THREAD] Status updated to '{status}' for thread {thread_id}")
+                return True
+            else:
+                print(f"❌ [THREAD] Failed to update status for thread {thread_id}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error updating thread status: {e}")
+            return False
+
+    def update_human_response(self, thread_id: str, human_response: bool) -> bool:
+        """Update the human_response flag for a thread."""
+        try:
+            response = self.supabase.table("threads").update({
+                "human_response": bool(human_response)
+            }).eq("thread_id", thread_id).execute()
+
+            if response.data:
+                print(f"✅ [THREAD] human_response updated to '{bool(human_response)}' for thread {thread_id}")
+                return True
+            else:
+                print(f"❌ [THREAD] Failed to update human_response for thread {thread_id}")
+                return False
+
+        except Exception as e:
+            print(f"❌ Error updating human_response: {e}")
             return False

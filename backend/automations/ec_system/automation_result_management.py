@@ -5,7 +5,8 @@ from db_client import (
     update_thread,
     get_email_service_data,
     insert_new_mail_in_history_thread,
-    get_calendar_service_data
+    get_calendar_service_data,
+    update_email_priority_score
 )
 import os
 import requests
@@ -328,6 +329,116 @@ def _get_timestamp_in_user_timezone(box_email: str) -> str:
         return datetime.now(timezone.utc).isoformat()
 
 
+def _create_draft_in_provider(
+    box_email: str,
+    sender_email: str,
+    subject: str,
+    response_body: str,
+    message_id: str = None,
+    reply_to_id: str = None,
+    original_thread_id: str = None,
+    microsoft_message_id: str = None,
+    scheduled_event_details: dict = None
+) -> tuple[bool, str]:
+    """
+    Create a draft email in the user's email provider (Gmail/Microsoft/IMAP).
+    
+    Args:
+        box_email: User's mailbox email
+        sender_email: Email to reply to
+        subject: Email subject
+        response_body: Body content of the draft
+        message_id: Message ID for threading
+        reply_to_id: Reply-to message ID
+        original_thread_id: Original thread ID for Gmail
+        microsoft_message_id: Microsoft Graph message ID for replies
+        scheduled_event_details: Event details for ICS attachment (optional)
+        
+    Returns:
+        Tuple of (success: bool, draft_id: str or None)
+    """
+    # Skip if no body to draft
+    if not response_body or not response_body.strip():
+        print(f"⚠️ [DRAFT] No response body to create draft - skipping draft creation")
+        return False, None
+    
+    try:
+        # Get email service data
+        email_service_data = get_email_service_data(box_email)
+        if not email_service_data:
+            print(f"❌ [DRAFT] No email service data found for {box_email}")
+            return False, None
+        
+        provider = email_service_data.get("email_provider")
+        if not provider:
+            print(f"❌ [DRAFT] No email provider configured for {box_email}")
+            return False, None
+        
+        # Add AI disclaimer to the response body
+        response_body_with_disclaimer = _wrap_body_with_disclaimer(response_body)
+        
+        # Prepare payload
+        payload = {
+            "email": sender_email,
+            "subject": subject,
+            "body": response_body_with_disclaimer,
+        }
+        
+        # Generate ICS attachment if event was scheduled/rescheduled
+        if scheduled_event_details:
+            ics_attachment = _create_ics_attachment(scheduled_event_details)
+            if ics_attachment:
+                payload["attachments"] = [ics_attachment]
+                print(f"📎 [DRAFT] ICS attachment generated for event code: {scheduled_event_details.get('event_code')}")
+        
+        senders_url = os.getenv("SENDERS_URL")
+        endpoint = ""
+        
+        if provider == "google":
+            endpoint = f"{senders_url}/send-email/draft-gmail"
+            payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
+            payload["original_thread_id"] = original_thread_id
+            payload["message_id"] = message_id
+        elif provider == "microsoft":
+            endpoint = f"{senders_url}/send-email/draft-microsoft"
+            payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
+            payload["message_id"] = microsoft_message_id
+        elif provider == "imap":
+            endpoint = f"{senders_url}/send-email/draft-imap"
+            imap_server = email_service_data.get("imap_server")
+            if not imap_server:
+                smtp_server = email_service_data.get("smtp_server", "")
+                imap_server = smtp_server.replace("smtp.", "imap.") if smtp_server.startswith("smtp.") else smtp_server
+            imap_port = email_service_data.get("imap_port") or 993
+            payload["imap_server"] = imap_server
+            payload["imap_port"] = imap_port
+            payload["imap_email"] = box_email
+            payload["password"] = email_service_data.get("hashed_password")
+            payload["reply_to_id"] = reply_to_id
+            payload["message_id"] = message_id
+        else:
+            print(f"❌ [DRAFT] Unknown email provider: {provider}")
+            return False, None
+        
+        # Send request
+        response = requests.post(endpoint, json=payload)
+        response.raise_for_status()
+        
+        result = response.json()
+        draft_id = result.get("draft_id") or result.get("message_id")
+        
+        if not result.get("success"):
+            print(f"❌ [DRAFT] Draft creation failed: {result.get('message')}")
+            return False, None
+        
+        print(f"✅ [DRAFT] Draft created successfully via {provider}, draft_id: {draft_id}")
+        return True, draft_id
+        
+    except Exception as e:
+        print(f"❌ [DRAFT] Error creating draft: {e}")
+        return False, None
+
+
 def process_automation_result(workflow_result: dict):
     """
     Process the results of the automation workflow.
@@ -348,6 +459,7 @@ def process_automation_result(workflow_result: dict):
     extracted_info = workflow_result.get('extracted_info', {})
     box_email = extracted_info.get('box_email', 'unknown')
     message_id = extracted_info.get('message_id', 'unknown')
+    email_id = workflow_result.get("email_id", None)  # Email UUID from emails table for notifications/events
     sender_email = extracted_info.get("from", "unknown")
     subject = extracted_info.get("subject", "No subject")
     thread_id = extracted_info.get("thread_id", None)
@@ -366,9 +478,17 @@ def process_automation_result(workflow_result: dict):
     original_thread_id = workflow_result.get("original_thread_id", None)
     microsoft_message_id = workflow_result.get("microsoft_message_id", None)  # Microsoft Graph internal ID for replies
     scheduled_event_details = workflow_result.get("scheduled_event_details", None)  # Event details for ICS attachment
+    duration = int(workflow_result.get("duration") or 0)
 
     # Get timestamp in user's timezone for notification formatting
     notification_timestamp = _get_timestamp_in_user_timezone(box_email)
+
+    # Persist priority_score on the INBOUND email that was processed (not on the outbound AI email).
+    if email_id is not None:
+        try:
+            update_email_priority_score(email_id, priority_score)
+        except Exception as e:
+            print(f"❌ [WORKFLOW] Error updating inbound email priority_score: {e}")
 
     # ======= SUMMARIZER ONLY CHECK ======= ✅
     if workflow_result.get("summarizer_only", False):   
@@ -380,8 +500,7 @@ def process_automation_result(workflow_result: dict):
         thread_data = {
             "summary": summary,
             "extended_summary": extended_summary,
-            "cc_emails": cc_emails,
-            "has_attachments": has_attachments
+            "cc_emails": cc_emails
         }
 
         try:
@@ -410,7 +529,7 @@ def process_automation_result(workflow_result: dict):
             notification_success = insert_notification_sync(
                 email=box_email,
                 notification_type="MAIL_NOT_PERMITTED",
-                message_id=message_id,
+                email_id=email_id,
                 text=None  # No text as requested
             )
             
@@ -444,7 +563,7 @@ def process_automation_result(workflow_result: dict):
             notification_success = insert_notification_sync(
                 email=box_email,
                 notification_type="LOW_CONFIDENCE_CLASSIFICATION_MAIL",
-                message_id=message_id,
+                email_id=email_id,
                 text=None
             )
             
@@ -485,18 +604,36 @@ def process_automation_result(workflow_result: dict):
         try:
             update_thread(thread_id, thread_data)
 
-            if workflow_result.get("needs_response", True):
+            # Create draft in provider if response_body is available
+            draft_created = False
+            draft_id = None
+            if response_body and response_body.strip():
+                draft_created, draft_id = _create_draft_in_provider(
+                    box_email=box_email,
+                    sender_email=sender_email,
+                    subject=subject,
+                    response_body=response_body,
+                    email_id=email_id,
+                    reply_to_id=reply_to_id,
+                    original_thread_id=original_thread_id,
+                    microsoft_message_id=microsoft_message_id,
+                    scheduled_event_details=scheduled_event_details
+                )
+                
+                # Save AI generated email record
                 ai_email_data = { 
                     "thread_id": thread_id,
+                    "message_id": draft_id,
                     "response_at_id": message_id,
                     "processed_at": now_tz,
-                    "duration": 0, #TODO calculate duration
-                    "priority_score": priority_score,
+                    "duration": duration,
                     "body": response_body,
                     "service_id": service_id,
                     "outcome": EmailOutcome.DRAFT.value
                 }
                 save_ai_generated_email(ai_email_data)
+            else:
+                print(f"⚠️ [HIGH_PRIORITY] No response body available - skipping draft creation")
 
         except Exception as e:
             print(f"❌ [WORKFLOW] Error saving AI generated email: {e}")
@@ -506,7 +643,7 @@ def process_automation_result(workflow_result: dict):
             notification_success = insert_notification_sync(
                 email=box_email,
                 notification_type="HIGH_PRIORITY_MAIL",
-                message_id=message_id,
+                email_id=email_id,
                 text=None
             )
             
@@ -529,6 +666,34 @@ def process_automation_result(workflow_result: dict):
         except Exception as e:
             print(f"❌ [PRIORITY_CONTROLLER] Error sending high priority notification: {e}")
         
+        return
+
+    # ======= NO TASKS (NO REPLY) CHECK =======
+    # If TASKS_EXTRACTOR produced an empty task list, the workflow ends early.
+    # We still need to persist the computed fields on the thread.
+    list_of_tasks = workflow_result.get("list_of_tasks")
+    if isinstance(list_of_tasks, list) and len(list_of_tasks) == 0:
+        if not thread_id:
+            print(f"❌ [WORKFLOW] No thread_id found in workflow result (no tasks)")
+            return
+
+        # Normalize enum subcategory to string for DB consistency
+        subcategory_value = subcategory.value if hasattr(subcategory, "value") else subcategory
+
+        thread_data = {
+            "category": category,
+            "subcategory": subcategory_value,
+            "summary": summary,
+            "extended_summary": extended_summary,
+            "status": ThreadStatus.PROCESSED.value,
+        }
+
+        try:
+            update_thread(thread_id, thread_data)
+            print(f"✅ [WORKFLOW] No tasks extracted - thread updated as PROCESSED")
+        except Exception as e:
+            print(f"❌ [WORKFLOW] Error updating thread (no tasks): {e}")
+
         return
     
     # ======= AUTOMATION EXECUTED CHECK =======
@@ -566,7 +731,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="EVENT_INVITE_MAIL",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
 
@@ -608,7 +773,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="NO_CALENDAR_PROVIDED",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
 
@@ -649,7 +814,7 @@ def process_automation_result(workflow_result: dict):
                 insert_notification_sync(
                     email=box_email,
                     notification_type="INFORMATION_NOT_PRESENT",
-                    message_id=message_id,
+                    email_id=email_id,
                     text=f"Error extracting company information: {str(e)}"
                 )
 
@@ -687,7 +852,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="EVENT_FOLLOWUP_MAIL",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -735,7 +900,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type=notification_type,
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -783,7 +948,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type=notification_type,
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -836,7 +1001,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="EVENT_CODE_NOT_FOUND",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -878,7 +1043,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="CALENDAR_SERVICE_NOT_FOUND",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -920,7 +1085,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="EVENT_DELETION_FAILED",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -959,22 +1124,40 @@ def process_automation_result(workflow_result: dict):
                     "status": ThreadStatus.HUMAN_REVIEW.value
                 }
 
-                ai_email_data = {
-                    "thread_id": thread_id,
-                    "response_at_id": message_id,
-                    "processed_at": now_tz,
-                    "duration": 0, #TODO calculate duration
-                    "priority_score": priority_score,
-                    "body": response_body,
-                    "service_id": service_id,
-                    "outcome": EmailOutcome.DRAFT.value
-                }
-
-                # Save draft in ai_generated_emails
-                try:
-                    save_ai_generated_email(ai_email_data)
-                except Exception as e:
-                    print(f"❌ [WORKFLOW] Error saving draft: {e}")
+                # Create draft in provider if response_body is available
+                draft_created = False
+                draft_id = None
+                if response_body and response_body.strip():
+                    draft_created, draft_id = _create_draft_in_provider(
+                        box_email=box_email,
+                        sender_email=sender_email,
+                        subject=subject,
+                        response_body=response_body,
+                        email_id=email_id,
+                        reply_to_id=reply_to_id,
+                        original_thread_id=original_thread_id,
+                        microsoft_message_id=microsoft_message_id,
+                        scheduled_event_details=scheduled_event_details
+                    )
+                    
+                    # Save AI generated email record
+                    ai_email_data = {
+                        "thread_id": thread_id,
+                        "message_id": draft_id,
+                        "response_at_id": message_id,
+                        "processed_at": now_tz,
+                        "duration": duration,
+                        "body": response_body,
+                        "service_id": service_id,
+                        "outcome": EmailOutcome.DRAFT.value
+                    }
+                    
+                    try:
+                        save_ai_generated_email(ai_email_data)
+                    except Exception as e:
+                        print(f"❌ [WORKFLOW] Error saving draft: {e}")
+                else:
+                    print(f"⚠️ [LOW_CONFIDENCE_WRITER] No response body available - skipping draft creation")
 
                 try:
                     update_thread(thread_id, thread_data)
@@ -985,7 +1168,7 @@ def process_automation_result(workflow_result: dict):
                     notification_success = insert_notification_sync(
                         email=box_email,
                         notification_type="LOW_CONFIDENCE_WRITER",
-                        message_id=message_id,
+                        email_id=email_id,
                         text=None
                     )
                     
@@ -1025,7 +1208,7 @@ def process_automation_result(workflow_result: dict):
                 notification_success = insert_notification_sync(
                     email=box_email,
                     notification_type="HUMAN_REVIEW",
-                    message_id=message_id,
+                    email_id=email_id,
                     text=None
                 )
                 
@@ -1055,8 +1238,16 @@ def process_automation_result(workflow_result: dict):
                     return
                 # ----------------------------------------
 
-                try:
+                # Check if draft mode is enabled
+                user_config = workflow_result.get("user_config", {})
+                draft_mode = user_config.get("draft", False)
+                
+                if draft_mode:
+                    print(f"📝 [WORKFLOW] Draft mode enabled - Creating draft instead of sending...")
+                else:
                     print(f"📧 [WORKFLOW] Sending email...")
+
+                try:
 
                     # Get email service data
                     email_service_data = get_email_service_data(box_email)
@@ -1070,7 +1261,7 @@ def process_automation_result(workflow_result: dict):
                     # Add AI disclaimer to the response body
                     response_body_with_disclaimer = _wrap_body_with_disclaimer(response_body)
 
-                    # Prepare payload TODO voglio rispondere all'email e non creare un nuovo thread
+                    # Prepare payload
                     payload = {
                         "email": sender_email,
                         "subject": subject,
@@ -1088,25 +1279,47 @@ def process_automation_result(workflow_result: dict):
                     endpoint = ""
 
                     if provider == "google":
-                        endpoint = f"{senders_url}/send-email/send-gmail"
+                        if draft_mode:
+                            endpoint = f"{senders_url}/send-email/draft-gmail"
+                        else:
+                            endpoint = f"{senders_url}/send-email/send-gmail"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
                         payload["original_thread_id"] = original_thread_id
                         payload["message_id"] = message_id
                     elif provider == "microsoft":
-                        endpoint = f"{senders_url}/send-email/send-microsoft"
+                        if draft_mode:
+                            endpoint = f"{senders_url}/send-email/draft-microsoft"
+                        else:
+                            endpoint = f"{senders_url}/send-email/send-microsoft"
                         payload["hashed_access_token"] = email_service_data.get("hashed_access_token")
                         # Use microsoft_message_id (internal Graph ID) for replies, not the RFC message_id
                         payload["message_id"] = microsoft_message_id
                     elif provider == "imap":
                         print("[DEBUG-AUTOMATION] imap")
                         print("[DEBUG-AUTOMATION] email_service_data: ", email_service_data)
-                        endpoint = f"{senders_url}/send-email/send-smtp"
-                        payload["smtp_server"] = email_service_data.get("smtp_server")
-                        payload["smtp_port"] = email_service_data.get("smtp_port")
-                        payload["smtp_email"] = box_email
-                        payload["password"] = email_service_data.get("hashed_password")
-                        payload["reply_to_id"] = reply_to_id
-                        payload["message_id"] = message_id
+                        if draft_mode:
+                            endpoint = f"{senders_url}/send-email/draft-imap"
+                            # Get IMAP config from database, fallback to SMTP server conversion if not configured
+                            imap_server = email_service_data.get("imap_server")
+                            if not imap_server:
+                                # Fallback: convert SMTP server to IMAP server
+                                smtp_server = email_service_data.get("smtp_server", "")
+                                imap_server = smtp_server.replace("smtp.", "imap.") if smtp_server.startswith("smtp.") else smtp_server
+                            imap_port = email_service_data.get("imap_port") or 993
+                            payload["imap_server"] = imap_server
+                            payload["imap_port"] = imap_port
+                            payload["imap_email"] = box_email
+                            payload["password"] = email_service_data.get("hashed_password")
+                            payload["reply_to_id"] = reply_to_id
+                            payload["message_id"] = message_id
+                        else:
+                            endpoint = f"{senders_url}/send-email/send-smtp"
+                            payload["smtp_server"] = email_service_data.get("smtp_server")
+                            payload["smtp_port"] = email_service_data.get("smtp_port")
+                            payload["smtp_email"] = box_email
+                            payload["password"] = email_service_data.get("hashed_password")
+                            payload["reply_to_id"] = reply_to_id
+                            payload["message_id"] = message_id
                     else:
                         raise Exception(f"Unknown email provider: {provider}")
 
@@ -1115,12 +1328,15 @@ def process_automation_result(workflow_result: dict):
                     response.raise_for_status()
                     
                     result = response.json()
-                    new_message_id = result.get("message_id") # TODO da inserire
+                    new_message_id = result.get("message_id") or result.get("draft_id")
                     
                     if not result.get("success"):
-                        raise Exception(f"Email sending failed: {result.get('message')}")
+                        raise Exception(f"Email {'draft creation' if draft_mode else 'sending'} failed: {result.get('message')}")
 
-                    print(f"✅ [WORKFLOW] Email sent successfully via {provider}")
+                    if draft_mode:
+                        print(f"✅ [WORKFLOW] Draft created successfully via {provider}")
+                    else:
+                        print(f"✅ [WORKFLOW] Email sent successfully via {provider}")
                     
                     """
                     # Update ai_generated_email outcome to SENT
@@ -1151,7 +1367,7 @@ def process_automation_result(workflow_result: dict):
                         insert_notification_sync(
                             email=box_email,
                             notification_type="EMAIL_NOT_SENT",
-                            message_id=message_id,
+                            email_id=email_id,
                             text=None
                         )
                     except Exception as notif_error:
@@ -1164,8 +1380,7 @@ def process_automation_result(workflow_result: dict):
                             "message_id": None,
                             "response_at_id": message_id,
                             "processed_at": now_tz,
-                            "duration": 0, #TODO calculate duration
-                            "priority_score": priority_score,
+                            "duration": duration,
                             "body": response_body,
                             "service_id": service_id,
                             "outcome": EmailOutcome.FAILED_TO_SEND.value
@@ -1182,6 +1397,7 @@ def process_automation_result(workflow_result: dict):
                             "subcategory": subcategory,
                             "summary": summary,
                             "extended_summary": extended_summary,
+                            "human_response": True,
                             "status": ThreadStatus.HUMAN_REVIEW.value,
                         }
                         update_thread(thread_id, thread_data)
@@ -1196,11 +1412,10 @@ def process_automation_result(workflow_result: dict):
                     "message_id": new_message_id,
                     "response_at_id": message_id,
                     "processed_at": now_tz,
-                    "duration": 0, #TODO calculate duration
-                    "priority_score": priority_score,
+                    "duration": duration,
                     "body": response_body,
                     "service_id": service_id,
-                    "outcome": EmailOutcome.SENT.value
+                    "outcome": EmailOutcome.DRAFT.value if draft_mode else EmailOutcome.SENT.value
                 }
 
                 thread_data = {
@@ -1208,15 +1423,24 @@ def process_automation_result(workflow_result: dict):
                     "subcategory": subcategory,
                     "summary": summary,
                     "extended_summary": extended_summary,
-                    "status": ThreadStatus.PROCESSED.value,
-                    "last_message_id": new_message_id,
-                    "last_message_at": now_tz,
-                    "last_sender_email": box_email
+                    "human_response": draft_mode,
+                    "status": ThreadStatus.HUMAN_REVIEW.value if draft_mode else ThreadStatus.PROCESSED.value,
                 }
+                
+                # Only add these fields when actually sending (not draft mode)
+                if not draft_mode:
+                    thread_data["last_message_id"] = new_message_id
+                    thread_data["last_message_at"] = now_tz
+                    thread_data["last_sender_email"] = box_email
 
                 try:
-                    insert_new_mail_in_history_thread(thread_id, new_message_id)
-                    save_ai_generated_email(ai_email_data)
+                    if not draft_mode:
+                        # Save the email first to get the email_id
+                        saved_email_id = save_ai_generated_email(ai_email_data)
+                        # Update history with both message_id and email_id
+                        insert_new_mail_in_history_thread(thread_id, new_message_id, saved_email_id)
+                    else:
+                        save_ai_generated_email(ai_email_data)
                     update_thread(thread_id, thread_data)
                 except Exception as e:
                     print(f"❌ [WORKFLOW] Error saving AI generated email: {e}")

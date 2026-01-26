@@ -29,10 +29,11 @@ from src.modules.scraper.src.utils.qdrant_utils import (
     get_collection_info,
     QDRANT_URL as EFFECTIVE_QDRANT_URL,
 )
+from src.modules.scraper.src.utils.job_store import ScrapingJobStore
 
 load_dotenv()
 
-# In-memory storage for scraping job status
+# In-memory fallback storage for scraping job status (Redis is preferred).
 scraping_jobs: Dict[str, Dict[str, Any]] = {}
 
 
@@ -41,6 +42,40 @@ class ScraperController:
     
     def __init__(self):
         self.subscription_service_dao = SubscriptionServiceDAO()
+        self.job_store = ScrapingJobStore()
+
+    def _job_get(self, email_key: str) -> Optional[Dict[str, Any]]:
+        """Get job state from Redis, falling back to in-memory."""
+        try:
+            job = self.job_store.get(email_key)
+            if job is not None:
+                scraping_jobs[email_key] = job
+                return job
+        except Exception as e:
+            print(f"[{email_key}] Warning: Redis get failed: {type(e).__name__}: {e}")
+        return scraping_jobs.get(email_key)
+
+    def _job_set(self, email_key: str, state: Dict[str, Any]) -> None:
+        """Set job state in Redis (and in-memory as fallback)."""
+        scraping_jobs[email_key] = state
+        try:
+            self.job_store.set(email_key, state)
+        except Exception as e:
+            print(f"[{email_key}] Warning: Redis set failed: {type(e).__name__}: {e}")
+
+    def _job_patch(self, email_key: str, patch: Dict[str, Any]) -> Dict[str, Any]:
+        """Patch job state in Redis (and keep in-memory mirrored)."""
+        try:
+            updated = self.job_store.patch(email_key, patch)
+            scraping_jobs[email_key] = updated
+            return updated
+        except Exception as e:
+            print(f"[{email_key}] Warning: Redis patch failed: {type(e).__name__}: {e}")
+            current = scraping_jobs.get(email_key, {})
+            # Shallow merge fallback is sufficient for minimal resiliency.
+            current.update(patch or {})
+            scraping_jobs[email_key] = current
+            return current
     
     def _normalize_email_key(self, email: str) -> str:
         return (email or "").strip().lower()
@@ -287,7 +322,7 @@ class ScraperController:
             print(f"[{email_key}] Warning: Error updating website URL: {e}")
         
         # Initialize job status
-        scraping_jobs[email_key] = {
+        job_state = {
             "status": "started",
             "website_url": website_url,
             "collection_name": collection_name,
@@ -305,6 +340,7 @@ class ScraperController:
             },
             "error": None
         }
+        self._job_set(email_key, job_state)
         
         if background_tasks:
             # Run in background
@@ -329,7 +365,7 @@ class ScraperController:
                 collection_name,
                 urls,
             )
-            return scraping_jobs.get(email_key, {})
+            return self._job_get(email_key) or {}
     
     async def _run_scraping_pipeline(
         self,
@@ -349,14 +385,18 @@ class ScraperController:
                 f"(effective={self._scrapings_dir()})"
             )
             # Step 1: Scrape selected URLs
-            scraping_jobs[email]["progress"]["step"] = "scraping"
-            scraping_jobs[email]["progress"]["current_url"] = website_url
+            self._job_patch(
+                email,
+                {"progress": {"step": "scraping", "current_url": website_url}, "status": "processing"},
+            )
             print(f"[{email}] Starting scraping for {website_url}")
             
             # Define progress callback to update status in real-time
             def update_scraping_progress(pages_scraped: int, current_url: str):
-                scraping_jobs[email]["progress"]["pages_scraped"] = pages_scraped
-                scraping_jobs[email]["progress"]["current_url"] = current_url
+                self._job_patch(
+                    email,
+                    {"progress": {"pages_scraped": pages_scraped, "current_url": current_url}},
+                )
             
             # Run scraping in thread pool to not block
             loop = asyncio.get_running_loop()
@@ -365,23 +405,22 @@ class ScraperController:
                 lambda: scrape_selected_urls(urls, update_scraping_progress)
             )
             
-            scraping_jobs[email]["progress"]["pages_scraped"] = len(pages)
+            self._job_patch(email, {"progress": {"pages_scraped": len(pages)}})
             print(f"[{email}] Scraped {len(pages)} pages")
             
             if not pages:
-                scraping_jobs[email]["status"] = "completed"
-                scraping_jobs[email]["progress"]["step"] = "completed_no_content"
+                self._job_patch(email, {"status": "completed", "progress": {"step": "completed_no_content"}})
                 return
             
             # Convert ScrapedPage to dict
             pages_dict = [{"url": p.url, "title": p.title, "content": p.content} for p in pages]
 
             # Step 2: Clean pages with LLM (once, before chunking)
-            scraping_jobs[email]["progress"]["step"] = "page_cleaning"
+            self._job_patch(email, {"progress": {"step": "page_cleaning"}})
             print(f"[{email}] Cleaning pages with LLM...")
 
             def update_pages_cleaned(pages_cleaned: int):
-                scraping_jobs[email]["progress"]["pages_cleaned"] = pages_cleaned
+                self._job_patch(email, {"progress": {"pages_cleaned": pages_cleaned}})
 
             cleaned_pages = await loop.run_in_executor(
                 None,
@@ -392,13 +431,13 @@ class ScraperController:
             pages_for_chunking = cleaned_pages if cleaned_pages else pages_dict
 
             # Step 3: Save cleaned pages JSON export to mounted scrapings folder
-            scraping_jobs[email]["progress"]["step"] = "exporting_json"
+            self._job_patch(email, {"progress": {"step": "exporting_json"}})
             print(f"[{email}] Exporting scrapings JSON...")
             export_path = await loop.run_in_executor(
                 None,
                 lambda: self._write_scrapings_json(email, pages_for_chunking),
             )
-            scraping_jobs[email]["export"]["scrapings_json_path"] = export_path
+            self._job_patch(email, {"export": {"scrapings_json_path": export_path}})
             try:
                 p = Path(export_path)
                 print(f"[{email}] Exported JSON path={export_path} exists={p.exists()} size={p.stat().st_size if p.exists() else None}")
@@ -415,28 +454,27 @@ class ScraperController:
                 print(f"[{email}] Warning: Error updating scraping_collection_path: {e}")
             
             # Step 4: Chunk pages
-            scraping_jobs[email]["progress"]["step"] = "chunking"
+            self._job_patch(email, {"progress": {"step": "chunking"}})
             print(f"[{email}] Chunking pages...")
             
             chunks = await loop.run_in_executor(None, chunk_pages, pages_for_chunking)
-            scraping_jobs[email]["progress"]["chunks_created"] = len(chunks)
+            self._job_patch(email, {"progress": {"chunks_created": len(chunks)}})
             print(f"[{email}] Created {len(chunks)} chunks")
             
             if not chunks:
-                scraping_jobs[email]["status"] = "completed"
-                scraping_jobs[email]["progress"]["step"] = "completed_no_chunks"
+                self._job_patch(email, {"status": "completed", "progress": {"step": "completed_no_chunks"}})
                 return
             
             # Step 5: Embed chunks
-            scraping_jobs[email]["progress"]["step"] = "embedding"
+            self._job_patch(email, {"progress": {"step": "embedding"}})
             print(f"[{email}] Embedding chunks...")
             
             embedded_chunks = await loop.run_in_executor(None, embed_chunks, chunks)
-            scraping_jobs[email]["progress"]["chunks_embedded"] = len(embedded_chunks)
+            self._job_patch(email, {"progress": {"chunks_embedded": len(embedded_chunks)}})
             print(f"[{email}] Embedded {len(embedded_chunks)} chunks")
             
             # Step 6: Upload to Qdrant
-            scraping_jobs[email]["progress"]["step"] = "uploading"
+            self._job_patch(email, {"progress": {"step": "uploading"}})
             print(f"[{email}] Uploading to Qdrant collection '{collection_name}'...")
             
             total_points = await loop.run_in_executor(
@@ -445,11 +483,11 @@ class ScraperController:
                 collection_name,
                 embedded_chunks
             )
-            scraping_jobs[email]["progress"]["chunks_uploaded"] = total_points
+            self._job_patch(email, {"progress": {"chunks_uploaded": total_points}})
             print(f"[{email}] Uploaded {total_points} points to Qdrant")
             
             # Step 7: Update database with collection name
-            scraping_jobs[email]["progress"]["step"] = "updating_database"
+            self._job_patch(email, {"progress": {"step": "updating_database"}})
             print(f"[{email}] Updating database with collection name...")
             
             success = self.subscription_service_dao.update_qdrant_collection_by_email(email, collection_name)
@@ -458,13 +496,11 @@ class ScraperController:
                 print(f"[{email}] Warning: Failed to update database with collection name")
             
             # Complete
-            scraping_jobs[email]["status"] = "completed"
-            scraping_jobs[email]["progress"]["step"] = "completed"
+            self._job_patch(email, {"status": "completed", "progress": {"step": "completed"}})
             print(f"[{email}] Scraping pipeline completed successfully")
             
         except Exception as e:
-            scraping_jobs[email]["status"] = "failed"
-            scraping_jobs[email]["error"] = str(e)
+            self._job_patch(email, {"status": "failed", "error": str(e)})
             print(f"[{email}] Scraping pipeline failed: {e}")
             print(f"[{email}] Traceback:\n{traceback.format_exc()}")
 
@@ -485,13 +521,14 @@ class ScraperController:
                 detail="email is required"
             )
         
-        if email_key not in scraping_jobs:
+        job = self._job_get(email_key)
+        if not job:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No scraping job found for email {email_key}"
             )
-        
-        return scraping_jobs[email_key]
+
+        return job
     
     def get_collection_status(self, email: str) -> Dict[str, Any]:
         """

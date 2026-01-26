@@ -14,7 +14,6 @@ from langchain_core.output_parsers import PydanticOutputParser
 from typing import TypeVar, Type, Optional, List
 
 from ..models.llm_responses import (
-    LanguageDetectionResponse, 
     EmailFilterResponse, 
     GuardrailResponse,
     EmailSummaryResponse,
@@ -36,10 +35,10 @@ from ..models.llm_responses import (
     ExtractorCompanyInfoResponse,
     OptimizedQueryResponse,
     WriteResponse,
-    ReviewerResponse
+    ReviewerResponse,
+    TasksExtractorResponse
 )
 from ..prompts.templates import (
-    LANGUAGE_DETECTION_PROMPT,
     EMAIL_FILTER_PROMPT_ITA,
     EMAIL_FILTER_PROMPT_ENG,
     EMAIL_GUARDRAIL_PROMPT_ITA,
@@ -97,7 +96,9 @@ from ..prompts.templates import (
     OPTIMIZE_QUERY_PROMPT_ITA,
     OPTIMIZE_QUERY_PROMPT_ENG,
     EXTRACTOR_FROM_CHUNKS_PROMPT_ITA,
-    EXTRACTOR_FROM_CHUNKS_PROMPT_ENG
+    EXTRACTOR_FROM_CHUNKS_PROMPT_ENG,
+    TASKS_EXTRACTOR_PROMPT_ITA,
+    TASKS_EXTRACTOR_PROMPT_ENG
 )
 
 # Import utils and db_client for calendar operations
@@ -161,48 +162,6 @@ class LLMClient:
         # Security settings
         self.enable_salt_protection = os.getenv("ENABLE_PROMPT_PROTECTION", "true").lower() == "true"
         self.salt_length = int(os.getenv("SALT_LENGTH", "8"))
-    
-    def detect_language(self, email_text: str) -> LanguageDetectionResponse:
-        """
-        Detect the language of an email text.
-        
-        Args:
-            email_text: The email text to analyze (first 400 chars)
-            
-        Returns:
-            LanguageDetectionResponse with detected language
-        """
-        try:
-            # Truncate text to 400 characters
-            truncated_text = email_text[:400] if email_text else ""
-            
-            # Create output parser
-            parser = PydanticOutputParser(pydantic_object=LanguageDetectionResponse)
-            
-            # Format prompt
-            prompt_text = LANGUAGE_DETECTION_PROMPT.format(
-                email_text=truncated_text
-            )
-            
-            # Add format instructions
-            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
-            
-            # Create message
-            message = HumanMessage(content=prompt_with_format)
-            
-            # Get response from LLM
-            response = self.llm.invoke([message])
-            
-            # Parse response
-            parsed_response = parser.parse(response.content)
-            
-            print(f"🔍 [LLM] Language detected: {parsed_response.language}")
-            return parsed_response
-            
-        except Exception as e:
-            print(f"❌ [LLM] Error detecting language: {e}")
-            # Return default ITA on error
-            return LanguageDetectionResponse(language="ITA")
     
     def filter_email_body(self, email_body: str, language: str) -> EmailFilterResponse:
         """
@@ -755,7 +714,7 @@ class LLMClient:
     
     def read_email(self, filtered_body: str, summary_attachments: str, language: str) -> ReaderResponse:
         """
-        Extract key entities and determine if email needs response.
+        Extract key entities from email.
         
         Args:
             filtered_body: Filtered email body
@@ -763,7 +722,7 @@ class LLMClient:
             language: Language of the email ("ITA" or "ENG")
             
         Returns:
-            ReaderResponse with key_entities dict and needs_response boolean
+            ReaderResponse with key_entities dict
         """
         try:
             # Choose prompt based on language
@@ -798,7 +757,7 @@ class LLMClient:
             # Parse response
             parsed_response = parser.parse(response.content)
             
-            print(f"📖 [LLM] Email read ({language}): needs_response={parsed_response.needs_response}, entities={len(parsed_response.key_entities)} keys")
+            print(f"📖 [LLM] Email read ({language}): entities={len(parsed_response.key_entities)} keys")
             return parsed_response
             
         except Exception as e:
@@ -815,8 +774,7 @@ class LLMClient:
                     "amounts": [],
                     "documents": [],
                     "other_info": []
-                },
-                needs_response=True  # Default to True to be safe
+                }
             )
     
     def read_appointment_request(self, filtered_body: str, extended_summary: str, 
@@ -1008,7 +966,7 @@ class LLMClient:
         service_id: str,
         event_type: str,
         created_by: str,
-        thread_id: Optional[str] = None,
+        email_id: Optional[str] = None,
         language: str = "ITA",
         favorite_day: Optional[str] = None
     ) -> SchedulerResponse:
@@ -1024,7 +982,7 @@ class LLMClient:
             service_id: Service ID from subscription_services
             event_type: Type of event
             created_by: Email of the creator
-            thread_id: Optional thread ID
+            email_id: Optional email ID from emails table
             language: Language for prompts (ITA or ENG)
             favorite_day: Optional preferred day in YYYY-MM-DD format (pre-extracted by reader)
             
@@ -1158,7 +1116,7 @@ class LLMClient:
                             service_id=service_id,
                             event_type=event_type,
                             created_by=created_by,
-                            thread_id=thread_id,
+                            email_id=email_id,
                             attendees=appointment_info.get('attendees'),
                             place=appointment_info.get('place'),
                             additional_notes=appointment_info.get('additional_notes') + "\n\nScheduled via Corretto AI Assistant." if appointment_info.get('additional_notes') else "Scheduled via Corretto AI Assistant."
@@ -1714,7 +1672,7 @@ class LLMClient:
         service_id: str,
         event_type: str,
         created_by: str,
-        thread_id: Optional[str] = None,
+        email_id: Optional[str] = None,
         attendees: list = None,
         place: str = None,
         additional_notes: str = None
@@ -1729,7 +1687,7 @@ class LLMClient:
             service_id: Service ID from subscription_services
             event_type: Type of event
             created_by: Email of the creator
-            thread_id: Optional thread ID
+            email_id: Optional email ID from emails table
             attendees: List of attendee emails
             place: Location of the event
             additional_notes: Additional notes
@@ -1863,7 +1821,7 @@ class LLMClient:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "title": title_of_event,
             "service_id": service_id,
-            "thread_id": thread_id,
+            "email_id": email_id,
             "event_type": event_type,
             "event_code": event_code,
             "created_by": created_by,
@@ -2666,8 +2624,65 @@ class LLMClient:
         
         return "\n".join(lines) if lines else "No appointment context applicable."
 
+    def extract_tasks(self, subject: str, mail_summary: str, extended_summary: str, 
+                      summary_attachments: str, language: str) -> TasksExtractorResponse:
+        """
+        Extract required tasks from email content.
         
-
+        Args:
+            subject: Email subject line
+            mail_summary: Summary of the current email
+            extended_summary: Extended conversation summary
+            summary_attachments: Summary of attachment contents (or empty string)
+            language: Language of the email ("ITA" or "ENG")
+            
+        Returns:
+            TasksExtractorResponse with list_of_tasks
+        """
+        try:
+            # Choose prompt based on language
+            if language == "ENG":
+                prompt_template = TASKS_EXTRACTOR_PROMPT_ENG
+            else:
+                prompt_template = TASKS_EXTRACTOR_PROMPT_ITA
+            
+            # Create output parser
+            parser = PydanticOutputParser(pydantic_object=TasksExtractorResponse)
+            
+            # Handle empty attachment summary
+            if not summary_attachments or summary_attachments.strip() == "":
+                if language == "ENG":
+                    summary_attachments = "No attachments in this email."
+                else:
+                    summary_attachments = "Nessun allegato in questa email."
+            
+            # Format prompt
+            prompt_text = prompt_template.format(
+                subject=subject,
+                mail_summary=mail_summary,
+                extended_summary=extended_summary or "Nessun riassunto conversazione precedente.",
+                summary_attachments=summary_attachments
+            )
+            
+            # Add format instructions
+            prompt_with_format = f"{prompt_text}\n\n{parser.get_format_instructions()}"
+            
+            # Create message
+            message = HumanMessage(content=prompt_with_format)
+            
+            # Get response from LLM
+            response = self.llm.invoke([message])
+            
+            # Parse response
+            parsed_response = parser.parse(response.content)
+            
+            print(f"📋 [LLM] Tasks extracted ({language}): {[t.value for t in parsed_response.list_of_tasks]}")
+            return parsed_response
+            
+        except Exception as e:
+            print(f"❌ [LLM] Error in task extraction: {e}")
+            # Return empty list on error
+            return TasksExtractorResponse(list_of_tasks=[])
         
 
 # Global LLM client instance

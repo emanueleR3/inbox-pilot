@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Query, HTTPException, status
+from typing import Optional
+from urllib.parse import urlencode
 from src.core.dependecy import get_current_user
 from src.modules.subscription_service.src.controllers.subscription_service_controller import SubscriptionServiceController
 from src.modules.subscription_service.src.utils.utils import forward_post, forward_get
@@ -8,186 +10,6 @@ router = APIRouter(
     tags=["Subscription Service"],
 )
 controller = SubscriptionServiceController()
-
-@router.get(
-    "/get-config/{subscription_id}",
-    summary="Recupera la configurazione di un abbonamento",
-    description="Restituisce i parametri di configurazione associati all'abbonamento specificato.",
-    responses={
-        200: {
-            "description": "Configurazione trovata con successo",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "ok",
-                        "result": {
-                            "confidence_response_threshold": 0.8,
-                            "confidence_review_mail": 0.7,
-                            "priority_threshold": 0.5,
-                            "confidence_classification_threshold": 0.75,
-                            "urgent_meeting_threshold": 0.9,
-                        },
-                    }
-                }
-            },
-        },
-        400: {
-            "description": "Richiesta non valida",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "ID sottoscrizione richiesto"}
-                }
-            }
-        },
-        404: {
-            "description": "Configurazione non trovata",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Configurazione con ID {subscription_id} non trovata"}
-                }
-            }
-        },
-        500: {
-            "description": "Errore interno del server",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Errore durante il recupero della configurazione"}
-                }
-            }
-        }
-    },
-)
-def get_configuration(subscription_id: str):
-    result = controller.get_configuration(subscription_id)
-    fields = [
-        "confidence_response_threshold",
-        "confidence_review_mail",
-        "priority_threshold",
-        "confidence_classification_threshold",
-        "urgent_meeting_threshold",
-    ]
-    if not result:
-        return {"status": "not_found"}
-    filtered = {k: result.get(k) for k in fields}
-    return {"status": "ok", "result": filtered}
-
-@router.patch(
-    "/update-config/{subscription_id}",
-    summary="Aggiorna una configurazione esistente",
-    description="Aggiorna uno o più parametri di configurazione per un abbonamento esistente.",
-    responses={
-        200: {
-            "description": "Configurazione aggiornata con successo",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "ok",
-                        "result": {
-                            "subscription_id": "sub_12345",
-                            "confidence_response_threshold": 0.9,
-                            "priority_threshold": 0.6,
-                        },
-                    }
-                }
-            },
-        },
-        400: {
-            "description": "Richiesta non valida",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "missing_id": {
-                            "value": {"detail": "ID sottoscrizione richiesto"}
-                        },
-                        "missing_updates": {
-                            "value": {"detail": "Nessun aggiornamento fornito"}
-                        },
-                        "invalid_fields": {
-                            "value": {"detail": "Campi non validi per l'aggiornamento"}
-                        },
-                        "invalid_values": {
-                            "value": {"detail": "I valori devono essere numeri tra 0 e 1"}
-                        }
-                    }
-                }
-            }
-        },
-        404: {
-            "description": "Configurazione non trovata",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Configurazione con ID {subscription_id} non trovata"
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "Errore interno del server",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Errore durante l'aggiornamento della configurazione"
-                    }
-                }
-            }
-        },
-        400: {
-            "description": "Richiesta non valida",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "missing_id": {
-                            "value": {"detail": "ID sottoscrizione richiesto"}
-                        },
-                        "missing_updates": {
-                            "value": {"detail": "Nessun aggiornamento fornito"}
-                        },
-                        "invalid_fields": {
-                            "value": {"detail": "Campi non validi per l'aggiornamento"}
-                        },
-                        "invalid_values": {
-                            "value": {"detail": "I valori devono essere numeri tra 0 e 1"}
-                        }
-                    }
-                }
-            }
-        },
-        404: {
-            "description": "Configurazione non trovata",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Configurazione con ID {subscription_id} non trovata"
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "Errore interno del server",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Errore durante l'aggiornamento della configurazione"
-                    }
-                }
-            }
-        },
-    },
-)
-def update_configuration(
-    subscription_id: str,
-    payload: dict = Body(
-        ...,
-        example={
-            "confidence_response_threshold": 0.9,
-            "priority_threshold": 0.6,
-        },
-        description="Parametri da aggiornare nella configurazione dell'abbonamento.",
-    ),
-):
-    updated = controller.update_configuration(subscription_id, payload)
-    return {"status": "ok", "result": updated}
 
 
 @router.post(
@@ -241,6 +63,156 @@ async def start_quiz(
         ),
     ):
     return await forward_post("/start", req)
+
+
+@router.post(
+    "/static-quiz",
+    summary="Aggiorna i dati del quiz statico",
+    description="""
+    Aggiorna i dati di configurazione del servizio tramite quiz statico.
+    
+    Questo endpoint permette di aggiornare i seguenti campi per un servizio identificato dall'email:
+    - **business_hours**: Orari di lavoro settimanali in formato JSON (0=Domenica, 1=Lunedì, ..., 6=Sabato)
+    - **appointment_duration**: Durata degli appuntamenti in minuti
+    - **email_signature**: Firma email personalizzata
+    - **tone_of_voice**: Tono di voce da utilizzare nelle comunicazioni
+    - **phone_numbers**: Numeri di telefono di contatto
+    - **draft**: Indica se il profilo è in bozza (true) o definitivo (false)
+    
+    **Formato business_hours:**
+    ```json
+    {
+      "0": ["09:00-17:00"],
+      "1": ["09:00-12:00", "14:00-18:00"],
+      "2": ["09:00-17:00"]
+    }
+    ```
+    
+    **Formato phone_numbers:**
+    ```json
+    {
+      "principale": "+39 123 456 7890",
+      "secondario": "+39 098 765 4321"
+    }
+    ```
+    oppure
+    ```json
+    ["+39 123 456 7890", "+39 098 765 4321"]
+    ```
+    
+    **Parametri:**
+    - `email` (obbligatorio): Email del servizio da aggiornare
+    - Tutti gli altri campi sono opzionali
+    """,
+    responses={
+        200: {
+            "description": "Dati aggiornati con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Dati static quiz inseriti con successo",
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_email": {
+                            "summary": "Email mancante",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Campi obbligatori mancanti: email"
+                            }
+                        },
+                        "invalid_business_hours": {
+                            "summary": "Formato business_hours non valido",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "business_hours deve essere un oggetto JSON"
+                            }
+                        },
+                        "invalid_duration": {
+                            "summary": "Durata appuntamento non valida",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "appointment_duration deve essere un numero intero positivo"
+                            }
+                        },
+                        "no_updates": {
+                            "summary": "Nessun campo da aggiornare",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Nessun campo da aggiornare fornito"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Servizio non trovato",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 404,
+                        "detail": "Servizio con email 'user@example.com' non trovato"
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 500,
+                        "detail": "Errore database durante: aggiornamento dati static quiz"
+                    }
+                }
+            }
+        }
+    }
+)
+def static_quiz(
+    payload: dict = Body(
+        ...,
+        description="Dati per l'aggiornamento del quiz statico",
+        examples=[{
+            "email": "user@example.com",
+            "business_hours": {
+                "0": ["09:00-17:00"],
+                "1": ["09:00-17:00"],
+                "2": ["09:00-17:00"],
+                "3": ["09:00-17:00"],
+                "4": ["09:00-17:00"]
+            },
+            "appointment_duration": 30,
+            "email_signature": "Cordiali saluti,\nIl Team",
+            "tone_of_voice": "Professionale e cordiale",
+            "phone_numbers": {
+                "principale": "+39 123 456 7890",
+                "secondario": "+39 098 765 4321"
+            },
+            "draft": True
+        }]
+    )
+) -> dict:
+    static_quiz = controller.static_quiz(payload)
+    
+    return {
+        "success": static_quiz,
+        "message": "Dati static quiz inseriti con successo",
+    }
 
 
 @router.post(
@@ -299,6 +271,7 @@ async def start_quiz(
                                 "max_turns": 30,
                                 "extracted_markdown": "# Profilo Aziendale\n\n## Servizi\n...",
                                 "error": None,
+                                "save_started": True,
                                 "conversation_log": [
                                     "[2024-01-01T12:00:00] [MODIFY] L'utente ha cambiato l'orario da 9-18 a 8-17"
                                 ]
@@ -466,6 +439,262 @@ async def finish_quiz(
     return await forward_post("/finish", req)
 
 
+@router.post(
+    "/quiz/save",
+    summary="Avvia il salvataggio del contesto in background",
+    description="""
+    Avvia la pipeline di salvataggio del contesto (pulizia JSON, chunking, embedding e upload su Qdrant) in background.
+
+    Questo endpoint evita di dover inviare un messaggio tipo "OK, salva" in chat: avvia direttamente la pipeline usando i dati
+    raccolti fino a quel momento nella sessione quiz.
+    """,
+    responses={
+        200: {
+            "description": "Pipeline avviata con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "started": True,
+                        "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                        "email": "user@example.it",
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Impossibile avviare il salvataggio",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_session_id": {
+                            "summary": "Session ID mancante",
+                            "value": {"detail": "Session ID è richiesto"},
+                        },
+                        "already_running": {
+                            "summary": "Pipeline già in esecuzione",
+                            "value": {"detail": "Pipeline già in esecuzione per questa sessione"},
+                        },
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Sessione non trovata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Sessione non trovata"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante l'avvio del salvataggio"}
+                }
+            },
+        },
+    },
+)
+async def save_quiz_context(
+    req: dict = Body(
+        ...,
+        example={
+            "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+        },
+        description="Parametri per avviare il salvataggio del contesto per una sessione quiz",
+    ),
+):
+    return await forward_post("/save", req)
+
+
+@router.get(
+    "/quiz/save-status",
+    summary="Monitora lo stato del salvataggio del contesto",
+    description="""
+    Recupera lo stato della pipeline di salvataggio del contesto (background).
+
+    In Kubernetes con più pod lo stato è persistito su DB (quiz_sessions), quindi è sempre recuperabile.
+    """,
+    responses={
+        200: {
+            "description": "Stato recuperato con successo",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "running": {
+                            "summary": "Pipeline in esecuzione",
+                            "value": {
+                                "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                                "email": "user@example.it",
+                                "phase": "EMBEDDING",
+                                "actual_step": 7,
+                                "total_steps": 9,
+                                "started_at": "2026-01-02T10:30:00+00:00",
+                                "updated_at": "2026-01-02T10:32:15+00:00",
+                                "completed_at": None,
+                                "error": None,
+                                "details": {"message": "Embedding di 45 chunks in corso...", "chunks_count": 45},
+                                "run_id": "f1a2b3c4-d5e6-4a1b-9c2d-1234567890ab",
+                                "worker": "pod-abc123:1234",
+                                "is_running": True,
+                                "is_completed": False,
+                                "is_failed": False,
+                                "save_status": "running",
+                            },
+                        },
+                        "idle": {
+                            "summary": "Pipeline non avviata (idle)",
+                            "value": {
+                                "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                                "email": "user@example.it",
+                                "phase": "idle",
+                                "actual_step": 0,
+                                "total_steps": 9,
+                                "started_at": None,
+                                "updated_at": None,
+                                "completed_at": None,
+                                "error": None,
+                                "details": {},
+                                "run_id": None,
+                                "worker": None,
+                                "is_running": False,
+                                "is_completed": False,
+                                "is_failed": False,
+                                "save_status": "idle",
+                            },
+                        },
+                        "failed": {
+                            "summary": "Pipeline fallita",
+                            "value": {
+                                "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                                "email": "user@example.it",
+                                "phase": "UPLOADING_TO_QDRANT",
+                                "actual_step": 8,
+                                "total_steps": 9,
+                                "started_at": "2026-01-02T10:30:00+00:00",
+                                "updated_at": "2026-01-02T10:41:00+00:00",
+                                "completed_at": "2026-01-02T10:41:00+00:00",
+                                "error": "Upload su Qdrant fallito",
+                                "details": {
+                                    "message": "Upload su Qdrant: quiz_updated_user_example_it_20260102_103000",
+                                    "collection_name": "quiz_updated_user_example_it_20260102_103000",
+                                },
+                                "run_id": "f1a2b3c4-d5e6-4a1b-9c2d-1234567890ab",
+                                "worker": "pod-abc123:1234",
+                                "is_running": False,
+                                "is_completed": False,
+                                "is_failed": True,
+                                "save_status": "failed",
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Parametri mancanti",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "session_id o email è richiesto"}
+                }
+            },
+        },
+        404: {
+            "description": "Sessione non trovata",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Sessione non trovata"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore durante il recupero dello stato di salvataggio"}
+                }
+            },
+        },
+    },
+)
+async def get_quiz_save_status(
+    session_id: Optional[str] = Query(None, description="ID sessione quiz"),
+    email: Optional[str] = Query(None, description="Email del servizio"),
+):
+    if not session_id and not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="session_id o email è richiesto",
+        )
+
+    params: dict[str, str] = {}
+    if session_id:
+        params["session_id"] = session_id
+    if email:
+        params["email"] = email
+
+    query = urlencode(params)
+    return await forward_get(f"/save-status?{query}")
+
+@router.get(
+    "/quiz/sessions/{email}",
+    summary="Recupera le sessioni di quiz per un'email",
+    description="Restituisce tutte le sessioni di quiz associate all'email fornita.",
+    responses={
+        200: {
+            "description": "Sessione di quiz recuperata con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "session_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                        "service_id": "ecommerce",
+                        "phase": "collecting",
+                        "business_field": "Retail",
+                        "bullet_list": [
+                            "Vendita online",
+                            "Pagamenti digitali",
+                            "Gestione magazzino"
+                        ],
+                        "is_done": False,
+                        "has_context": True,
+                        "final_markdown": "## Analisi preliminare\nContenuto generato..."
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Email mancante o non valida",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "email è richiesto"}
+                }
+            },
+        },
+        404: {
+            "description": "Nessuna sessione trovata per l'email fornita",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Nessuna sessione trovata per questa email"}
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno durante il recupero della sessione",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Errore durante il recupero della sessione: <dettagli>"
+                    }
+                }
+            },
+        },
+    },
+)
+async def get_sessions(email: str):
+    return await forward_get(f"/sessions/{email}")
+
+
 @router.get(
     "/quiz/sessions",
     summary="Elenca le sessioni attive",
@@ -491,6 +720,7 @@ async def finish_quiz(
 )
 async def list_sessions():
     return await forward_get("/sessions")
+
 
 @router.get(
     "/information/{email}",
@@ -659,20 +889,21 @@ def update_information(
 
 
 @router.get(
-    "/get_subscription_service/{subscription_id}/{email}",
-    summary="Recupera i servizi associati a una sottoscrizione",
+    "/get_subscription_service/{subscription_id}",
+    summary="Recupera tutti i servizi associati a una sottoscrizione",
     description=(
-        "Restituisce tutti i record della tabella `subscription_services` collegati alla sottoscrizione indicata. "
-        "Il contenuto restituito varia in base al provider del servizio (Google, Microsoft o provider personalizzato IMAP)."
+        "Restituisce una lista di tutti i record della tabella `subscription_services` collegati alla sottoscrizione indicata. "
+        "Il contenuto restituito varia in base al provider del servizio (Google, Microsoft o provider personalizzato IMAP). "
+        "\n\nL'endpoint ritorna tutti i servizi (email) associati alla subscription_id specificata."
     ),
     responses={
         200: {
-            "description": "Servizi trovati",
+            "description": "Lista dei servizi associati alla sottoscrizione",
             "content": {
                 "application/json": {
                     "examples": {
-                        "google": {
-                            "summary": "Servizio Google",
+                        "multiple_services": {
+                            "summary": "Subscription con più servizi (Google e Microsoft)",
                             "value": [
                                 {
                                     "email": "user@gmail.com",
@@ -699,12 +930,7 @@ def update_information(
                                     "microsoft_expiration_datetime_inbound": None,
                                     "microsoft_expiration_datetime_outbound": None,
                                     "oauth_user_id": None
-                                }
-                            ]
-                        },
-                        "microsoft": {
-                            "summary": "Servizio Microsoft",
-                            "value": [
+                                },
                                 {
                                     "email": "user@outlook.com",
                                     "email_provider": "microsoft",
@@ -733,8 +959,8 @@ def update_information(
                                 }
                             ]
                         },
-                        "imap": {
-                            "summary": "Servizio IMAP personalizzato",
+                        "single_imap_service": {
+                            "summary": "Subscription con un solo servizio IMAP",
                             "value": [
                                 {
                                     "email": "user@custommail.com",
@@ -768,40 +994,19 @@ def update_information(
                 }
             }
         },
-        404: {"description": "Nessun servizio associato trovato"},
-        500: {"description": "Errore interno del server"}
-    }
-)
-async def get_services_by_subscription(subscription_id: str, email: str):
-    return controller.get_services_by_subscription(subscription_id, email)
-
-@router.post(
-    "/setup-calendar-information",
-    summary="Setup informazioni calendario utente",
-    description="""
-    Configura le informazioni del calendario per l'utente autenticato.
-    """,
-    responses={
-        200: {
-            "description": "Informazioni calendario configurate con successo",
+        400: {
+            "description": "Parametri mancanti",
             "content": {
                 "application/json": {
-                    "example": {
-                        "message": "Informazioni calendario configurate correttamente",
-                        "result": True
-                    }
+                    "example": {"detail": "Campi richiesti mancanti: subscription_id"}
                 }
             }
         },
-        400: {
-            "description": "Richiesta non valida",
+        404: {
+            "description": "Nessun servizio associato trovato per la subscription_id specificata",
             "content": {
                 "application/json": {
-                    "examples": {
-                        "missing_fields": {
-                            "value": {"detail": "Campi richiesti mancanti o non validi"}
-                        },
-                    }
+                    "example": {"detail": "Nessun servizio trovato per subscription_id=xxx"}
                 }
             }
         },
@@ -809,86 +1014,11 @@ async def get_services_by_subscription(subscription_id: str, email: str):
             "description": "Errore interno del server",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Errore interno nel servizio di autenticazione"}
+                    "example": {"detail": "Errore database durante: recupero servizi"}
                 }
             }
         }
     }
 )
-def setup_calendar_information (
-    payload: dict = Body(
-        ...,
-        example={
-            "email": "user@example.com",
-            "business_hours": {
-                "0": ["09:00-17:00"],
-                "1": ["09:00-17:00"],
-                "2": ["09:00-17:00"],
-                "3": ["09:00-17:00"],
-                "4": ["09:00-17:00"],
-            },
-            "appointment_duration": 30
-        },
-        description="Informazioni del calendario da configurare per l'utente.",
-    ),
-):
-    result = controller.setup_calendar_information(payload)
-    return {"message": "Informazioni calendario configurate correttamente", "result": result}
-
-@router.get(
-    "/get-calendar-information",
-    summary="get informazioni calendario utente",
-    description="""
-    Ottiene le informazioni del calendario per l'utente autenticato.
-    """,
-    responses={
-        200: {
-            "description": "Informazioni calendario configurate con successo",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Informazioni calendario configurate correttamente",
-                        "result": """
-                            "business_hours": {
-                                "0": ["09:00-17:00"],
-                                "1": ["09:00-17:00"],
-                                "2": ["09:00-17:00"],
-                                "3": ["09:00-17:00"],
-                                "4": ["09:00-17:00"],
-                            },
-                            "appointment_duration": 30
-                        """
-                    }
-                }
-            }
-        },
-        400: {
-            "description": "Richiesta non valida",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "missing_fields": {
-                            "value": {"detail": "Campi richiesti mancanti o non validi"}
-                        },
-                    }
-                }
-            }
-        },
-        500: {
-            "description": "Errore interno del server",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Errore interno nel servizio di autenticazione"}
-                }
-            }
-        }
-    }
-)
-def get_calendar_information (
-    payload: dict = Body(
-        ...,
-        description="Ottenere le informazioni del calendario da configurare per l'utente.",
-    ),
-):
-    result = controller.get_calendar_information(payload)
-    return {"message": "Informazioni calendario", "result": result}
+async def get_services_by_subscription(subscription_id: str):
+    return controller.get_services_by_subscription(subscription_id)

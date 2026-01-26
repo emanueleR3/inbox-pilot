@@ -83,20 +83,110 @@ def list_quiz_sessions(limit: int = 50, status: Optional[str] = "in_progress") -
         return []
 
 
-def _get_email_for_service(service_id: str) -> Optional[str]:
+def _normalize_email(email: Optional[str]) -> str:
+    if email is None:
+        return ""
+    return str(email).strip().strip('"').strip("'").lower()
+
+
+def fetch_latest_quiz_session_row_for_email(
+    email: str,
+    status: Optional[str] = None,
+) -> Optional[dict[str, Any]]:
+    """Fetch the latest quiz session row for an email.
+
+    This is used to resolve the active session_id starting from the user email.
+
+    Args:
+        email: User email.
+        status: Optional filter for quiz_sessions.status.
+                If None, no status filter is applied.
+
+    Returns:
+        The latest matching quiz_sessions row, or None if not found.
+    """
     supabase = get_supabase_client()
-    if not service_id:
+    normalized_email = _normalize_email(email)
+    if not normalized_email:
+        return None
+
+    try:
+        query = (
+            supabase
+            .table(_QUIZ_SESSIONS_TABLE)
+            .select(_QUIZ_SESSION_COLUMNS)
+            .eq("email", normalized_email)
+        )
+
+        if status is not None:
+            query = query.eq("status", status)
+
+        result = query.order("updated_at", desc=True).limit(1).execute()
+        rows = result.data or []
+        if not rows:
+            return None
+        return rows[0]
+
+    except Exception:
+        return None
+    
+def fetch_quiz_session_rows_for_email(
+    email: str,
+    status: Optional[str] = None,
+) -> List[dict[str, Any]]:
+    """Fetch all quiz session rows for an email.
+
+    Args:
+        email: User email.
+        status: Optional filter for quiz_sessions.status.
+                If None, no status filter is applied.
+
+    Returns:
+        A list of matching quiz_sessions rows (possibly empty).
+    """
+    supabase = get_supabase_client()
+    normalized_email = _normalize_email(email)
+    if not normalized_email:
+        return []
+
+    try:
+        query = (
+            supabase
+            .table(_QUIZ_SESSIONS_TABLE)
+            .select(_QUIZ_SESSION_COLUMNS)
+            .eq("email", normalized_email)
+        )
+
+        if status is not None:
+            query = query.eq("status", status)
+
+        result = query.order("updated_at", desc=True).execute()
+        return result.data or []
+
+    except Exception:
+        return []
+
+
+def _get_service_id_for_email(email: str) -> Optional[str]:
+    """Fetch subscription_services.service_id for a given email."""
+    supabase = get_supabase_client()
+    email = _normalize_email(email)
+    if not email:
         return None
     try:
+        # Use a list query (no .single()) to avoid failures when multiple services exist.
         result = (
             supabase.table("subscription_services")
-            .select("email")
-            .eq("service_id", service_id)
-            .single()
+            .select("service_id")
+            .eq("email", email)
+            .limit(1)
             .execute()
         )
-        email = (result.data or {}).get("email")
-        return email
+        rows = result.data or []
+        if not rows:
+            return None
+        service_id = rows[0].get("service_id")
+        return str(service_id) if service_id else None
     except Exception:
         return None
 
@@ -186,29 +276,27 @@ def _save_quiz_session_state(session_id: str, state: QuizState) -> None:
     supabase.table(_QUIZ_SESSIONS_TABLE).update(_state_to_update_payload(state)).eq("session_id", session_id).execute()
 
 
-def create_session(service_id: str) -> str:
-    """
-    Create a new quiz session for a user (keyed by email).
-    
-    Args:
-        service_id: subscription_services.service_id
-        
+def create_session_for_email(email: str) -> tuple[str, str]:
+    """Create a new quiz session using email as the input.
+
+    Looks up the corresponding subscription_services.service_id.
+
     Returns:
-        The session ID
+        (session_id, service_id)
     """
-    email = _get_email_for_service(service_id)
-    if not email:
-        raise ValueError(f"Unable to find email for service_id: {service_id}")
+    normalized_email = _normalize_email(email)
+    service_id = _get_service_id_for_email(normalized_email)
+    if not service_id:
+        raise ValueError(f"Unable to find service_id for email: {normalized_email}")
 
     session_id = str(uuid.uuid4())
-    # Persist the session immediately (state will be filled on start_quiz)
     try:
-        _upsert_quiz_session(session_id=session_id, service_id=service_id, email=email)
+        _upsert_quiz_session(session_id=session_id, service_id=service_id, email=normalized_email)
     except Exception as e:
         raise ValueError(
             f"Unable to persist quiz session to Supabase. Ensure '{_QUIZ_SESSIONS_TABLE}' table exists. Error: {e}"
         )
-    return session_id
+    return session_id, service_id
 
 
 def get_session(session_id: str) -> Optional[QuizFlow]:
@@ -360,28 +448,27 @@ async def submit_answer(session_id: str, user_answer: str) -> dict:
         state["is_done"] = True
         await persist_quiz_result(state)
         
-        # If pending_context_save (qdrant user), update JSON and rebuild collection
+        # If pending_context_save (qdrant user), start background save pipeline
         if state.get("pending_context_save") and state.get("has_qdrant_collection"):
-            try:
-                from quiz.flow.context_updater import finalize_context_update
-                
-                conversation_log = state.get("conversation_log", [])
-                final_markdown = state.get("final_markdown", "")
-                email = state["email"]
-                
-                print(f"🔄 [QUIZ_SERVICE] Triggering context update for {email}...")
-                success = finalize_context_update(email, conversation_log, final_markdown)
-                
-                if success:
-                    print(f"✅ [QUIZ_SERVICE] Context update completed for {email}")
-                else:
-                    print(f"⚠️ [QUIZ_SERVICE] Context update failed for {email}")
-            except Exception as e:
-                print(f"❌ [QUIZ_SERVICE] Error in context update: {e}")
-
-            # Persist final state (completed) to quiz_sessions.
+            from api.services.save_pipeline import run_save_pipeline_background
+            
+            conversation_log = state.get("conversation_log", [])
+            final_markdown = state.get("final_markdown", "")
+            email = state["email"]
+            
+            print(f"🚀 [QUIZ_SERVICE] Starting background save pipeline for {email}...")
+            run_save_pipeline_background(
+                session_id=session_id,
+                email=email,
+                conversation_log=conversation_log,
+                final_markdown=final_markdown
+            )
+            
+            # Return immediately - pipeline runs in background
             _save_quiz_session_state(session_id, state)
-            return _build_response(state)
+            response = _build_response(state)
+            response["save_started"] = True
+            return response
     
     return _build_response(state)
 
@@ -577,3 +664,90 @@ async def get_service_business_field(email: str) -> Optional[str]:
     if customer:
         return customer.get("business_field")
     return None
+
+
+async def trigger_save_pipeline(session_id: str) -> dict:
+    """
+    Manually trigger the save pipeline for a quiz session.
+    
+    This is used when the frontend wants to trigger save without 
+    relying on chat message interpretation (e.g., a save button).
+    
+    Args:
+        session_id: The quiz session ID
+        
+    Returns:
+        Dictionary with started status and error if any
+    """
+    from api.services.save_pipeline import run_save_pipeline_background
+    
+    session_id = _normalize_session_id(session_id)
+    row = _get_quiz_session_row(session_id)
+    
+    if not row:
+        return {"started": False, "error": "Sessione non trovata"}
+    
+    email = row.get("email")
+    has_qdrant = row.get("has_qdrant_collection") or row.get("has_qdrant")
+    
+    if not has_qdrant:
+        return {"started": False, "error": "L'utente non ha una collezione Qdrant (scraping non effettuato)"}
+    
+    conversation_log = row.get("conversation_log") or []
+    final_markdown = row.get("final_markdown") or ""
+    
+    if not final_markdown:
+        return {"started": False, "error": "Nessun markdown finale da salvare"}
+    
+    # Mark the session as confirmed and done
+    state = _row_to_state(row)
+    state["context_confirmed"] = True
+    state["is_done"] = True
+    state["pending_context_save"] = True
+    _save_quiz_session_state(session_id, state)
+    
+    # Persist the final result
+    await persist_quiz_result(state)
+    
+    # Start background pipeline
+    started = run_save_pipeline_background(
+        session_id=session_id,
+        email=email,
+        conversation_log=conversation_log,
+        final_markdown=final_markdown
+    )
+    
+    if started:
+        return {"started": True, "session_id": session_id, "email": email}
+    else:
+        return {"started": False, "error": "Pipeline già in esecuzione per questa sessione"}
+
+
+def get_save_pipeline_status(session_id: Optional[str] = None, email: Optional[str] = None) -> Optional[dict]:
+    """
+    Get the status of a save pipeline operation from database.
+    
+    This reads from quiz_sessions table, making it multi-pod safe.
+    
+    Args:
+        session_id: The quiz session ID (optional)
+        email: User email (optional, used if session_id not provided)
+        
+    Returns:
+        Status dictionary or None if not found
+    """
+    from api.services.save_pipeline import (
+        get_save_status_from_db,
+        get_save_status_from_db_by_email,
+        db_row_to_status_dict
+    )
+    
+    if session_id:
+        session_id = _normalize_session_id(session_id)
+        row = get_save_status_from_db(session_id)
+    elif email:
+        row = get_save_status_from_db_by_email(_normalize_email(email))
+    else:
+        return None
+    
+    return db_row_to_status_dict(row)

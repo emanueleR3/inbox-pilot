@@ -1,0 +1,3 @@
+from .calendar_routes import router
+
+__all__ = ["router"]

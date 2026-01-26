@@ -53,6 +53,8 @@ spec:
           volumeMounts:
             - name: attachments
               mountPath: /app/attachments
+            - name: logs
+              mountPath: /app/logs
           resources:
             requests:
               memory: "256Mi"
@@ -64,6 +66,10 @@ spec:
         - name: attachments
           hostPath:
             path: /home/deploy/corretto/data/attachments
+            type: DirectoryOrCreate
+        - name: logs
+          hostPath:
+            path: /home/deploy/corretto/logs
             type: DirectoryOrCreate
       imagePullSecrets:
         - name: ghcr-secret

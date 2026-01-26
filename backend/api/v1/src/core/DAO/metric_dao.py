@@ -62,10 +62,11 @@ class MetricDAO:
         total = len(threads)
         ai_only = sum(1 for t in threads if not t["human_response"])
 
-        ai_rows = self.supabase.table("ai_generated_emails") \
+        ai_rows = self.supabase.table("emails") \
             .select("duration", "priority_score") \
-            .gte("processed_at", date_from) \
-            .lte("processed_at", date_to) \
+            .eq("ai_generated", True) \
+            .gte("datetime", date_from) \
+            .lte("datetime", date_to) \
             .execute().data
 
         avg_resp = sum(r["duration"] for r in ai_rows) / len(ai_rows) if ai_rows else 0
@@ -131,11 +132,12 @@ class MetricDAO:
     async def get_ai_quality_metrics(self, subscription_id: str, date_from: str, date_to: str) -> AiQualityMetrics:
         service_ids = self._get_service_ids(subscription_id)
 
-        rows = self.supabase.table("ai_generated_emails") \
+        rows = self.supabase.table("emails") \
             .select("outcome") \
+            .eq("ai_generated", True) \
             .in_("service_id", service_ids) \
-            .gte("processed_at", date_from) \
-            .lte("processed_at", date_to) \
+            .gte("datetime", date_from) \
+            .lte("datetime", date_to) \
             .execute().data
 
         dist: Dict[str, int] = {}
@@ -160,20 +162,21 @@ class MetricDAO:
     async def get_risk_metrics(self, subscription_id: str, date_from: str, date_to: str) -> RiskMetrics:
         service_ids = self._get_service_ids(subscription_id)
 
-        rows = self.supabase.table("ai_generated_emails") \
-            .select("thread_id", "priority_score", "processed_at") \
+        rows = self.supabase.table("emails") \
+            .select("thread_id", "priority_score", "datetime") \
+            .eq("ai_generated", True) \
             .in_("service_id", service_ids) \
-            .gte("processed_at", date_from) \
-            .lte("processed_at", date_to) \
+            .gte("datetime", date_from) \
+            .lte("datetime", date_to) \
             .execute().data
 
         critical = [
             PriorityThread(
                 thread_id=r["thread_id"],
                 priority_score=r["priority_score"],
-                processed_at=r["processed_at"]
+                processed_at=r["datetime"]
             )
-            for r in rows if r["priority_score"] > 0.8
+            for r in rows if r["priority_score"] and r["priority_score"] > 0.8
         ]
 
         return RiskMetrics(
@@ -193,11 +196,12 @@ class MetricDAO:
         service_ids = [s["service_id"] for s in services]
         emails = [s["email"] for s in services]
 
-        email_rows = self.supabase.table("ai_generated_emails") \
-            .select("email_automation_id") \
+        email_rows = self.supabase.table("emails") \
+            .select("email_id") \
+            .eq("ai_generated", True) \
             .in_("service_id", service_ids) \
-            .gte("processed_at", date_from) \
-            .lte("processed_at", date_to) \
+            .gte("datetime", date_from) \
+            .lte("datetime", date_to) \
             .execute().data
 
         threads = self.supabase.table("threads") \
