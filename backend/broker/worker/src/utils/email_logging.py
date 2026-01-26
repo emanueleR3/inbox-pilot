@@ -10,8 +10,8 @@ import os
 import sys
 import io
 import threading
-from datetime import datetime, timezone
-from contextlib import redirect_stdout
+from contextvars import ContextVar
+from datetime import datetime
 from typing import Optional
 
 # Try to import ZoneInfo (Python 3.9+)
@@ -91,8 +91,9 @@ class EmailLogContext:
     The log file will be automatically saved when exiting the context.
     """
     
-    # Thread-local storage for nested contexts
-    _local = threading.local()
+    _active_ctx: ContextVar[Optional['EmailLogContext']] = ContextVar("email_log_context", default=None)
+    _router_lock = threading.Lock()
+    _stdout_router = None
     
     def __init__(self, box_email: str, timestamp: Optional[datetime] = None, service_name: str = "BROKER"):
         """
@@ -110,22 +111,26 @@ class EmailLogContext:
         suffix = "_A" if service_name == "AUTOMATIONS" else "_B"
         self.log_path = get_log_file_path(box_email, self.timestamp, suffix)
         self.buffer = io.StringIO()
-        self._old_stdout = None
+        self._token = None
         self._started = False
+
+    @classmethod
+    def _get_console_stdout(cls):
+        return getattr(sys, "__stdout__", None) or sys.stdout
+
+    @classmethod
+    def _ensure_stdout_router_installed(cls):
+        with cls._router_lock:
+            if cls._stdout_router is None:
+                cls._stdout_router = _StdoutRouter(console=cls._get_console_stdout(), ctx_var=cls._active_ctx)
+            if sys.stdout is not cls._stdout_router:
+                sys.stdout = cls._stdout_router
         
     def __enter__(self):
         """Start capturing output."""
         self._started = True
-        self._old_stdout = sys.stdout
-        
-        # Create a custom stdout that writes to both console and buffer
-        self._dual_writer = DualWriter(self._old_stdout, self.buffer)
-        sys.stdout = self._dual_writer
-        
-        # Store context in thread-local storage for access from other modules
-        if not hasattr(EmailLogContext._local, 'stack'):
-            EmailLogContext._local.stack = []
-        EmailLogContext._local.stack.append(self)
+        EmailLogContext._ensure_stdout_router_installed()
+        self._token = EmailLogContext._active_ctx.set(self)
         
         # Log session start
         self.log(f"\n{'='*80}")
@@ -148,12 +153,9 @@ class EmailLogContext:
             self.log(f"✅ [{self.service_name}] EMAIL PROCESSING LOG SESSION COMPLETED")
             self.log(f"{'='*80}\n")
         
-        # Restore stdout
-        sys.stdout = self._old_stdout
-        
-        # Remove from thread-local stack
-        if hasattr(EmailLogContext._local, 'stack') and EmailLogContext._local.stack:
-            EmailLogContext._local.stack.pop()
+        if self._token is not None:
+            EmailLogContext._active_ctx.reset(self._token)
+            self._token = None
         
         # Save the log file
         self._save_log()
@@ -187,13 +189,11 @@ class EmailLogContext:
                 f.write(log_content)
             
             # Print to original stdout (for container logs)
-            if self._old_stdout:
-                self._old_stdout.write(f"\n💾 [EMAIL_LOGGING] Log saved to: {self.log_path}\n")
+            EmailLogContext._get_console_stdout().write(f"\n💾 [EMAIL_LOGGING] Log saved to: {self.log_path}\n")
                 
         except Exception as e:
             # Print error to original stdout
-            if self._old_stdout:
-                self._old_stdout.write(f"\n❌ [EMAIL_LOGGING] Failed to save log: {e}\n")
+            EmailLogContext._get_console_stdout().write(f"\n❌ [EMAIL_LOGGING] Failed to save log: {e}\n")
     
     @classmethod
     def get_current(cls) -> Optional['EmailLogContext']:
@@ -203,9 +203,7 @@ class EmailLogContext:
         Returns:
             The current EmailLogContext or None if not in a logging context
         """
-        if hasattr(cls._local, 'stack') and cls._local.stack:
-            return cls._local.stack[-1]
-        return None
+        return cls._active_ctx.get()
     
     def get_log_content(self) -> str:
         """
@@ -217,29 +215,38 @@ class EmailLogContext:
         return self.buffer.getvalue()
 
 
-class DualWriter:
-    """
-    A file-like object that writes to two destinations simultaneously.
-    Used to capture output while also displaying it in the console.
-    """
-    
-    def __init__(self, original_stdout, buffer: io.StringIO):
-        self.original_stdout = original_stdout
-        self.buffer = buffer
-    
+class _StdoutRouter:
+    """A single global sys.stdout proxy that routes writes to the active EmailLogContext (per-task via ContextVar)."""
+
+    def __init__(self, console, ctx_var: ContextVar):
+        self._console = console
+        self._ctx_var = ctx_var
+
     def write(self, message: str):
-        """Write to both destinations."""
-        self.original_stdout.write(message)
-        self.buffer.write(message)
-    
+        ctx = self._ctx_var.get()
+        if ctx is not None and getattr(ctx, "buffer", None) is not None and not ctx.buffer.closed:
+            try:
+                ctx.buffer.write(message)
+            except Exception:
+                pass
+        return self._console.write(message)
+
     def flush(self):
-        """Flush both destinations."""
-        self.original_stdout.flush()
-        self.buffer.flush()
-    
+        try:
+            self._console.flush()
+        except Exception:
+            pass
+
     def fileno(self):
-        """Return original stdout's file descriptor."""
-        return self.original_stdout.fileno()
+        return self._console.fileno()
+
+    def isatty(self):
+        return getattr(self._console, "isatty", lambda: False)()
+
+    @property
+    def encoding(self):
+        return getattr(self._console, "encoding", "utf-8")
+
 
 
 # Convenience function for global access
