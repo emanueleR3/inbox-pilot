@@ -4,8 +4,7 @@ import hashlib
 from cryptography.fernet import Fernet
 from datetime import datetime
 from dotenv import load_dotenv
-from pyparsing import Optional
-from realtime import List
+from typing import Optional, List
 from src.core.model.mailbox import EmailAttachment
 from src.core.model.calendar import CalendarEvent, CalendarAttendee, CalendarOrganizer
 from email.mime.multipart import MIMEMultipart
