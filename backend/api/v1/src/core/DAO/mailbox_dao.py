@@ -1,7 +1,6 @@
 from typing import List, Optional
 import httpx
 import base64
-import json
 
 from src.core.database import get_supabase_client
 from src.core.model.mailbox import (

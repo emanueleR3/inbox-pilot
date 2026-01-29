@@ -6,7 +6,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from pyparsing import Optional
 from realtime import List
-from api.v1.src.core.model.mailbox import EmailAttachment
+from src.core.model.mailbox import EmailAttachment
 from src.core.model.calendar import CalendarEvent, CalendarAttendee, CalendarOrganizer
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
