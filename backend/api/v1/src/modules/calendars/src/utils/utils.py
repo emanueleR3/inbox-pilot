@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime
 from src.handler_exception import InvalidFieldException, MissingFieldException
 
-def _validate_required_fields(request_data: dict) -> None:
+def validate_required_fields(request_data: dict) -> None:
     required_fields = ["provider", "token"]
     missing_fields = [field for field in required_fields if not request_data.get(field)]
     
@@ -10,7 +10,7 @@ def _validate_required_fields(request_data: dict) -> None:
         raise MissingFieldException(fields=missing_fields)
 
 
-def _parse_datetime_field(value: Optional[str], field_name: str) -> Optional[datetime]:
+def parse_datetime_field(value: Optional[str], field_name: str) -> Optional[datetime]:
     if value is None:
         return None
     
@@ -30,3 +30,17 @@ def _parse_datetime_field(value: Optional[str], field_name: str) -> Optional[dat
             field=field_name,
             reason="formato data/ora non valido. Utilizzare formato ISO 8601 (es. 2025-01-15T10:00:00Z)"
         )
+    
+def validate_delete_event_fields(request_data: dict) -> None:
+    required_fields = ["provider", "email", "event_id"]
+    missing_fields = [field for field in required_fields if not request_data.get(field)]
+        
+    if missing_fields:
+        raise MissingFieldException(fields=missing_fields)
+    
+def validate_update_event_fields(request_data: dict) -> None:
+    required_fields = ["provider", "email", "event_id"]
+    missing_fields = [field for field in required_fields if not request_data.get(field)]
+        
+    if missing_fields:
+        raise MissingFieldException(fields=missing_fields)

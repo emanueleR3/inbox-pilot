@@ -4,7 +4,14 @@ import hashlib
 from cryptography.fernet import Fernet
 from datetime import datetime
 from dotenv import load_dotenv
+from pyparsing import Optional
+from realtime import List
+from api.v1.src.core.model.mailbox import EmailAttachment
 from src.core.model.calendar import CalendarEvent, CalendarAttendee, CalendarOrganizer
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
 load_dotenv()
 
@@ -163,3 +170,47 @@ def normalize_microsoft_event(event: dict) -> CalendarEvent:
             status=status_map.get(event.get("status", {}).get("response", ""), "confirmed"),
             html_link=event.get("webLink")
         )
+
+def build_mime_message(
+        from_email: str,
+        to: List[str],
+        subject: str,
+        body: str,
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
+        reply_to: Optional[str] = None,
+        attachments: Optional[List[EmailAttachment]] = None,
+        is_html: bool = False
+    ) -> str:
+        """Costruisce un messaggio MIME per Gmail API."""
+
+        if attachments:
+            msg = MIMEMultipart()
+            content_type = "html" if is_html else "plain"
+            msg.attach(MIMEText(body, content_type, "utf-8"))
+            
+            for att in attachments:
+                part = MIMEBase(*att.content_type.split("/", 1))
+                part.set_payload(base64.b64decode(att.content))
+                encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition",
+                    f"attachment; filename={att.filename}"
+                )
+                msg.attach(part)
+        else:
+            content_type = "html" if is_html else "plain"
+            msg = MIMEText(body, content_type, "utf-8")
+
+        msg["From"] = from_email
+        msg["To"] = ", ".join(to)
+        msg["Subject"] = subject
+        
+        if cc:
+            msg["Cc"] = ", ".join(cc)
+        if bcc:
+            msg["Bcc"] = ", ".join(bcc)
+        if reply_to:
+            msg["Reply-To"] = reply_to
+
+        return msg.as_string()

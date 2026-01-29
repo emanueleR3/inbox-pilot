@@ -2,13 +2,20 @@ from typing import Optional
 from datetime import datetime
 from src.core.DAO.calendar_dao import CalendarDAO
 from src.handler_exception import InvalidFieldException, MissingFieldException
+from src.modules.calendars.src.utils.utils import (
+    validate_required_fields,
+    parse_datetime_field,
+    validate_delete_event_fields,
+    validate_update_event_fields
+)
+    
 
 class CalendarController:
     def __init__(self):
         self.calendar_dao = CalendarDAO()
 
     async def get_calendar_events(self, req: dict):
-        self._validate_required_fields(req)
+        validate_required_fields(req)
         
         provider = req.get("provider", "").lower()
         email = req.get("email")
@@ -27,8 +34,8 @@ class CalendarController:
                 reason="deve essere un intero tra 1 e 2500"
             )
         
-        time_min = self._parse_datetime_field(req.get("time_min"), "time_min")
-        time_max = self._parse_datetime_field(req.get("time_max"), "time_max")
+        time_min = parse_datetime_field(req.get("time_min"), "time_min")
+        time_max = parse_datetime_field(req.get("time_max"), "time_max")
         
         if time_min and time_max and time_min >= time_max:
             raise InvalidFieldException(
@@ -53,30 +60,144 @@ class CalendarController:
                 max_results=max_results
             )
 
-    def _validate_required_fields(self, request_data: dict) -> None:
-        required_fields = ["provider", "email"]
-        missing_fields = [field for field in required_fields if not request_data.get(field)]
+    async def create_calendar_event(self, req: dict):
         
-        if missing_fields:
-            raise MissingFieldException(fields=missing_fields)
+        provider = req.get("provider", "").lower()
+        email = req.get("email")
+        title = req.get("title")
+        description = req.get("description")
+        location = req.get("location")
+        attendees = req.get("attendees", [])
+        is_all_day = req.get("is_all_day", False)
+        calendar_id = req.get("calendar_id", "primary")
+        timezone = req.get("timezone", "Europe/Rome")
+        reminders = req.get("reminders")
 
-    def _parse_datetime_field(self, value: Optional[str], field_name: str) -> Optional[datetime]:
-        if value is None:
-            return None
-        
-        if not isinstance(value, str):
+        if provider not in ["google", "microsoft"]:
             raise InvalidFieldException(
-                field=field_name,
-                reason="deve essere una stringa in formato ISO 8601"
+                field="provider",
+                reason="deve essere 'google' o 'microsoft'"
             )
-        
-        try:
-            if value.endswith("Z"):
-                value = value.replace("Z", "+00:00")
-            
-            return datetime.fromisoformat(value)
-        except (ValueError, AttributeError):
+
+        start = self._parse_datetime_field(req.get("start"), "start")
+        end = self._parse_datetime_field(req.get("end"), "end")
+
+        if start >= end:
             raise InvalidFieldException(
-                field=field_name,
-                reason="formato data/ora non valido. Utilizzare formato ISO 8601 (es. 2025-01-15T10:00:00Z)"
+                field="start/end",
+                reason="la data di inizio deve essere precedente alla data di fine"
+            )
+
+        if provider == "google":
+            return await self.calendar_dao.create_google_calendar_event(
+                email=email,
+                title=title,
+                start=start,
+                end=end,
+                description=description,
+                location=location,
+                attendees=attendees,
+                is_all_day=is_all_day,
+                calendar_id=calendar_id,
+                timezone=timezone,
+                reminders=reminders
+            )
+        else:
+            return await self.calendar_dao.create_microsoft_calendar_event(
+                email=email,
+                title=title,
+                start=start,
+                end=end,
+                description=description,
+                location=location,
+                attendees=attendees,
+                is_all_day=is_all_day,
+                calendar_id=calendar_id,
+                timezone=timezone
+            )
+
+    async def update_calendar_event(self, req: dict):
+
+        validate_update_event_fields(req)
+        
+        provider = req.get("provider", "").lower()
+        email = req.get("email")
+        event_id = req.get("event_id")
+        title = req.get("title")
+        description = req.get("description")
+        location = req.get("location")
+        attendees = req.get("attendees")
+        is_all_day = req.get("is_all_day")
+        calendar_id = req.get("calendar_id", "primary")
+        timezone = req.get("timezone", "Europe/Rome")
+
+        if provider not in ["google", "microsoft"]:
+            raise InvalidFieldException(
+                field="provider",
+                reason="deve essere 'google' o 'microsoft'"
+            )
+
+        start = self._parse_datetime_field(req.get("start"), "start")
+        end = self._parse_datetime_field(req.get("end"), "end")
+
+        if start and end and start >= end:
+            raise InvalidFieldException(
+                field="start/end",
+                reason="la data di inizio deve essere precedente alla data di fine"
+            )
+
+        if provider == "google":
+            return await self.calendar_dao.update_google_calendar_event(
+                email=email,
+                event_id=event_id,
+                title=title,
+                start=start,
+                end=end,
+                description=description,
+                location=location,
+                attendees=attendees,
+                is_all_day=is_all_day,
+                calendar_id=calendar_id,
+                timezone=timezone
+            )
+        else:
+            return await self.calendar_dao.update_microsoft_calendar_event(
+                email=email,
+                event_id=event_id,
+                title=title,
+                start=start,
+                end=end,
+                description=description,
+                location=location,
+                attendees=attendees,
+                is_all_day=is_all_day,
+                calendar_id=calendar_id,
+                timezone=timezone
+            )
+
+    async def delete_calendar_event(self, req: dict):
+        validate_delete_event_fields(req)
+        
+        provider = req.get("provider", "").lower()
+        email = req.get("email")
+        event_id = req.get("event_id")
+        calendar_id = req.get("calendar_id", "primary")
+
+        if provider not in ["google", "microsoft"]:
+            raise InvalidFieldException(
+                field="provider",
+                reason="deve essere 'google' o 'microsoft'"
+            )
+
+        if provider == "google":
+            return await self.calendar_dao.delete_google_calendar_event(
+                email=email,
+                event_id=event_id,
+                calendar_id=calendar_id
+            )
+        else:
+            return await self.calendar_dao.delete_microsoft_calendar_event(
+                email=email,
+                event_id=event_id,
+                calendar_id=calendar_id
             )

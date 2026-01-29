@@ -293,3 +293,182 @@ def get_threads_by_category(
     subcategory: Optional[str] = None
 ):
     return controller.get_threads_by_category(category, subcategory)
+
+
+# =============================================================================
+# INVIO EMAIL
+# =============================================================================
+
+@router.post(
+    "/send",
+    status_code=status.HTTP_200_OK,
+    summary="Invia email",
+    description="""
+    Invia una email tramite Google Gmail API o Microsoft Graph API.
+    
+    **Provider supportati:**
+    - `google`: Gmail API
+    - `microsoft`: Microsoft Graph API (Outlook)
+    
+    **Autenticazione:**
+    L'email del mittente deve corrispondere a un account registrato con token OAuth valido.
+    
+    **Campi obbligatori:**
+    - `provider`: Provider email ("google" o "microsoft")
+    - `email`: Email del mittente (account autenticato)
+    - `to`: Lista di destinatari
+    - `subject`: Oggetto dell'email
+    - `body`: Corpo dell'email (testo o HTML)
+    
+    **Campi opzionali:**
+    - `cc`: Lista di indirizzi in copia
+    - `bcc`: Lista di indirizzi in copia nascosta
+    - `reply_to`: Indirizzo per le risposte
+    - `attachments`: Lista di allegati (base64 encoded)
+    - `is_html`: Se True, il body viene interpretato come HTML
+    
+    **Formato allegati:**
+    Ogni allegato deve avere:
+    - `filename`: Nome del file
+    - `content`: Contenuto in base64
+    - `content_type`: MIME type (default: application/octet-stream)
+    """,
+    responses={
+        200: {
+            "description": "Email inviata con successo",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "success": {
+                            "summary": "Invio riuscito",
+                            "value": {
+                                "success": True,
+                                "message_id": "18d1a2b3c4d5e6f7",
+                                "message": "Email inviata con successo"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida - parametri mancanti o non validi",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "summary": "Campi obbligatori mancanti",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Campi obbligatori mancanti: provider, email, to"
+                            }
+                        },
+                        "invalid_provider": {
+                            "summary": "Provider non valido",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Campo 'provider' non valido: deve essere 'google' o 'microsoft'"
+                            }
+                        },
+                        "invalid_email": {
+                            "summary": "Indirizzo email non valido",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Campo 'to' non valido: indirizzo email non valido: invalid-email"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Token non valido o scaduto",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "google_token": {
+                            "summary": "Token Google non valido",
+                            "value": {
+                                "error": True,
+                                "status_code": 401,
+                                "detail": "Token Google non valido"
+                            }
+                        },
+                        "microsoft_token": {
+                            "summary": "Token Microsoft non valido",
+                            "value": {
+                                "error": True,
+                                "status_code": 401,
+                                "detail": "Token Microsoft non valido"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        502: {
+            "description": "Errore di comunicazione con il servizio esterno",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "gmail_error": {
+                            "summary": "Errore Gmail API",
+                            "value": {
+                                "error": True,
+                                "status_code": 502,
+                                "detail": "Errore servizio Gmail: Status code 403: Forbidden"
+                            }
+                        },
+                        "graph_error": {
+                            "summary": "Errore Microsoft Graph",
+                            "value": {
+                                "error": True,
+                                "status_code": 502,
+                                "detail": "Errore servizio Microsoft Graph: Timeout durante l'invio dell'email"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 500,
+                        "detail": "Errore interno del server"
+                    }
+                }
+            }
+        }
+    }
+)
+async def send_email(
+    payload: Dict[str, Any] = Body(
+        ...,
+        example={
+            "provider": "google",
+            "email": "mittente@example.com",
+            "to": ["destinatario@example.com"],
+            "subject": "Oggetto dell'email",
+            "body": "Contenuto dell'email",
+            "cc": ["copia@example.com"],
+            "bcc": ["nascosta@example.com"],
+            "reply_to": "risposta@example.com",
+            "is_html": False,
+            "attachments": [
+                {
+                    "filename": "documento.pdf",
+                    "content": "base64-encoded-content",
+                    "content_type": "application/pdf"
+                }
+            ]
+        }
+    )
+):
+    return await controller.send_email(payload)
