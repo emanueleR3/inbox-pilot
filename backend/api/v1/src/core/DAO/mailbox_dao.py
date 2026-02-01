@@ -285,10 +285,6 @@ class MailboxDAO:
         except Exception as e:
             raise GmailAPIException(reason=f"Errore inaspettato: {str(e)}")
 
-    # =========================================================================
-    # INVIO EMAIL - MICROSOFT (GRAPH API)
-    # =========================================================================
-
     async def send_microsoft_email(
         self,
         email: str,
