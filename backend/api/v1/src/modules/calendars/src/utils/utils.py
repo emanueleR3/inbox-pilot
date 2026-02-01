@@ -21,9 +21,8 @@ def parse_datetime_field(value: Optional[str], field_name: str) -> Optional[date
         )
     
     try:
-        # Handle 'Z' suffix (UTC timezone)
         if value.endswith("Z"):
-            value = value[:-1]  # Remove 'Z'
+            value = value[:-1]  
             dt = datetime.fromisoformat(value)
             return dt.replace(tzinfo=timezone.utc)
         else:
