@@ -3,7 +3,7 @@ from datetime import datetime
 from src.handler_exception import InvalidFieldException, MissingFieldException
 
 def validate_required_fields(request_data: dict) -> None:
-    required_fields = ["provider", "token"]
+    required_fields = ["provider", "email"]
     missing_fields = [field for field in required_fields if not request_data.get(field)]
     
     if missing_fields:
