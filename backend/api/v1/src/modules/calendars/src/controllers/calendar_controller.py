@@ -137,8 +137,8 @@ class CalendarController:
                 reason="deve essere 'google' o 'microsoft'"
             )
 
-        start = self._parse_datetime_field(req.get("start"), "start")
-        end = self._parse_datetime_field(req.get("end"), "end")
+        start = parse_datetime_field(req.get("start"), "start")
+        end = parse_datetime_field(req.get("end"), "end")
 
         if start and end and start >= end:
             raise InvalidFieldException(

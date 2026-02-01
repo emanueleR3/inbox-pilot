@@ -36,7 +36,6 @@ class CalendarDAO:
         )
 
         encrypted_token = token.data[0]["hashed_access_token"]
-
         decrypted_token = decrypt_token(encrypted_token, "token")
         url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
 
