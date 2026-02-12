@@ -1,3 +1,4 @@
+from src.core.DAO.subscription_dao import SubscriptionDAO
 from src.core.DAO.subscription_service_dao import SubscriptionServiceDAO
 from src.handler_exception import (
     MissingFieldException,
@@ -10,6 +11,7 @@ from src.handler_exception import (
 
 class SubscriptionServiceController:
     def __init__(self):
+        self.subscription_dao = SubscriptionDAO()
         self.subscription_service_dao = SubscriptionServiceDAO()
 
     def get_configuration(self, subscription_id: str):
@@ -44,10 +46,12 @@ class SubscriptionServiceController:
             raise MissingFieldException(fields=["subscription_id"])
         
         try:
+            subscription = self.subscription_dao.get_subscription_by_id(subscription_id)
+            if not subscription:
+                raise NotFoundException(detail=f"Sottoscrizione con ID {subscription_id} non trovata")
+
             services = self.subscription_service_dao.get_services_by_subscription(subscription_id)
-            if not services:
-                raise NotFoundException(detail=f"Nessun servizio trovato per subscription_id={subscription_id}")
-            return services
+            return services or []
         except APIException:
             raise
         except Exception as e:

@@ -902,6 +902,10 @@ def update_information(
             "content": {
                 "application/json": {
                     "examples": {
+                        "no_services": {
+                            "summary": "Subscription valida ma senza servizi collegati",
+                            "value": []
+                        },
                         "multiple_services": {
                             "summary": "Subscription con più servizi (Google e Microsoft)",
                             "value": [
@@ -1003,10 +1007,10 @@ def update_information(
             }
         },
         404: {
-            "description": "Nessun servizio associato trovato per la subscription_id specificata",
+            "description": "Sottoscrizione non trovata",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Nessun servizio trovato per subscription_id=xxx"}
+                    "example": {"detail": "Sottoscrizione con ID xxx non trovata"}
                 }
             }
         },
