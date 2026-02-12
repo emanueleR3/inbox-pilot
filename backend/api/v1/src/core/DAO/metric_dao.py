@@ -26,18 +26,24 @@ class MetricDAO:
         self.supabase = get_supabase_client()
 
     def _get_service_emails(self, subscription_id: str) -> List[str]:
-        rows = self.supabase.table("subscription_services") \
-            .select("email") \
-            .eq("subscription_id", subscription_id) \
-            .execute().data
-        return [r["email"] for r in rows]
+        rows = (
+            self.supabase.table("subscription_services")
+            .select("email")
+            .eq("subscription_id", subscription_id)
+            .execute()
+            .data
+        ) or []
+        return [r["email"] for r in rows if r.get("email")]
 
     def _get_service_ids(self, subscription_id: str) -> List[str]:
-        rows = self.supabase.table("subscription_services") \
-            .select("service_id") \
-            .eq("subscription_id", subscription_id) \
-            .execute().data
-        return [r["service_id"] for r in rows]
+        rows = (
+            self.supabase.table("subscription_services")
+            .select("service_id")
+            .eq("subscription_id", subscription_id)
+            .execute()
+            .data
+        ) or []
+        return [r["service_id"] for r in rows if r.get("service_id")]
 
     async def get_overview_metrics(self, subscription_id: str, date_from: str, date_to: str) -> OverviewMetrics:
         emails = self._get_service_emails(subscription_id)
@@ -62,15 +68,19 @@ class MetricDAO:
         total = len(threads)
         ai_only = sum(1 for t in threads if not t["human_response"])
 
-        ai_rows = self.supabase.table("emails") \
-            .select("duration", "priority_score") \
-            .eq("ai_generated", True) \
-            .gte("datetime", date_from) \
-            .lte("datetime", date_to) \
-            .execute().data
+        ai_rows = (
+            self.supabase.table("emails")
+            .select("duration", "priority_score")
+            .eq("ai_generated", True)
+            .gte("datetime", date_from)
+            .lte("datetime", date_to)
+            .execute()
+            .data
+        ) or []
 
-        avg_resp = sum(r["duration"] for r in ai_rows) / len(ai_rows) if ai_rows else 0
-        alerts = sum(1 for r in ai_rows if r["priority_score"] > 0.8)
+        durations = [r["duration"] for r in ai_rows if r.get("duration") is not None]
+        avg_resp = (sum(durations) / len(durations)) if durations else 0
+        alerts = sum(1 for r in ai_rows if (r.get("priority_score") is not None and r["priority_score"] > 0.8))
 
         return OverviewMetrics(
             ticket_total=total,
@@ -173,10 +183,10 @@ class MetricDAO:
         critical = [
             PriorityThread(
                 thread_id=r["thread_id"],
-                priority_score=r["priority_score"],
-                processed_at=r["datetime"]
+                priority_score=r.get("priority_score"),
+                processed_at=r.get("datetime")
             )
-            for r in rows if r["priority_score"] and r["priority_score"] > 0.8
+            for r in rows if (r.get("priority_score") is not None and r["priority_score"] > 0.8)
         ]
 
         return RiskMetrics(
@@ -188,10 +198,13 @@ class MetricDAO:
         )
 
     async def get_usage_metrics(self, subscription_id: str, date_from: str, date_to: str) -> UsageMetrics:
-        services = self.supabase.table("subscription_services") \
-            .select("service_id", "email") \
-            .eq("subscription_id", subscription_id) \
-            .execute().data
+        services = (
+            self.supabase.table("subscription_services")
+            .select("service_id", "email")
+            .eq("subscription_id", subscription_id)
+            .execute()
+            .data
+        ) or []
 
         service_ids = [s["service_id"] for s in services]
         emails = [s["email"] for s in services]
@@ -215,12 +228,16 @@ class MetricDAO:
         for t in threads:
             by_category[t["category"]] = by_category.get(t["category"], 0) + 1
 
-        attachments = self.supabase.table("email_attachments") \
-            .select("size_bytes") \
-            .in_("service_id", service_ids) \
-            .execute().data
+        attachments = (
+            self.supabase.table("email_attachments")
+            .select("size_bytes")
+            .in_("service_id", service_ids)
+            .execute()
+            .data
+        ) or []
 
-        total_minutes = sum(a["size_bytes"] for a in attachments) / 60000 if attachments else 0
+        total_bytes = sum((a.get("size_bytes") or 0) for a in attachments)
+        total_minutes = (total_bytes / 60000) if total_bytes else 0
 
         return UsageMetrics(
             email_processate=len(email_rows),
