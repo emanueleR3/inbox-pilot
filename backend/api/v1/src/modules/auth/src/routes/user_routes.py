@@ -196,20 +196,41 @@ def add_new_user(
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Registrazione completata",
-                        "result": {
-                            "user": {
-                                "session of the user"
-                            },
-                            "subscription": {
-                                "name": "TechVision Srl",
-                                "vat_number": "IT12345678901",
-                                "city": "Milano",
-                                "address": "Via Roma 42",
-                                "active": True,
-                                "current_period_end": "2025-12-31T23:59:59Z",
-                                "plan": "premium",
-                                "industry": "Tecnologia",
+                        {
+                            "message": "Registrazione completata",
+                            "result": {
+                                "id": "35e26201-6c9f-4933-806e-315cefe20b73",
+                                "email": "dev1@example.com",
+                                "subscriptions": [
+                                    {
+                                        "subscription_id": "b81fdc42-59f5-4d7c-bf60-95e02bfd06fc",
+                                        "name": "Emanuele Srl",
+                                        "vat_number": "1234567890",
+                                        "city": "Lecce",
+                                        "address": "Via Enrico Fermi",
+                                        "active": True,
+                                        "current_period_end": "2026-01-22T16:36:59.451000Z",
+                                        "plan": "personal",
+                                        "website": "https://keplero.ai",
+                                        "industry": "Informatica",
+                                        "is_configurated": True
+                                    },
+                                    {
+                                        "subscription_id": "4abd29ef-8e47-4714-947e-6a472661433d",
+                                        "name": "Acme Inc",
+                                        "vat_number": "1\\234567890",
+                                        "city": "Milan",
+                                        "address": "Via Roma 1",
+                                        "active": True,
+                                        "current_period_end": "2026-03-16T21:45:03.050000Z",
+                                        "plan": "trial",
+                                        "website": None,
+                                        "industry": None,
+                                        "is_configurated": False
+                                    }
+                                ],
+                                "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.REDACTED.REDACTED",
+                                "sub_selected": 1
                             }
                         }
                     }
