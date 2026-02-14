@@ -1,5 +1,4 @@
 from fastapi import HTTPException, status
-from fastapi import HTTPException, status
 from supabase_auth.errors import AuthApiError
 from src.core.model.user import UserRead, UserReadSub, UserReadSubs
 from src.core.model.subscription import SubscriptionRead, SubscriptionReadWithConfig
@@ -165,33 +164,34 @@ class UserDAO:
 
         return response
 
-    def create_new_sub(self, user: dict, subscription_data: dict) -> UserReadSubs:
-        # Estrai i campi dal dict utente
+    def create_new_sub(self, user: dict, subscription_data: dict, jwt: str | None = None) -> UserReadSubs:
         user_id = user.get("id")
         user_email = user.get("email")
-        user_subscriptions = user.get("subscriptions", [])
-        user_jwt = user.get("jwt")
-        user_sub_selected = user.get("sub_selected")
+        jwt = jwt or user.get("jwt")
 
-        # Crea una nuova subscription
-        subscription = SubscriptionDAO().create_subscription(subscription_data)
+        if not user_id or not user_email:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User id/email mancanti")
 
-        # Collega l’utente alla subscription
-        self.link_user_subscription(user_id, subscription.subscription_id)
+        if not jwt:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="JWT mancante")
 
-        # Aggiungi la nuova subscription all’elenco
-        user_subscriptions.append(subscription)
+        self.supabase_auth.rpc(
+            "create_subscription_for_user",
+            {
+                "p_user_id": user_id,
+                "p_subscription": subscription_data,
+            }
+        ).execute()
 
-        # Recupera l’indice dell’ultima subscription
-        last_index = len(user_subscriptions) - 1
+        subscriptions = self.get_subscriptions_by_user(user_id)
+        sub_selected = max(len(subscriptions) - 1, 0)
 
-        # Ritorna il nuovo oggetto UserReadSubs
         return UserReadSubs(
             id=user_id,
             email=user_email,
-            subscriptions=user_subscriptions,
-            jwt=user_jwt,
-            sub_selected=last_index  # 🔥 deve essere un int, non un oggetto
+            subscriptions=subscriptions,
+            jwt=jwt,
+            sub_selected=sub_selected,
         )
 
 

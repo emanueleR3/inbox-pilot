@@ -252,13 +252,9 @@ def create_new_sub(
         example={
             "user": {
                 "id": "userid",
-                "email": "email",
-                "subscriptions": [
-                    "...."
-                ],
-                "jwt": "jwt_token",
-                "sub_selected": "0"
+                "email": "user@example.com"
             },
+            "jwt": "jwt_token",
             "subscription": {
                 "name": "Palestra Torino123",
                 "vat_number": "IT123456789",
@@ -270,7 +266,7 @@ def create_new_sub(
                 "industry": "Fitness"
             }
         },
-        description="Email e password per la registrazione del nuovo utente.",
+        description="Crea e collega una nuova subscription a un account già esistente (user + jwt).",
     )
 ):
     result = controller.create_new_sub(payload)
