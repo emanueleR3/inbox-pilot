@@ -1,11 +1,15 @@
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 import os, dotenv
+import threading
+from contextlib import contextmanager
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
 from uuid import uuid4
+from psycopg import OperationalError
+from psycopg_pool import ConnectionPool
 from automations.chatbot.tools import (
     send_email,
     create_draft_email,
@@ -103,29 +107,27 @@ def handle_user_message(user_id: str, thread_id: str | None, text: str):
         print(f"❌ [JERRY_MODERATION] Error during moderation check: {e}")
         # On error, continue but log for monitoring
 
-    # Nel caso non esista thread_id, ne crea uno nuovo con user context. 
+    # Nel caso non esista thread_id, ne crea uno nuovo con user context.
     # Tuttavia, dovrebbe essere sempre gia' presente, perche' gestito a livello di API.
-    if thread_id is None:
-        # Build system prompt with user context
-        system_prompt = _build_system_prompt_with_context(user_id)
-        thread_id = f"user{user_id}:conv{uuid4()}"
-        
-        # Initialize the thread with the system message first
+    with graph_session() as graph:
+        if thread_id is None:
+            system_prompt = _build_system_prompt_with_context(user_id)
+            thread_id = f"user{user_id}:conv{uuid4()}"
+
+            config = {"configurable": {"thread_id": thread_id}}
+            graph.invoke(
+                {"messages": [SystemMessage(content=system_prompt)]},
+                config=config,
+            )
+
         config = {"configurable": {"thread_id": thread_id}}
-        graph.invoke(
-            {"messages": [SystemMessage(content=system_prompt)]},
+        result = graph.invoke(
+            {"messages": [HumanMessage(content=text)]},
             config=config,
         )
 
-    config = {"configurable": {"thread_id": thread_id}}
-
-    result = graph.invoke(
-        {"messages": [HumanMessage(content=text)]},
-        config=config,
-    )
-
-    answer = result["messages"][-1]
-    return thread_id, answer
+        answer = result["messages"][-1]
+        return thread_id, answer
 
 
 def create_chatbot_agent(state: GraphState):
@@ -151,18 +153,88 @@ def create_chatbot_agent(state: GraphState):
     
     return agent
 
-checkpointer_cm = PostgresSaver.from_conn_string(DB_URI)
-checkpointer = checkpointer_cm.__enter__()
-checkpointer.setup()
 
-builder = StateGraph(GraphState)
+_pool_lock = threading.Lock()
+_pool: ConnectionPool | None = None
+_checkpoint_setup_done = False
 
-builder.add_node("chatbot", create_chatbot_agent)
 
-builder.add_edge(START, "chatbot")
-builder.add_edge("chatbot", END)
+def _get_pool() -> ConnectionPool:
+    global _pool
+    if _pool is not None:
+        return _pool
 
-graph = builder.compile(checkpointer=checkpointer)
+    with _pool_lock:
+        if _pool is not None:
+            return _pool
+
+        max_size = int(os.getenv("JERRY_DB_POOL_MAX_SIZE", "5"))
+        timeout = float(os.getenv("JERRY_DB_POOL_TIMEOUT_SECONDS", "30"))
+
+        _pool = ConnectionPool(
+            conninfo=DB_URI,
+            min_size=0,
+            max_size=max_size,
+            timeout=timeout,
+            kwargs={"autocommit": True},
+        )
+        return _pool
+
+
+def _reset_pool() -> None:
+    global _pool, _checkpoint_setup_done
+    with _pool_lock:
+        if _pool is not None:
+            try:
+                _pool.close()
+            except Exception:
+                pass
+        _pool = None
+        _checkpoint_setup_done = False
+
+
+def _compile_graph(checkpointer: PostgresSaver):
+    builder = StateGraph(GraphState)
+    builder.add_node("chatbot", create_chatbot_agent)
+    builder.add_edge(START, "chatbot")
+    builder.add_edge("chatbot", END)
+    return builder.compile(checkpointer=checkpointer)
+
+
+@contextmanager
+def graph_session():
+    """Yield a compiled graph bound to a fresh, pooled DB connection.
+
+    This prevents long-lived stale connections that can lead to
+    OperationalError('the connection is closed') in production.
+    """
+    last_error: OperationalError | None = None
+
+    for attempt in range(2):
+        pool = _get_pool()
+        try:
+            with pool.connection() as conn:
+                checkpointer = PostgresSaver(conn)
+
+                global _checkpoint_setup_done
+                if not _checkpoint_setup_done:
+                    with _pool_lock:
+                        if not _checkpoint_setup_done:
+                            checkpointer.setup()
+                            _checkpoint_setup_done = True
+
+                graph = _compile_graph(checkpointer)
+                yield graph
+                return
+        except OperationalError as e:
+            last_error = e
+            if attempt == 0 and "connection is closed" in str(e).lower():
+                _reset_pool()
+                continue
+            raise
+
+    if last_error is not None:
+        raise last_error
 
 
 

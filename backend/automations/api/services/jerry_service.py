@@ -23,9 +23,8 @@ class JerryService:
     
     def __init__(self):
         """Initialize the Jerry service using the existing jerry.py graph."""
-        # Use the already initialized graph from jerry.py
-        self.graph = jerry.graph
-        self.checkpointer = jerry.checkpointer
+        # Avoid holding a long-lived DB connection inside a global graph/checkpointer.
+        # Graphs are compiled per-request via jerry.graph_session().
         self.agent_prompt = jerry.agent_prompt
     
     def _build_system_prompt_with_context(self, user_id: str) -> str:
@@ -64,10 +63,11 @@ class JerryService:
         
         # Initialize the thread with enriched system message
         config = {"configurable": {"thread_id": thread_id}}
-        self.graph.invoke(
-            {"messages": [SystemMessage(content=system_prompt)]},
-            config=config,
-        )
+        with jerry.graph_session() as graph:
+            graph.invoke(
+                {"messages": [SystemMessage(content=system_prompt)]},
+                config=config,
+            )
         
         return thread_id
     
@@ -115,38 +115,35 @@ class JerryService:
         Yields:
             Chunks of the response as they are generated
         """
-        # Create new thread with user context if not provided
-        if thread_id is None:
+        created_new_thread = thread_id is None
+        if created_new_thread:
             thread_id = f"user{user_id}:conv{uuid4()}"
-            
-            # Build system prompt with user context
             system_prompt = self._build_system_prompt_with_context(user_id)
-            
-            # Initialize the thread with enriched system message
-            config = {"configurable": {"thread_id": thread_id}}
-            self.graph.invoke(
-                {"messages": [SystemMessage(content=system_prompt)]},
-                config=config,
-            )
-        
+
         config = {"configurable": {"thread_id": thread_id}}
-        
-        # Stream the graph execution using jerry's graph
-        for chunk in self.graph.stream(
-            {"messages": [HumanMessage(content=message)]},
-            config=config,
-        ):
-            # Extract relevant data from chunk
-            if "chatbot" in chunk:
-                messages = chunk["chatbot"].get("messages", [])
-                if messages:
-                    last_message = messages[-1]
-                    if hasattr(last_message, 'content'):
-                        yield {
-                            "thread_id": thread_id,
-                            "content": last_message.content,
-                            "type": "message"
-                        }
+
+        # Keep the DB connection open for the full streaming duration.
+        with jerry.graph_session() as graph:
+            if created_new_thread:
+                graph.invoke(
+                    {"messages": [SystemMessage(content=system_prompt)]},
+                    config=config,
+                )
+
+            for chunk in graph.stream(
+                {"messages": [HumanMessage(content=message)]},
+                config=config,
+            ):
+                if "chatbot" in chunk:
+                    messages = chunk["chatbot"].get("messages", [])
+                    if messages:
+                        last_message = messages[-1]
+                        if hasattr(last_message, "content"):
+                            yield {
+                                "thread_id": thread_id,
+                                "content": last_message.content,
+                                "type": "message",
+                            }
     
     def get_thread_history(self, thread_id: str) -> List[Dict[str, Any]]:
         """
@@ -161,8 +158,8 @@ class JerryService:
         config = {"configurable": {"thread_id": thread_id}}
         
         try:
-            # Get the state from checkpointer using jerry's graph
-            state = self.graph.get_state(config)
+            with jerry.graph_session() as graph:
+                state = graph.get_state(config)
             
             if not state or not state.values:
                 return []
@@ -198,10 +195,11 @@ class JerryService:
             config = {"configurable": {"thread_id": thread_id}}
             
             # Update state to empty messages using jerry's graph
-            self.graph.update_state(
-                config,
-                {"messages": []},
-            )
+            with jerry.graph_session() as graph:
+                graph.update_state(
+                    config,
+                    {"messages": []},
+                )
             
             return True
         except Exception as e:
