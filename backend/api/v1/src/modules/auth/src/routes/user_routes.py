@@ -196,7 +196,6 @@ def add_new_user(
             "content": {
                 "application/json": {
                     "example": {
-                        {
                             "message": "Registrazione completata",
                             "result": {
                                 "id": "35e26201-6c9f-4933-806e-315cefe20b73",
@@ -229,10 +228,9 @@ def add_new_user(
                                         "is_configurated": False
                                     }
                                 ],
-                                "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.REDACTED.REDACTED",
+                                "jwt": "jwt_token",
                                 "sub_selected": 1
                             }
-                        }
                     }
                 }
             }
