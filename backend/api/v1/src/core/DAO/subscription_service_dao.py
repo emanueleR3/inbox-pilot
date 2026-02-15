@@ -339,7 +339,7 @@ class SubscriptionServiceDAO:
 
     def create_subscription_service(
         self,
-        email: Optional[str],
+        email: str = None,
         subscription_id: str = None,
         name: str = None,
         email_provider: str = None,
