@@ -5,6 +5,7 @@ from src.handler_exception import (
     SubscriptionIdRequiredException,
     BadRequestException,
     NotFoundException,
+    ResourceAlreadyExistsException,
     APIException,
     DatabaseException
 )
@@ -242,3 +243,29 @@ class SubscriptionServiceController:
             raise
         except Exception as e:
             raise DatabaseException(operation=f"aggiornamento dati static quiz: {str(e)}")
+
+    def create_minimal_service(self, subscription_id: str, name: str) -> dict:
+        if not subscription_id:
+            raise MissingFieldException(fields=["subscription_id"])
+        if not name:
+            raise MissingFieldException(fields=["name"])
+
+        try:
+            subscription = self.subscription_dao.get_subscription_by_id(subscription_id)
+            if not subscription:
+                raise NotFoundException(detail=f"Sottoscrizione con ID {subscription_id} non trovata")
+
+            created = self.subscription_service_dao.create_subscription_service(
+                subscription_id=subscription_id,
+                name=name,
+            )
+
+            if not created:
+                raise DatabaseException(operation="creazione subscription_service")
+
+            return created
+
+        except APIException:
+            raise
+        except Exception as e:
+            raise DatabaseException(operation=f"creazione subscription_service: {str(e)}")

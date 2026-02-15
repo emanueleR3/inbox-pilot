@@ -1,3 +1,4 @@
+from realtime import Optional
 from src.core.database import get_supabase_client
 from src.core.utils.utils import encrypt_token, decrypt_token
 from cryptography.fernet import Fernet
@@ -338,8 +339,9 @@ class SubscriptionServiceDAO:
 
     def create_subscription_service(
         self,
-        email: str,
+        email: Optional[str],
         subscription_id: str = None,
+        name: str = None,
         email_provider: str = None,
         calendar_provider: str = None,
         calendar_names: list = None,
@@ -371,18 +373,11 @@ class SubscriptionServiceDAO:
         last_received_message_id: str = None,
         last_received_timestamp: datetime = None
     ) -> dict | None:
-        """
-        Crea un nuovo record nella tabella subscription_services.
-        Tutti i parametri sono opzionali tranne email.
-        I valori None vengono inseriti come NULL nel database.
-        
-        Returns:
-            dict: Il record creato se successo, None se errore
-        """
         try:
             data = {
                 "email": email,
                 "subscription_id": str(subscription_id) if subscription_id else None,
+                "name": name,
                 "email_provider": email_provider,
                 "calendar_provider": calendar_provider,
                 "calendar_names": calendar_names,

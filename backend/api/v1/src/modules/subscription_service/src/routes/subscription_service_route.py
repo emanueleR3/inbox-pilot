@@ -13,6 +13,93 @@ controller = SubscriptionServiceController()
 
 
 @router.post(
+    "/create-new-service",
+    summary="Crea un nuovo subscription service",
+    description="""
+    Crea un nuovo record nella tabella `subscription_services`.
+
+    Input:
+    - `subscription_id`
+    - `name`
+
+    Note importanti:
+    - In DB `subscription_services.email` è `NOT NULL` e `UNIQUE`.
+    - Questo endpoint (così com'è) prende in input solo `subscription_id` e `name`.
+    - Se l'email non viene valorizzata lato backend, l'INSERT verrà rifiutato dal vincolo DB.
+
+    Suggerimento operativo:
+    - Per una versione “production-ready”, tipicamente si abilita l'autenticazione e si ricava l'email dal token
+      con `Depends(get_current_user)` (vedi parametro commentato sotto).
+    """,
+    responses={
+        200: {
+            "description": "Record creato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "service": {
+                            "service_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                            "email": "user@example.it",
+                            "subscription_id": "9a9a9a9a-1111-2222-3333-444444444444",
+                            "name": "Nome Attività",
+                            "config_completed": False,
+                            "activated": False,
+                        }
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "summary": "Campi mancanti",
+                            "value": {"detail": "Campi obbligatori mancanti: subscription_id, name"},
+                        }
+                    }
+                }
+            },
+        },
+        401: {"description": "Non autenticato"},
+        409: {"description": "Conflitto (record già esistente)"},
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "db_constraint": {
+                            "summary": "Vincolo DB (email NOT NULL/UNIQUE)",
+                            "value": {"detail": "Errore database durante: creazione subscription_service"},
+                        }
+                    }
+                }
+            },
+        },
+    },
+)
+def create_subscription_service(
+    payload: dict = Body(
+        ...,
+        example={
+            "subscription_id": "9a9a9a9a-1111-2222-3333-444444444444",
+            "name": "Nome Attività",
+        },
+        description="Dati per creare un nuovo subscription service",
+    ),
+    #current_user=Depends(get_current_user),
+):
+
+    subscription_id = payload.get("subscription_id")
+    name = payload.get("name")
+
+    service = controller.create_minimal_service(subscription_id=subscription_id, name=name)
+    return {"success": True, "service": service}
+
+
+@router.post(
     "/quiz/start",
     summary="Avvia una nuova sessione di quiz",
     description="Crea una nuova sessione di quiz per un determinato servizio e restituisce la prima domanda.",

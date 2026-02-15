@@ -79,6 +79,21 @@ class UserDAO:
             for c in (config_response.data or [])
         }
 
+        services_response = (
+            self.supabase
+            .table("subscription_services")
+            .select("service_id, email, subscription_id, email_provider, calendar_provider, config_completed, activated, draft, name")
+            .in_("subscription_id", subscription_ids)
+            .execute()
+        )
+
+        services_map: dict[str, list[dict]] = {}
+        for row in (services_response.data or []):
+            sub_id = row.get("subscription_id")
+            if not sub_id:
+                continue
+            services_map.setdefault(sub_id, []).append(row)
+
         subscriptions = [
             SubscriptionReadWithConfig(
                 subscription_id=sub["subscription_id"],
@@ -92,6 +107,7 @@ class UserDAO:
                 website=sub.get("website"),
                 industry=sub.get("industry"),
                 is_configurated=config_map.get(sub["subscription_id"], False), # TODO: monitorare se funziona sempre
+                services=services_map.get(sub["subscription_id"], []),
 
             )
             for sub in subs_response.data

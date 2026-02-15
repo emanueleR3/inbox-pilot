@@ -321,6 +321,7 @@ def get_users_by_subscription(subscription_id: str):
     - Richiede email e password validi
     - Verifica le credenziali contro Supabase Auth
     - Restituisce un token di sessione in caso di successo
+    - Per ogni subscription ritorna anche i `subscription_services` associati nel campo `services`
     """,
     responses={
         200: {
@@ -344,7 +345,20 @@ def get_users_by_subscription(subscription_id: str):
                                     "plan": "personal",
                                     "website": "www.namesrl.com",
                                     "industry": "Tecnologia",
-                                    "is_configurated": "true"
+                                    "is_configurated": "true",
+                                    "services": [
+                                        {
+                                            "service_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                                            "email": "user@example.com",
+                                            "subscription_id": "sub_id12345",
+                                            "email_provider": "google",
+                                            "calendar_provider": "google",
+                                            "config_completed": False,
+                                            "activated": False,
+                                            "draft": True,
+                                            "name": "Nome Attività"
+                                        }
+                                    ]
                                 }
                             ],
                             "jwt": "jwt_token",
