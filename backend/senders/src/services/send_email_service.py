@@ -88,7 +88,7 @@ class SendEmailService:
             else:
                 scopes = [
                     "https://www.googleapis.com/auth/gmail.send",
-                    "https://www.googleapis.com/auth/gmail.modify",
+                    #"https://www.googleapis.com/auth/gmail.modify",
                 ]
 
             creds = Credentials(
@@ -602,7 +602,7 @@ class SendEmailService:
             else:
                 scopes = [
                     "https://www.googleapis.com/auth/gmail.send",
-                    "https://www.googleapis.com/auth/gmail.modify",
+                    #"https://www.googleapis.com/auth/gmail.modify",
                 ]
 
             creds = Credentials(

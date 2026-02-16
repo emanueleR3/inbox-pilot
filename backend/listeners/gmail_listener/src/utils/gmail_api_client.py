@@ -19,7 +19,7 @@ def get_service_for_user(email: str):
     else:
         # Fallback agli scope hardcoded
         scopes = [
-            "https://www.googleapis.com/auth/gmail.modify",
+            #"https://www.googleapis.com/auth/gmail.modify",
             "https://www.googleapis.com/auth/gmail.readonly", 
             "https://www.googleapis.com/auth/gmail.send",
             "https://www.googleapis.com/auth/calendar",

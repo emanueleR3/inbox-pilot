@@ -27,7 +27,7 @@ def create_google_flow(services="all"):
         ]
     elif services == "mail":
         scopes = [
-            "https://www.googleapis.com/auth/gmail.modify",
+            #"https://www.googleapis.com/auth/gmail.modify",
             "https://www.googleapis.com/auth/gmail.readonly",
             "https://www.googleapis.com/auth/gmail.send",
             "https://www.googleapis.com/auth/userinfo.email",
@@ -42,7 +42,7 @@ def create_google_flow(services="all"):
         else:
             # Fallback agli scope completi
             scopes = [
-                "https://www.googleapis.com/auth/gmail.modify",
+                #"https://www.googleapis.com/auth/gmail.modify",
                 "https://www.googleapis.com/auth/gmail.readonly", 
                 "https://www.googleapis.com/auth/gmail.send",
                 #"https://www.googleapis.com/auth/gmail.metadata",
