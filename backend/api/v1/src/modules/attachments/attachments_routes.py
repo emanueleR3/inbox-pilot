@@ -149,13 +149,15 @@ def get_attachments(
     }
 )
 def preview_attachment(attachment_id: str):
-    attachment_data = controller.get_attachment_for_preview(attachment_id)
+    attachment_data = controller.get_attachment_file(attachment_id)
     
     return FileResponse(
         path=attachment_data["file_path"],
         media_type=attachment_data["mime_type"],
         filename=attachment_data["file_name"],
-        content_disposition_type="inline"
+        headers={
+            "Content-Disposition": f'inline; filename="{attachment_data["file_name"]}"'
+        }
     )
 
 
@@ -218,16 +220,10 @@ def preview_attachment(attachment_id: str):
     }
 )
 def download_attachment(attachment_id: str):
-    attachment_data = controller.get_attachment_for_download(attachment_id)
+    attachment_data = controller.get_attachment_file(attachment_id)
     
     return FileResponse(
         path=attachment_data["file_path"],
         media_type=attachment_data["mime_type"],
         filename=attachment_data["file_name"],
-        content_disposition_type="attachment"  
     )
-
-
-
-    
-    
