@@ -17,11 +17,12 @@ controller = AttachmentsController()
         "I risultati sono ordinati per data di creazione decrescente e supportano paginazione.\n\n"
         "Note:\n"
         "- service_id è obbligatorio\n"
-        "- Restituisce solo i metadati, non il contenuto dei file"
+        "- Restituisce i metadati degli allegati con il contesto dell'email associata\n"
+        "- Se il thread non è disponibile, email_context.available sarà False"
     ),
     responses={
         200: {
-            "description": "Lista di attachments con paginazione",
+            "description": "Lista di attachments con paginazione e contesto email",
             "content": {
                 "application/json": {
                     "example": {
@@ -31,13 +32,24 @@ controller = AttachmentsController()
                                 "thread_id": "t1t2t3t4-t5t6-7890-abcd-ef1234567890",
                                 "email_id": "e1e2e3e4-e5e6-7890-abcd-ef1234567890",
                                 "sender": "cliente@example.com",
+                                "receiver": "azienda@example.com",
+                                "cc": ["cc1@example.com"],
                                 "file_name": "documento.pdf",
                                 "mime_type": "application/pdf",
                                 "size_bytes": 125000,
                                 "created_at": "2026-02-16T10:30:00Z",
                                 "service_id": "s1s2s3s4-s5s6-7890-abcd-ef1234567890",
-                                "receiver": "azienda@example.com",
-                                "cc": ["cc1@example.com"]
+                                "email_context": {
+                                    "subject": "Richiesta preventivo",
+                                    "sender_email": "cliente@example.com",
+                                    "cc_emails": ["cc1@example.com"],
+                                    "summary": "Il cliente richiede un preventivo per...",
+                                    "category": "INFO_REQUESTED",
+                                    "subcategory": "PRICING",
+                                    "started_at": "2026-02-16T10:00:00Z",
+                                    "last_message_at": "2026-02-16T10:30:00Z",
+                                    "available": True
+                                }
                             }
                         ],
                         "total": 150,
@@ -82,11 +94,12 @@ def get_attachments(
     summary="Metadati attachment per preview",
     description=(
         "Restituisce i metadati completi di un attachment per visualizzazione. "
-        "Include tutte le informazioni sull'attachment tranne il percorso fisico del file."
+        "Include tutte le informazioni sull'attachment e il contesto dell'email associata.\n\n"
+        "Se il thread non è disponibile, email_context.available sarà False."
     ),
     responses={
         200: {
-            "description": "Metadati attachment",
+            "description": "Metadati attachment con contesto email",
             "content": {
                 "application/json": {
                     "example": {
@@ -100,7 +113,18 @@ def get_attachments(
                         "mime_type": "application/pdf",
                         "size_bytes": 125000,
                         "created_at": "2026-02-16T10:30:00Z",
-                        "service_id": "s1s2s3s4-s5s6-7890-abcd-ef1234567890"
+                        "service_id": "s1s2s3s4-s5s6-7890-abcd-ef1234567890",
+                        "email_context": {
+                            "subject": "Richiesta preventivo",
+                            "sender_email": "cliente@example.com",
+                            "cc_emails": ["cc1@example.com"],
+                            "summary": "Il cliente richiede un preventivo per...",
+                            "category": "INFO_REQUESTED",
+                            "subcategory": "PRICING",
+                            "started_at": "2026-02-16T10:00:00Z",
+                            "last_message_at": "2026-02-16T10:30:00Z",
+                            "available": True
+                        }
                     }
                 }
             },
@@ -134,11 +158,12 @@ def preview_attachment(attachment_id: str):
     summary="Metadati attachment per download",
     description=(
         "Restituisce i metadati completi di un attachment per download. "
-        "Include tutte le informazioni sull'attachment tranne il percorso fisico del file."
+        "Include tutte le informazioni sull'attachment e il contesto dell'email associata.\n\n"
+        "Se il thread non è disponibile, email_context.available sarà False."
     ),
     responses={
         200: {
-            "description": "Metadati attachment",
+            "description": "Metadati attachment con contesto email",
             "content": {
                 "application/json": {
                     "example": {
@@ -152,7 +177,18 @@ def preview_attachment(attachment_id: str):
                         "mime_type": "application/pdf",
                         "size_bytes": 125000,
                         "created_at": "2026-02-16T10:30:00Z",
-                        "service_id": "s1s2s3s4-s5s6-7890-abcd-ef1234567890"
+                        "service_id": "s1s2s3s4-s5s6-7890-abcd-ef1234567890",
+                        "email_context": {
+                            "subject": "Richiesta preventivo",
+                            "sender_email": "cliente@example.com",
+                            "cc_emails": ["cc1@example.com"],
+                            "summary": "Il cliente richiede un preventivo per...",
+                            "category": "INFO_REQUESTED",
+                            "subcategory": "PRICING",
+                            "started_at": "2026-02-16T10:00:00Z",
+                            "last_message_at": "2026-02-16T10:30:00Z",
+                            "available": True
+                        }
                     }
                 }
             },

@@ -14,7 +14,7 @@ class AttachmentsDAO:
         offset: int = 0
     ) -> List[dict]:
         """
-        Recupera gli attachments per un dato service_id.
+        Recupera gli attachments per un dato service_id con informazioni del thread.
         
         Args:
             service_id: ID del subscription service
@@ -22,14 +22,15 @@ class AttachmentsDAO:
             offset: Offset per la paginazione
             
         Returns:
-            Lista di attachment come dizionari (senza file_path per sicurezza)
+            Lista di attachment come dizionari con info thread annesse
         """
         try:
             response = (
                 self.supabase.table("email_attachments")
                 .select(
                     "attachment_id, thread_id, email_id, sender, file_name, "
-                    "mime_type, size_bytes, created_at, service_id, receiver, cc"
+                    "mime_type, size_bytes, created_at, service_id, receiver, cc, "
+                    "threads(subject, sender_email, cc_emails, summary, category, subcategory, started_at, last_message_at)"
                 )
                 .eq("service_id", service_id)
                 .order("created_at", desc=True)
@@ -43,18 +44,20 @@ class AttachmentsDAO:
 
     def get_attachment_by_id(self, attachment_id: str) -> Optional[Dict]:
         """
-        Recupera un singolo attachment per ID.
+        Recupera un singolo attachment per ID con informazioni del thread.
         
         Args:
             attachment_id: ID dell'attachment
             
         Returns:
-            Dict con i dati dell'attachment o None se non trovato
+            Dict con i dati dell'attachment e info thread o None se non trovato
         """
         try:
             response = (
                 self.supabase.table("email_attachments")
-                .select("*")
+                .select(
+                    "*, threads(subject, sender_email, cc_emails, summary, category, subcategory, started_at, last_message_at)"
+                )
                 .eq("attachment_id", attachment_id)
                 .single()
                 .execute()

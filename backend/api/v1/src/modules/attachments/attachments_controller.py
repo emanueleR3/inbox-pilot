@@ -34,8 +34,13 @@ class AttachmentsController:
             )
             total_count = self.attachments_dao.get_attachments_count_by_service_id(service_id)
             
+            # Formatta gli attachments con info thread
+            formatted_attachments = []
+            for att in attachments:
+                formatted_attachments.append(self._format_attachment_with_thread(att))
+            
             return {
-                "attachments": attachments,
+                "attachments": formatted_attachments,
                 "total": total_count,
                 "limit": limit,
                 "offset": offset
@@ -48,7 +53,7 @@ class AttachmentsController:
         Recupera i metadati di un attachment per il preview/visualizzazione.
         
         Returns:
-            dict con metadati (senza file_path per sicurezza)
+            dict con metadati (senza file_path per sicurezza) e info thread
         """
         if not attachment_id:
             raise MissingFieldException(["attachment_id"])
@@ -58,20 +63,7 @@ class AttachmentsController:
             if not attachment:
                 raise NotFoundException(detail=f"Attachment con ID {attachment_id} non trovato")
             
-            # Restituisce solo i metadati senza file_path
-            return {
-                "attachment_id": attachment["attachment_id"],
-                "thread_id": attachment.get("thread_id"),
-                "email_id": attachment["email_id"],
-                "sender": attachment["sender"],
-                "receiver": attachment["receiver"],
-                "cc": attachment.get("cc"),
-                "file_name": attachment["file_name"],
-                "mime_type": attachment["mime_type"],
-                "size_bytes": attachment["size_bytes"],
-                "created_at": attachment["created_at"],
-                "service_id": attachment.get("service_id")
-            }
+            return self._format_attachment_with_thread(attachment)
         except NotFoundException:
             raise
         except Exception as e:
@@ -83,6 +75,60 @@ class AttachmentsController:
         Alias di get_attachment_for_preview, ma semanticamente distinto.
         
         Returns:
-            dict con metadati (senza file_path per sicurezza)
+            dict con metadati (senza file_path per sicurezza) e info thread
         """
         return self.get_attachment_for_preview(attachment_id)
+
+    def _format_attachment_with_thread(self, attachment: dict) -> dict:
+        """
+        Formatta un attachment includendo le informazioni del thread.
+        Se il thread non è disponibile, restituisce un placeholder.
+        
+        Args:
+            attachment: dict con dati attachment e eventuale threads nested
+            
+        Returns:
+            dict formattato con email_context
+        """
+        # Estrai info thread (può essere None se thread_id è null o non esiste)
+        thread_info = attachment.get("threads")
+        
+        if thread_info:
+            email_context = {
+                "subject": thread_info.get("subject"),
+                "sender_email": thread_info.get("sender_email"),
+                "cc_emails": thread_info.get("cc_emails"),
+                "summary": thread_info.get("summary"),
+                "category": thread_info.get("category"),
+                "subcategory": thread_info.get("subcategory"),
+                "started_at": thread_info.get("started_at"),
+                "last_message_at": thread_info.get("last_message_at"),
+                "available": True
+            }
+        else:
+            email_context = {
+                "subject": "Informazioni non disponibili",
+                "sender_email": None,
+                "cc_emails": None,
+                "summary": None,
+                "category": None,
+                "subcategory": None,
+                "started_at": None,
+                "last_message_at": None,
+                "available": False
+            }
+        
+        return {
+            "attachment_id": attachment["attachment_id"],
+            "thread_id": attachment.get("thread_id"),
+            "email_id": attachment["email_id"],
+            "sender": attachment["sender"],
+            "receiver": attachment["receiver"],
+            "cc": attachment.get("cc"),
+            "file_name": attachment["file_name"],
+            "mime_type": attachment["mime_type"],
+            "size_bytes": attachment["size_bytes"],
+            "created_at": attachment["created_at"],
+            "service_id": attachment.get("service_id"),
+            "email_context": email_context
+        }
