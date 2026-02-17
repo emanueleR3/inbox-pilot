@@ -49,6 +49,60 @@ class AttachmentsController:
         except Exception as e:
             raise DatabaseException(operation=f"recupero attachments: {str(e)}")
 
+    def _format_attachment_with_thread(self, attachment: dict) -> dict:
+        """
+        Formatta un attachment includendo le informazioni del thread.
+        Se il thread non è disponibile, restituisce un placeholder.
+        
+        Args:
+            attachment: dict con dati attachment e eventuale threads nested
+            
+        Returns:
+            dict formattato con email_context
+        """
+        # Estrai info thread (può essere None se thread_id è null o non esiste)
+        thread_info = attachment.get("threads")
+        
+        if thread_info:
+            email_context = {
+                "subject": thread_info.get("subject"),
+                "sender_email": thread_info.get("sender_email"),
+                "cc_emails": thread_info.get("cc_emails"),
+                "summary": thread_info.get("summary"),
+                "category": thread_info.get("category"),
+                "subcategory": thread_info.get("subcategory"),
+                "started_at": thread_info.get("started_at"),
+                "last_message_at": thread_info.get("last_message_at"),
+                "available": True
+            }
+        else:
+            email_context = {
+                "subject": "Informazioni non disponibili",
+                "sender_email": None,
+                "cc_emails": None,
+                "summary": None,
+                "category": None,
+                "subcategory": None,
+                "started_at": None,
+                "last_message_at": None,
+                "available": False
+            }
+        
+        return {
+            "attachment_id": attachment["attachment_id"],
+            "thread_id": attachment.get("thread_id"),
+            "email_id": attachment["email_id"],
+            "sender": attachment["sender"],
+            "receiver": attachment["receiver"],
+            "cc": attachment.get("cc"),
+            "file_name": attachment["file_name"],
+            "mime_type": attachment["mime_type"],
+            "size_bytes": attachment["size_bytes"],
+            "created_at": attachment["created_at"],
+            "service_id": attachment.get("service_id"),
+            "email_context": email_context
+        }
+
     def get_attachment_file(self, attachment_id: str) -> dict:
         """
         Recupera i dati necessari per servire il file.
