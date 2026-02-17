@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Query, status
+from fastapi.responses import FileResponse
 from src.modules.attachments.attachments_controller import AttachmentsController
 
 router = APIRouter(
@@ -215,3 +216,55 @@ def download_attachment(attachment_id: str):
     attachment_data = controller.get_attachment_for_download(attachment_id)
     
     return attachment_data
+
+
+@router.get(
+    "/{attachment_id}/file",
+    summary="Scarica file attachment",
+    description=(
+        "Restituisce il file binario dell'attachment per il download effettivo. "
+        "Il browser avvierà il download del file."
+    ),
+    responses={
+        200: {
+            "description": "File binario",
+            "content": {
+                "application/octet-stream": {}
+            },
+        },
+        404: {
+            "description": "Attachment o file non trovato",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "attachment_not_found": {
+                            "summary": "Attachment non trovato",
+                            "value": {"detail": "Attachment con ID xxx non trovato"}
+                        },
+                        "file_not_found": {
+                            "summary": "File non trovato sul server",
+                            "value": {"detail": "File non trovato sul server: documento.pdf"}
+                        }
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Errore interno",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Errore database durante: recupero file attachment"}
+                }
+            },
+        },
+    }
+)
+def get_attachment_file(attachment_id: str):
+    file_data = controller.get_attachment_file(attachment_id)
+    
+    return FileResponse(
+        path=file_data["file_path"],
+        media_type=file_data["mime_type"],
+        filename=file_data["file_name"],
+        content_disposition_type="attachment"  # Forza download
+    )
