@@ -151,7 +151,12 @@ def get_attachments(
 def preview_attachment(attachment_id: str):
     attachment_data = controller.get_attachment_for_preview(attachment_id)
     
-    return attachment_data
+    return FileResponse(
+        path=attachment_data["file_path"],
+        media_type=attachment_data["mime_type"],
+        filename=attachment_data["file_name"],
+        content_disposition_type="inline"
+    )
 
 
 @router.get(
@@ -215,56 +220,14 @@ def preview_attachment(attachment_id: str):
 def download_attachment(attachment_id: str):
     attachment_data = controller.get_attachment_for_download(attachment_id)
     
-    return attachment_data
-
-
-@router.get(
-    "/{attachment_id}/file",
-    summary="Scarica file attachment",
-    description=(
-        "Restituisce il file binario dell'attachment per il download effettivo. "
-        "Il browser avvierà il download del file."
-    ),
-    responses={
-        200: {
-            "description": "File binario",
-            "content": {
-                "application/octet-stream": {}
-            },
-        },
-        404: {
-            "description": "Attachment o file non trovato",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "attachment_not_found": {
-                            "summary": "Attachment non trovato",
-                            "value": {"detail": "Attachment con ID xxx non trovato"}
-                        },
-                        "file_not_found": {
-                            "summary": "File non trovato sul server",
-                            "value": {"detail": "File non trovato sul server: documento.pdf"}
-                        }
-                    }
-                }
-            },
-        },
-        500: {
-            "description": "Errore interno",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Errore database durante: recupero file attachment"}
-                }
-            },
-        },
-    }
-)
-def get_attachment_file(attachment_id: str):
-    file_data = controller.get_attachment_file(attachment_id)
-    
     return FileResponse(
-        path=file_data["file_path"],
-        media_type=file_data["mime_type"],
-        filename=file_data["file_name"],
-        content_disposition_type="attachment"  # Forza download
+        path=attachment_data["file_path"],
+        media_type=attachment_data["mime_type"],
+        filename=attachment_data["file_name"],
+        content_disposition_type="attachment"  
     )
+
+
+
+    
+    
