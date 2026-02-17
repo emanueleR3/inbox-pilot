@@ -998,6 +998,7 @@ def update_information(
                             "value": [
                                 {
                                     "email": "user@gmail.com",
+                                    "name": "User name",
                                     "email_provider": "google",
                                     "calendar_provider": "google",
                                     "calendar_names": None,
@@ -1024,6 +1025,7 @@ def update_information(
                                 },
                                 {
                                     "email": "user@outlook.com",
+                                    "name": "User name",
                                     "email_provider": "microsoft",
                                     "calendar_provider": "microsoft",
                                     "calendar_names": None,
@@ -1055,6 +1057,7 @@ def update_information(
                             "value": [
                                 {
                                     "email": "user@custommail.com",
+                                    "name": "User name",
                                     "email_provider": "imap",
                                     "calendar_provider": None,
                                     "calendar_names": None,
