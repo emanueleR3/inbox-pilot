@@ -26,6 +26,7 @@ class NotificationDAO:
                     "emails(body, datetime, message_id, outcome, direction, has_attachment)"
                 )
                 .eq("email", email)
+                .eq("view", False)  
                 .order("emails(datetime)", desc=True)
                 .execute()
             )
