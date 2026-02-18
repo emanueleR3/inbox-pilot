@@ -74,7 +74,7 @@ def retrieve_notifications_by_email(
     return controller.get_notifications_by_email(email)
 
 
-@router.put(
+@router.patch(
     "/setTrue/{notification_id}",
     status_code=status.HTTP_200_OK,
     summary="Marca notifica come vista",
