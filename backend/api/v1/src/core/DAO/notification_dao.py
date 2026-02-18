@@ -9,15 +9,6 @@ class NotificationDAO:
         self.supabase = get_supabase_client()
 
     def get_notifications_by_email(self, email: str) -> List[NotificationWithEmail]:
-        """
-        Recupera tutte le notifiche per una specifica email con il body dalla tabella emails.
-        
-        Args:
-            email: Email dell'utente
-            
-        Returns:
-            Lista di NotificationWithEmail con email body incluso
-        """
         try:
             response = (
                 self.supabase.table("notifications")
@@ -54,15 +45,6 @@ class NotificationDAO:
             raise
 
     def mark_notification_as_viewed(self, notification_id: str) -> Optional[NotificationBase]:
-        """
-        Marca una notifica come vista (view = true).
-        
-        Args:
-            notification_id: ID della notifica
-            
-        Returns:
-            NotificationBase con i dati aggiornati o None se non trovata
-        """
         try:
             response = (
                 self.supabase.table("notifications")
@@ -79,15 +61,6 @@ class NotificationDAO:
             raise
 
     def get_notification_by_id(self, notification_id: str) -> Optional[NotificationBase]:
-        """
-        Recupera una singola notifica per ID.
-        
-        Args:
-            notification_id: ID della notifica
-            
-        Returns:
-            NotificationBase con i dati della notifica o None se non trovata
-        """
         try:
             response = (
                 self.supabase.table("notifications")
