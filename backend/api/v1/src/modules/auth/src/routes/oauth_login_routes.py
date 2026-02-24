@@ -46,7 +46,7 @@ async def oauth_login_route(provider_name: str, request: Request):
             raise SubscriptionIdRequiredException()
         
         if not service_id:
-            raise BadRequestException(detail="service_id è obbligatorio. Devi prima creare un service con POST /create-new-service e passare il service_id ottenuto")
+            raise BadRequestException(detail="service_id è obbligatorio.")
         
         oauth_request = OAuthLoginRequest(subscription_id=subscription_id, services=services, email=email, service_id=service_id)
         return await oauth_login(provider_name, oauth_request, request)

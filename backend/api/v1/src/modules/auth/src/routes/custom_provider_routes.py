@@ -108,7 +108,7 @@ async def custom_login_route(
     # Validazione service_id obbligatorio
     if not payload.get("service_id"):
         from src.handler_exception import BadRequestException
-        raise BadRequestException(detail="service_id è obbligatorio. Devi prima creare un service con POST /create-new-service e passare il service_id ottenuto")
+        raise BadRequestException(detail="service_id è obbligatorio.")
     
     res = CustomProviderController.custom_provider_login(payload)
     return {"status": "success", "message": "Credenziali custom provider salvate con successo", "data": res}
