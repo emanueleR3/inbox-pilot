@@ -27,7 +27,7 @@ class SubscriptionServiceDAO:
         password: str,
         subscription_id: str,
         calendar_provider: str,
-        service_id: str = None
+        service_id: str
     ) -> SubscriptionServiceRead:
         try:
             encrypted_password = encrypt_token(password, "pass")
@@ -127,7 +127,7 @@ class SubscriptionServiceDAO:
             microsoft_subscription_id_outbound: ID della subscription Microsoft Graph per email in uscita
             microsoft_expiration_datetime_inbound: Data di scadenza della subscription Graph inbound
             microsoft_expiration_datetime_outbound: Data di scadenza della subscription Graph outbound
-            service_id: ID del service esistente da aggiornare (opzionale, da create-new-service)
+            service_id: ID del service esistente da aggiornare (OBBLIGATORIO)
         """
         try:
             # service_id è obbligatorio
@@ -230,7 +230,7 @@ class SubscriptionServiceDAO:
             refresh_token: Token di refresh Google
             expiry: Data di scadenza del token
             history_id: ID dello storico Gmail (None se services="calendar")
-            service_id: ID del service esistente da aggiornare (opzionale, da create-new-service)
+            service_id: ID del service esistente da aggiornare (OBBLIGATORIO)
         """
         try:
             # service_id è obbligatorio

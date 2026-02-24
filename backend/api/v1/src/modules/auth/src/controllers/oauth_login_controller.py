@@ -38,7 +38,7 @@ class OAuthLoginRequest(BaseModel):
     subscription_id: str
     services: str  # "all" (mail+calendar), "calendar" (solo calendar), "mail" (solo mail)
     email: Optional[str] = None  # Email opzionale per services="calendar"
-    service_id: Optional[str] = None  # ID del service esistente da aggiornare (da create-new-service)
+    service_id: str  # ID del service esistente da aggiornare (OBBLIGATORIO - da create-new-service)
 
 
 async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, request: Request):
