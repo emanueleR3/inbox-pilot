@@ -22,6 +22,7 @@ async def oauth_login_route(provider_name: str, request: Request):
         subscription_id = None
         services = None
         email = None
+        service_id = None
         
         # Prova prima a leggere come form data
         if request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
@@ -29,17 +30,19 @@ async def oauth_login_route(provider_name: str, request: Request):
             subscription_id = form_data.get("subscription_id")
             services = form_data.get("services", "all")  # default to "all"
             email = form_data.get("email")  # Può essere None
+            service_id = form_data.get("service_id")  # ID del service esistente da aggiornare
         else:
             # Prova come JSON
             json_data = await request.json()
             subscription_id = json_data.get("subscription_id")
             services = json_data.get("services", "all")  # default to "all"
             email = json_data.get("email")  # Può essere None
+            service_id = json_data.get("service_id")  # ID del service esistente da aggiornare
         
         if not subscription_id:
             raise SubscriptionIdRequiredException()
         
-        oauth_request = OAuthLoginRequest(subscription_id=subscription_id, services=services, email=email)
+        oauth_request = OAuthLoginRequest(subscription_id=subscription_id, services=services, email=email, service_id=service_id)
         return await oauth_login(provider_name, oauth_request, request)
         
     except SubscriptionIdRequiredException:

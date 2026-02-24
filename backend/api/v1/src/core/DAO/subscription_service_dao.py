@@ -26,7 +26,8 @@ class SubscriptionServiceDAO:
         email: str,
         password: str,
         subscription_id: str,
-        calendar_provider: str
+        calendar_provider: str,
+        service_id: str = None
     ) -> SubscriptionServiceRead:
         try:
             encrypted_password = encrypt_token(password, "pass")
@@ -44,7 +45,23 @@ class SubscriptionServiceDAO:
                 "calendar_provider": calendar_provider
             }
 
-            if self.email_exists(email):
+            # Se service_id è fornito, aggiorna il service esistente
+            if service_id:
+                data["email"] = email
+                response = (
+                    self.supabase.table("subscription_services")
+                    .update(data)
+                    .eq("service_id", service_id)
+                    .execute()
+                )
+
+                if not response.data:
+                    logging.warning(f"Nessun record aggiornato per service_id: {service_id}")
+                    raise ValueError(f"Nessun record aggiornato per service_id: {service_id}")
+                
+                record = response.data[0]
+
+            elif self.email_exists(email):
                 response = (
                     self.supabase.table("subscription_services")
                     .update(data)
@@ -109,7 +126,8 @@ class SubscriptionServiceDAO:
         microsoft_subscription_id_inbound: str = None,
         microsoft_subscription_id_outbound: str = None,
         microsoft_expiration_datetime_inbound = None,
-        microsoft_expiration_datetime_outbound = None
+        microsoft_expiration_datetime_outbound = None,
+        service_id: str = None
     ) -> bool:
         """
         Salva le credenziali Microsoft nel database per l'utente con l'email specificata.
@@ -125,6 +143,7 @@ class SubscriptionServiceDAO:
             microsoft_subscription_id_outbound: ID della subscription Microsoft Graph per email in uscita
             microsoft_expiration_datetime_inbound: Data di scadenza della subscription Graph inbound
             microsoft_expiration_datetime_outbound: Data di scadenza della subscription Graph outbound
+            service_id: ID del service esistente da aggiornare (opzionale, da create-new-service)
         """
         try:
             # Cifra i token prima del salvataggio
@@ -160,7 +179,39 @@ class SubscriptionServiceDAO:
                 elif isinstance(microsoft_expiration_datetime_outbound, datetime):
                     microsoft_expiration_dt_outbound = microsoft_expiration_datetime_outbound
 
-            # Controllo se esiste già un record con questa email
+            # Se service_id è fornito, aggiorna il service esistente
+            if service_id:
+                data = {
+                    "email": email,
+                    "hashed_access_token": encrypted_access_token,
+                    "hashed_refresh_token": encrypted_refresh_token,
+                    "expiry_token": expiry_datetime.isoformat() if expiry_datetime else None,
+                    "calendar_provider": "microsoft"
+                }
+                
+                # Aggiungi i campi Microsoft subscription se presenti
+                if microsoft_subscription_id_inbound is not None:
+                    data["microsoft_subscription_id_inbound"] = microsoft_subscription_id_inbound
+                    data["email_provider"] = "microsoft"
+                
+                if microsoft_subscription_id_outbound is not None:
+                    data["microsoft_subscription_id_outbound"] = microsoft_subscription_id_outbound
+                    data["email_provider"] = "microsoft"
+                
+                if microsoft_expiration_dt_inbound is not None:
+                    data["microsoft_expiration_datetime_inbound"] = microsoft_expiration_dt_inbound.isoformat()
+                
+                if microsoft_expiration_dt_outbound is not None:
+                    data["microsoft_expiration_datetime_outbound"] = microsoft_expiration_dt_outbound.isoformat()
+                
+                response = self.supabase.table("subscription_services").update(data).eq("service_id", service_id).execute()
+                    
+                if not response.data:
+                    logging.info(f"Nessun record aggiornato per service_id: {service_id}")
+                    return False
+                return True
+
+            # Altrimenti usa la logica esistente (controllo per email)
             email_exists = self.email_exists(email)
             if email_exists:
                 # Aggiorna il record esistente
@@ -219,7 +270,7 @@ class SubscriptionServiceDAO:
             print(f"Errore nel salvataggio delle credenziali Microsoft: {e}")
             return False  
 
-    def save_google_credentials(self, email: str, subscription_id: str, access_token: str, refresh_token: str, expiry, history_id: str = None) -> bool:
+    def save_google_credentials(self, email: str, subscription_id: str, access_token: str, refresh_token: str, expiry, history_id: str = None, service_id: str = None) -> bool:
         """
         Salva le credenziali Google nel database per l'utente con l'email specificata.
         I token vengono cifrati prima del salvataggio.
@@ -231,14 +282,40 @@ class SubscriptionServiceDAO:
             refresh_token: Token di refresh Google
             expiry: Data di scadenza del token
             history_id: ID dello storico Gmail (None se services="calendar")
-            calendar_provider: Provider del calendar ("google" se services="calendar", None se services="all")
+            service_id: ID del service esistente da aggiornare (opzionale, da create-new-service)
         """
         try:
             # Cifra i token prima del salvataggio
             encrypted_access_token = encrypt_token(access_token, "token")
             encrypted_refresh_token = encrypt_token(refresh_token, "token")
             
-            # controllo se esiste già un record con questa email
+            # Se service_id è fornito, aggiorna il service esistente
+            if service_id:
+                data = {
+                    "email": email,
+                    "email_provider": "google" if history_id else None,
+                    "hashed_access_token": encrypted_access_token,
+                    "hashed_refresh_token": encrypted_refresh_token,
+                    "expiry_token": expiry.isoformat() if expiry else None,
+                    "calendar_provider": "google"
+                }
+                
+                # Aggiungi history_id solo se non è None
+                if history_id is not None:
+                    data["history_id"] = history_id
+                    data["email_provider"] = "google"
+                
+                # Rimuove le chiavi con valore None
+                data = {k: v for k, v in data.items() if v is not None}
+                
+                response = self.supabase.table("subscription_services").update(data).eq("service_id", service_id).execute()
+                    
+                if not response.data:
+                    logging.info(f"Nessun record aggiornato per service_id: {service_id}")
+                    return False
+                return True
+            
+            # Altrimenti usa la logica esistente (controllo per email)
             email_exists = self.email_exists(email)
             if email_exists:
                 # Aggiorna il record esistente

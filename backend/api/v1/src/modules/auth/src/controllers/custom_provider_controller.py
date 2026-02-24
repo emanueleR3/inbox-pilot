@@ -20,6 +20,7 @@ class CustomProviderController:
         password = payload.get("password")
         subscription_id = payload.get("subscription_id")
         calendar_provider = payload.get("calendar_provider")
+        service_id = payload.get("service_id")  # ID del service esistente da aggiornare
 
         missing_fields = []
         if not server_imap:
@@ -50,7 +51,7 @@ class CustomProviderController:
         try:
             res = SubscriptionServiceDAO().save_custom_provider_credentials(
                 server_imap, server_smtp, imap_port, smtp_port, email, password,
-                subscription_id, calendar_provider
+                subscription_id, calendar_provider, service_id
             )
             return res
 

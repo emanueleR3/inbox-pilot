@@ -91,9 +91,10 @@ async def custom_login_route(
             "email": "user@example.com",
             "password": "secure_password",
             "subscription_id": "sub_12345",
-            "calendar_provider": "google"
+            "calendar_provider": "google",
+            "service_id": "service_id_12345"
         },
-        description="Credenziali e configurazione del server di posta personalizzato"
+        description="Credenziali e configurazione del server di posta personalizzato. service_id è opzionale e serve per aggiornare un service esistente creato con create-new-service"
     )
 ):
     res = CustomProviderController.custom_provider_login(payload)
