@@ -1,8 +1,12 @@
 from fastapi import APIRouter, Body, status
 from typing import Dict, Any
+
+from fastapi.params import Depends
+from api.v1.src.core.dependecy import get_current_user
 from src.modules.calendars.src.controllers.calendar_controller import CalendarController
 
 router = APIRouter(
+    dependencies=[Depends(get_current_user)],
     tags=["Calendars"]
 )
 

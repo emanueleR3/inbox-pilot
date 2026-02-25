@@ -1,4 +1,7 @@
 from fastapi import APIRouter, Request
+from fastapi.params import Depends
+
+from api.v1.src.core.dependecy import get_current_user
 from ..controllers.oauth_login_controller import (
     oauth_login,
     google_callback,
@@ -11,7 +14,10 @@ from src.handler_exception import (
     BadRequestException
 )
 
-router = APIRouter(tags=["Auth OAuth Login"])
+router = APIRouter(
+    tags=["Auth OAuth Login"], 
+    dependencies=[Depends(get_current_user)],
+)
 
 @router.post("/oauth/login/{provider_name}")
 async def oauth_login_route(provider_name: str, request: Request):

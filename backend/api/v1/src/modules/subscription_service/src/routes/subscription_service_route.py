@@ -6,7 +6,7 @@ from src.modules.subscription_service.src.controllers.subscription_service_contr
 from src.modules.subscription_service.src.utils.utils import forward_post, forward_get
 
 router = APIRouter(
-    #dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user)],
     tags=["Subscription Service"],
 )
 controller = SubscriptionServiceController()

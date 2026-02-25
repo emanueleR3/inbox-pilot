@@ -178,7 +178,7 @@ def add_new_user(
         },
         description="Email e password per la registrazione del nuovo utente.",
     ),
-    #current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user)
 ):
     result = controller.add_new_user(payload)
     return {"message": "Registrazione completata", "result": result}
@@ -286,7 +286,8 @@ def create_new_sub(
             }
         },
         description="Crea e collega una nuova subscription a un account già esistente (user + jwt).",
-    )
+    ),
+    current_user=Depends(get_current_user)
 ):
     result = controller.create_new_sub(payload)
     return {"message": "Registrazione completata", "result": result}
@@ -309,7 +310,7 @@ def create_new_sub(
         500: {"description": "Errore interno del server"}
     }
 )
-def get_users_by_subscription(subscription_id: str):
+def get_users_by_subscription(subscription_id: str, current_user=Depends(get_current_user)):
     return controller.get_users_by_subscription(subscription_id)
 
 @router.post(
@@ -460,7 +461,8 @@ def reset_password(
         ...,
         example={"email": "user@example.com"},
         description="Email dell'utente che richiede il reset della password.",
-    )
+    ),
+    current_user=Depends(get_current_user)
 ):
     return controller.reset_password(payload)
 
@@ -561,5 +563,5 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
         500: {"description": "Errore interno del server"}
     }
 )
-async def get_subscription_by_id(subscription_id: str):
+async def get_subscription_by_id(subscription_id: str, current_user=Depends(get_current_user)):
     return controller.get_subscription_by_id(subscription_id)

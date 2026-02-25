@@ -1,13 +1,16 @@
 """FastAPI routes for Jerry chatbot - proxies to automations service."""
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
+from api.v1.src.core.dependecy import get_current_user
 from src.modules.jerry.src.controllers.jerry_controller import JerryController
 from src.modules.jerry.src.utils.utils import forward_stream
 
-router = APIRouter(tags=["jerry"])
+router = APIRouter(
+    dependencies=[Depends(get_current_user)],
+    tags=["jerry"])
 controller = JerryController()
 
 

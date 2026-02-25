@@ -3,7 +3,7 @@ from src.core.dependecy import get_current_user
 from src.modules.quiz_session.src.controllers.quiz_controller import QuizController
 
 router = APIRouter(
-    #dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user)],
     tags=["Quiz session"],
 )
 controller = QuizController()
