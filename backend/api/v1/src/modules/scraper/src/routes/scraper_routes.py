@@ -5,7 +5,7 @@ from fastapi.params import Depends
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
-from api.v1.src.core.dependecy import get_current_user
+from src.core.dependecy import get_current_user
 from src.modules.scraper.src.controllers.scraper_controller import ScraperController
 
 router = APIRouter(

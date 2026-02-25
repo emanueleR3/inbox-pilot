@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Request
 from fastapi.params import Depends
 
-from api.v1.src.core.dependecy import get_current_user
+from src.core.dependecy import get_current_user
+
 from ..controllers.oauth_login_controller import (
     oauth_login,
     google_callback,

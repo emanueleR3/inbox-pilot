@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Path, status
 from fastapi.params import Depends
-from api.v1.src.core.dependecy import get_current_user
+from src.core.dependecy import get_current_user
 from src.modules.notifications.notification_controller import NotificationController
 
 router = APIRouter(

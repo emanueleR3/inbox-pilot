@@ -2,7 +2,7 @@ from fastapi import APIRouter, Body, Query, status
 from typing import Dict, Any, Optional
 
 from fastapi.params import Depends
-from api.v1.src.core.dependecy import get_current_user
+from src.core.dependecy import get_current_user
 from src.modules.mailbox.src.controllers.mailbox_controller import MailboxController
 
 router = APIRouter(

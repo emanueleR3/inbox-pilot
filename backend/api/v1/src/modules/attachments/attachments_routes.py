@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query, status
 from fastapi.params import Depends
 from fastapi.responses import FileResponse
-from api.v1.src.core.dependecy import get_current_user
+from src.core.dependecy import get_current_user
 from src.modules.attachments.attachments_controller import AttachmentsController
 
 router = APIRouter(
