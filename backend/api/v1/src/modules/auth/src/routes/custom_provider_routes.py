@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, Body
 from src.core.dependecy import get_current_user
 from src.modules.auth.src.controllers.custom_provider_controller import CustomProviderController
 
-router = APIRouter(tags=["Auth Custom Provider"])
+router = APIRouter(
+    dependencies=[Depends(get_current_user)],
+    tags=["Auth Custom Provider"])
 
 @router.post(
     "/custom-provider/login",
