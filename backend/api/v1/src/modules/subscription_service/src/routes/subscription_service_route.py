@@ -42,9 +42,12 @@ controller = SubscriptionServiceController()
                             "service_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
                             "email": "user@example.it",
                             "subscription_id": "9a9a9a9a-1111-2222-3333-444444444444",
-                            "name": "Nome Attività",
+                            "email_provider": "google",
+                            "calendar_provider": "google",                           "name": "Nome Attività",
                             "config_completed": False,
                             "activated": False,
+                            "draft": True,
+                            "name": "Nome Attività",
                         }
                     }
                 }
@@ -89,13 +92,28 @@ def create_subscription_service(
         },
         description="Dati per creare un nuovo subscription service",
     ),
-    #current_user=Depends(get_current_user),
 ):
 
     subscription_id = payload.get("subscription_id")
     name = payload.get("name")
 
-    service = controller.create_minimal_service(subscription_id=subscription_id, name=name)
+    created_service = controller.create_minimal_service(
+        subscription_id=subscription_id,
+        name=name,
+    )
+
+    service = {
+        "service_id": created_service.get("service_id"),
+        "email": created_service.get("email"),
+        "subscription_id": created_service.get("subscription_id"),
+        "email_provider": created_service.get("email_provider"),
+        "calendar_provider": created_service.get("calendar_provider"),
+        "name": created_service.get("name"),
+        "config_completed": created_service.get("config_completed"),
+        "activated": created_service.get("activated"),
+        "draft": created_service.get("draft"),
+    }
+
     return {"success": True, "service": service}
 
 
