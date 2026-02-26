@@ -17,7 +17,6 @@ from src.handler_exception import (
 
 router = APIRouter(
     tags=["Auth OAuth Login"], 
-    dependencies=[Depends(get_current_user)],
 )
 
 @router.post("/oauth/login/{provider_name}")
