@@ -462,7 +462,6 @@ def reset_password(
         example={"email": "user@example.com"},
         description="Email dell'utente che richiede il reset della password.",
     ),
-    current_user=Depends(get_current_user)
 ):
     return controller.reset_password(payload)
 
