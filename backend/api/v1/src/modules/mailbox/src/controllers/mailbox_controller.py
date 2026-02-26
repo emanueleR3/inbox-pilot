@@ -29,9 +29,9 @@ class MailboxController:
         except Exception as e:
             raise DatabaseException(str(e))
 
-    def get_human_review_threads(self, limit: int, offset: int):
+    def get_human_review_threads(self, email: str, limit: int, offset: int):
         try:
-            return self.mailbox_dao.fetch_human_review_threads(limit, offset)
+            return self.mailbox_dao.fetch_human_review_threads(email, limit, offset)
         except Exception as e:
             raise DatabaseException(str(e))
 

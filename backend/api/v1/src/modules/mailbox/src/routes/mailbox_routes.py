@@ -134,10 +134,11 @@ def get_inbox_threads(
     }
 )
 def get_human_review_threads(
+    email: str = Query(..., description="Email del box"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0)
 ):
-    return controller.get_human_review_threads(limit, offset)
+    return controller.get_human_review_threads(email, limit, offset)
 
 
 @router.get(

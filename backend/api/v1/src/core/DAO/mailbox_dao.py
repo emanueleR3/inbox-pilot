@@ -70,6 +70,7 @@ class MailboxDAO:
 
     def fetch_human_review_threads(
         self,
+        email: str,
         limit: int = 50,
         offset: int = 0
     ) -> List[EmailThreadSummary]:
@@ -77,6 +78,7 @@ class MailboxDAO:
         rows = (
             self.supabase
             .table("inbox_human_review_view")
+            .eq("box_email", email)
             .select("*")
             .order("last_message_at", desc=True)
             .range(offset, offset + limit - 1)
