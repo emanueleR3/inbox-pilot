@@ -8,6 +8,7 @@ sleep 5
 term_handler() {
   echo "Caught termination signal, stopping children..."
   [ -n "$google_pid" ] && kill -TERM "$google_pid" 2>/dev/null || true
+  [ -n "$google_watch_pid" ] && kill -TERM "$google_watch_pid" 2>/dev/null || true
   [ -n "$ms_token_pid" ] && kill -TERM "$ms_token_pid" 2>/dev/null || true
   [ -n "$ms_sub_pid" ] && kill -TERM "$ms_sub_pid" 2>/dev/null || true
 }
@@ -16,6 +17,7 @@ trap term_handler TERM INT
 # Default intervals if not provided
 : "${REFRESH_INTERVAL_MINUTES_TOKENS:=15}"
 : "${REFRESH_INTERVAL_HOURS_SUBSCRIPTIONS:=3}"
+: "${REFRESH_INTERVAL_HOURS_WATCH:=24}"
 : "${INITIAL_DELAY_SECONDS:=30}"
 : "${CLEANUP_ORPHAN_SUBSCRIPTIONS:=true}"
 
@@ -33,6 +35,12 @@ google_pid=$!
 ms_token_pid=$!
 
 (
+  cd /app/google_watch_refresher && \
+  PYTHONPATH="/app/google_watch_refresher:/app" exec python -u -m src.main
+) &
+google_watch_pid=$!
+
+(
   cd /app/microsoft_subscription_refresher && \
   INITIAL_DELAY_SECONDS="${INITIAL_DELAY_SECONDS}" \
   CLEANUP_ORPHAN_SUBSCRIPTIONS="${CLEANUP_ORPHAN_SUBSCRIPTIONS}" \
@@ -43,11 +51,12 @@ ms_sub_pid=$!
 # Monitor children: if any exits, terminate the rest
 while :; do
   if ! kill -0 "$google_pid" 2>/dev/null; then break; fi
+  if ! kill -0 "$google_watch_pid" 2>/dev/null; then break; fi
   if ! kill -0 "$ms_token_pid" 2>/dev/null; then break; fi
   if ! kill -0 "$ms_sub_pid" 2>/dev/null; then break; fi
   sleep 1
 done
 
 # Someone exited, stop others
-kill -TERM "$google_pid" "$ms_token_pid" "$ms_sub_pid" 2>/dev/null || true
+kill -TERM "$google_pid" "$google_watch_pid" "$ms_token_pid" "$ms_sub_pid" 2>/dev/null || true
 wait
