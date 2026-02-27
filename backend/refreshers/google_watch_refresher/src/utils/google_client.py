@@ -57,7 +57,7 @@ def renew_gmail_watch(access_token: str, refresh_token: str) -> dict:
         scopes=scopes,
     )
 
-    service = build("gmail", "v1", credentials=creds)
+    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
 
     request_body = {
         "labelIds": ["INBOX"],
