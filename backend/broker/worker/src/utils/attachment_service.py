@@ -27,13 +27,15 @@ class AttachmentService:
         # Security settings
         self.max_file_size = 50 * 1024 * 1024  # 50MB
         self.allowed_extensions = {
-            '.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.gif', 
-            '.zip', '.rar', '.xlsx', '.xls', '.ppt', '.pptx', '.csv'
+            '.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.gif', '.json',
+            '.zip', '.rar', '.xlsx', '.xls', '.ppt', '.pptx', '.csv', '.xml', '.md', 
         }
         # Blocked dangerous extensions
         self.blocked_extensions = {
             '.exe', '.bat', '.cmd', '.com', '.scr', '.pif', '.vbs', '.js', 
-            '.jar', '.app', '.deb', '.pkg', '.dmg', '.iso', '.msi'
+            '.jar', '.app', '.deb', '.pkg', '.dmg', '.iso', '.msi', '.sh', 
+            '.cpl', '.msc', '.reg', '.gadget', '.wsf', '.wsh', '.ps1', '.ps2',
+            '.psm1', '.psd1', '.psc1', '.psc2', '.lnk', '.vb', '.vbe', '.ws', '.wsc', '.hta',
         }
     
     def _extract_email_address(self, email_field: str) -> str:
