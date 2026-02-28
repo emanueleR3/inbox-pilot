@@ -308,16 +308,46 @@ def get_user_calendar_info(user_email: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_attachments_by_sender_email(target_sender_email: str, user_configured_emails: List[str]) -> Dict[str, Any]:
+def get_service_id_by_email(email: str) -> Optional[str]:
     """
-    Retrieve attachments from emails sent by a specific sender.
+    Retrieve the service_id for a given email address.
     
-    This function performs a join between the threads and email_attachments tables
-    to find all attachments from a specific sender, restricted to the user's configured mailboxes.
+    Args:
+        email: The email address to look up
+        
+    Returns:
+        The service_id as a string, or None if not found
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select(
+            "service_id"
+        ).eq("email", email.lower().strip()).eq("activated", True).execute()
+        
+        if not response.data:
+            print(f"❌ [DB] No service_id found for email: {email}")
+            return None
+        
+        service_id = response.data[0].get("service_id")
+        print(f"✅ [DB] Found service_id for {email}: {service_id}")
+        return service_id
+        
+    except Exception as e:
+        print(f"❌ [DB] Error retrieving service_id for {email}: {str(e)}")
+        return None
+
+
+def get_attachments_by_sender_email(target_sender_email: str, service_id: str) -> Dict[str, Any]:
+    """
+    Retrieve attachments from emails sent by a specific sender, filtered by service_id.
+    
+    This function queries the email_attachments table directly to find all attachments
+    from a specific sender, restricted to the user's service_id for security.
     
     Args:
         target_sender_email: The email address of the sender to search for
-        user_configured_emails: List of the user's configured email addresses (for security filtering)
+        service_id: The service_id to filter attachments (ensures user can only see their own attachments)
         
     Returns:
         Dictionary with:
@@ -331,47 +361,29 @@ def get_attachments_by_sender_email(target_sender_email: str, user_configured_em
         "data": []
     }
     
-    if not target_sender_email or not user_configured_emails:
-        print(f"❌ [DB] Invalid parameters: target_sender_email={target_sender_email}, user_configured_emails={user_configured_emails}")
+    if not target_sender_email or not service_id:
+        print(f"❌ [DB] Invalid parameters: target_sender_email={target_sender_email}, service_id={service_id}")
         return result
     
     try:
         supabase = get_supabase_client()
         
-        # Normalize emails for case-insensitive comparison
+        # Normalize email for case-insensitive comparison
         target_email_lower = target_sender_email.lower().strip()
-        configured_emails_lower = [e.lower().strip() for e in user_configured_emails]
         
-        # Step 1: Query threads table to find threads from this sender
-        # Filter by sender_email (or last_sender_email) and ensure box_email is in user's configured emails
-        threads_response = supabase.table("threads").select(
-            "thread_id"
-        ).or_(
-            f"sender_email.ilike.{target_email_lower},last_sender_email.ilike.{target_email_lower}"
-        ).in_("box_email", configured_emails_lower).execute()
+        # Query email_attachments table directly filtering by service_id and sender
+        # This ensures the user can only access attachments from their own service
+        attachments_response = supabase.table("email_attachments").select(
+            "attachment_id, file_name, file_path, created_at"
+        ).eq("service_id", service_id).ilike("sender", target_email_lower).order("created_at", desc=True).execute()
         
-        if not threads_response.data:
-            # No threads found from this sender
-            print(f"ℹ️ [DB] No threads found from sender: {target_sender_email}")
+        if not attachments_response.data:
+            # No attachments found from this sender
+            print(f"ℹ️ [DB] No attachments found from sender: {target_sender_email} for service_id: {service_id}")
             result["status"] = "no_emails"
             return result
         
-        # Extract thread_ids
-        thread_ids = [row["thread_id"] for row in threads_response.data]
-        print(f"✅ [DB] Found {len(thread_ids)} threads from sender: {target_sender_email}")
-        
-        # Step 2: Query email_attachments table for these thread_ids
-        attachments_response = supabase.table("email_attachments").select(
-            "attachment_id, file_name, file_path, created_at"
-        ).in_("thread_id", thread_ids).order("created_at", desc=True).execute()
-        
-        if not attachments_response.data:
-            # Threads exist but no attachments
-            print(f"ℹ️ [DB] No attachments found for threads from sender: {target_sender_email}")
-            result["status"] = "no_attachments"
-            return result
-        
-        # Step 3: Return successful result with attachments
+        # Return successful result with attachments
         result["status"] = "success"
         result["data"] = [
             {
@@ -390,3 +402,150 @@ def get_attachments_by_sender_email(target_sender_email: str, user_configured_em
         print(f"❌ [DB] Error retrieving attachments for sender {target_sender_email}: {str(e)}")
         result["status"] = "no_emails"
         return result
+
+
+def update_tokens_in_db(email: str, access_token: str, expires_in: int, refresh_token: Optional[str] = None) -> bool:
+    """
+    Update OAuth tokens in the database after a refresh.
+    
+    Args:
+        email: User email address
+        access_token: New access token (unencrypted - will be encrypted before storage)
+        expires_in: Token validity in seconds
+        refresh_token: New refresh token if provider rotated it (unencrypted)
+        
+    Returns:
+        True if update successful, False otherwise
+    """
+    from datetime import datetime, timedelta, timezone
+    from automations.ec_system.utils.utils import encrypt_token
+    
+    try:
+        supabase = get_supabase_client()
+        
+        # Calculate new expiry time
+        new_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        new_expiry_iso = new_expiry.isoformat()
+        
+        # Note: Encryption should be done by the caller using the same method as _encrypt_token in tools.py
+        # For now, we'll assume the token is passed already encrypted or needs encryption here
+        update_data = {
+            "hashed_access_token": access_token,  # Caller should encrypt before passing
+            "expiry_token": new_expiry_iso
+        }
+        
+        # Update refresh token if provided
+        if refresh_token:
+            update_data["hashed_refresh_token"] = refresh_token  # Caller should encrypt before passing
+        
+        response = supabase.table("subscription_services").update(update_data).eq("email", email.lower()).execute()
+        
+        if response.data:
+            print(f"✅ [DB] Tokens updated for {email}, expires at {new_expiry_iso}")
+            return True
+        else:
+            print(f"❌ [DB] Failed to update tokens for {email}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ [DB] Error updating tokens for {email}: {str(e)}")
+        return False
+
+
+def get_token_info_for_email(email: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve OAuth token information for a given email address.
+    
+    Args:
+        email: User email address
+        
+    Returns:
+        Dictionary with hashed_access_token, hashed_refresh_token, expiry_token, email_provider
+        or None if not found
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select(
+            "hashed_access_token, hashed_refresh_token, expiry_token, email_provider"
+        ).eq("email", email.lower()).execute()
+        
+        if not response.data:
+            print(f"❌ [DB] No token info found for email: {email}")
+            return None
+        
+        token_info = response.data[0]
+        print(f"✅ [DB] Token info retrieved for {email}")
+        return token_info
+        
+    except Exception as e:
+        print(f"❌ [DB] Error retrieving token info for {email}: {str(e)}")
+        return None
+
+
+def get_imap_smtp_credentials(email: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve IMAP/SMTP credentials for a given email address.
+    
+    Args:
+        email: User email address
+        
+    Returns:
+        Dictionary with email, imap_server, imap_port, smtp_server, smtp_port, hashed_password
+        or None if not found or not configured
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select(
+            "email, imap_server, imap_port, smtp_server, smtp_port, hashed_password"
+        ).eq("email", email.lower()).execute()
+        
+        if not response.data:
+            print(f"❌ [DB] No IMAP/SMTP credentials found for email: {email}")
+            return None
+        
+        credentials = response.data[0]
+        
+        # Check if IMAP/SMTP is configured
+        if not credentials.get("imap_server") or not credentials.get("smtp_server"):
+            print(f"ℹ️ [DB] IMAP/SMTP not configured for email: {email}")
+            return None
+        
+        print(f"✅ [DB] IMAP/SMTP credentials retrieved for {email}")
+        return credentials
+        
+    except Exception as e:
+        print(f"❌ [DB] Error retrieving IMAP/SMTP credentials for {email}: {str(e)}")
+        return None
+
+
+def get_calendar_appointment_info(email: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve calendar and appointment information for a given email address.
+    
+    Args:
+        email: User email address
+        
+    Returns:
+        Dictionary with subscription_id, calendar_provider, hashed_access_token, 
+        business_hours, appointment_duration or None if not found
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select(
+            "subscription_id, calendar_provider, hashed_access_token, business_hours, appointment_duration"
+        ).eq("email", email.lower()).execute()
+        
+        if not response.data:
+            print(f"❌ [DB] No calendar appointment info found for email: {email}")
+            return None
+        
+        info = response.data[0]
+        print(f"✅ [DB] Calendar appointment info retrieved for {email}")
+        return info
+        
+    except Exception as e:
+        print(f"❌ [DB] Error retrieving calendar appointment info for {email}: {str(e)}")
+        return None

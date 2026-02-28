@@ -3,10 +3,8 @@ from datetime import timedelta, timezone
 from zoneinfo import ZoneInfo
 import httpx
 from typing import List, Optional, Dict, Any, Tuple
-from supabase import Client
 
 # Use absolute imports for the chatbot module
-from automations.chatbot.db.db import get_supabase_client
 from automations.ec_system.utils.utils import (
     decrypt,
     get_google_busy_slots,
@@ -34,15 +32,15 @@ def delete_calendar_event(event_id: str) -> str:
 
 
 def propose_new_slots(email: str, favourite_day: Optional[str] = None, not_available_dates: Optional[List[str]] = None) -> List[str]:
-    supabase: Client = get_supabase_client()
+    from automations.chatbot.db.db import get_calendar_appointment_info
     
-    response_sub_ser = supabase.table("subscription_services").select("subscription_id, calendar_provider, hashed_access_token, business_hours, appointment_duration").eq("email", email.lower()).execute()
-
-    if not response_sub_ser.data:
+    # Get calendar appointment info from db.py
+    data = get_calendar_appointment_info(email)
+    
+    if not data:
         print("No subscription service data found.")
         return []
 
-    data = response_sub_ser.data[0]
     calendar_provider = data.get("calendar_provider")
     hashed_access_token = data.get("hashed_access_token")
     subscription_id = data.get("subscription_id")

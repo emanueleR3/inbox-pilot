@@ -132,34 +132,22 @@ def _update_tokens_in_db(email: str, access_token: str, expires_in: int, refresh
     Returns:
         bool: True if update successful
     """
+    from automations.chatbot.db.db import update_tokens_in_db
+    
     try:
-        supabase = get_supabase_client()
-        
-        # Calculate new expiry time
-        new_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-        new_expiry_iso = new_expiry.isoformat()
-        
-        # Encrypt tokens
+        # Encrypt tokens before storing
         encrypted_access_token = _encrypt_token(access_token)
+        encrypted_refresh_token = _encrypt_token(refresh_token) if refresh_token else None
         
-        update_data = {
-            "hashed_access_token": encrypted_access_token,
-            "expiry_token": new_expiry_iso
-        }
+        # Call db.py function with encrypted tokens
+        success = update_tokens_in_db(
+            email=email,
+            access_token=encrypted_access_token,
+            expires_in=expires_in,
+            refresh_token=encrypted_refresh_token
+        )
         
-        # Update refresh token if provided (Microsoft may rotate it)
-        if refresh_token:
-            encrypted_refresh_token = _encrypt_token(refresh_token)
-            update_data["hashed_refresh_token"] = encrypted_refresh_token
-        
-        response = supabase.table("subscription_services").update(update_data).eq("email", email.lower()).execute()
-        
-        if response.data:
-            print(f"✅ [TOKEN REFRESH] Tokens updated for {email}, expires at {new_expiry_iso}")
-            return True
-        else:
-            print(f"❌ [TOKEN REFRESH] Failed to update tokens for {email}")
-            return False
+        return success
             
     except Exception as e:
         print(f"❌ [TOKEN REFRESH] Error updating tokens for {email}: {str(e)}")
@@ -168,17 +156,16 @@ def _update_tokens_in_db(email: str, access_token: str, expires_in: int, refresh
 
 def _get_access_token_for_email(email: str) -> Optional[str]:
     """Retrieve and decrypt access token for a given email address. Refreshes if expired."""
+    from automations.chatbot.db.db import get_token_info_for_email
+    
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("subscription_services").select(
-            "hashed_access_token, hashed_refresh_token, expiry_token, email_provider"
-        ).eq("email", email.lower()).execute()
+        # Get token info from db.py
+        user_data = get_token_info_for_email(email)
         
-        if not response.data:
+        if not user_data:
             print(f"No credentials found for email {email}")
             return None
         
-        user_data = response.data[0]
         provider = user_data.get("email_provider", "").lower()
         
         # Check if token is expired or expiring soon (within 5 minutes)
@@ -271,23 +258,17 @@ def _get_imap_smtp_credentials(email: str) -> Optional[dict]:
     
     Returns None if no IMAP/SMTP configuration is found.
     """
+    from automations.chatbot.db.db import get_imap_smtp_credentials as db_get_imap_smtp_credentials
+    
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("subscription_services").select(
-            "email, imap_server, imap_port, smtp_server, smtp_port, hashed_password"
-        ).eq("email", email.lower()).execute()
+        # Get credentials from db.py
+        user_data = db_get_imap_smtp_credentials(email)
         
-        if not response.data:
+        if not user_data:
             print(f"No IMAP/SMTP credentials found for email {email}")
             return None
         
-        user_data = response.data[0]
         print(f"Found user data for {email}: imap_server={user_data.get('imap_server')}, smtp_server={user_data.get('smtp_server')}, has_password={bool(user_data.get('hashed_password'))}")
-        
-        # Check if IMAP/SMTP is configured
-        if not user_data.get("imap_server") or not user_data.get("smtp_server"):
-            print(f"IMAP/SMTP not configured for email {email}")
-            return None
         
         # Decrypt the password
         decrypted_password = ""
@@ -1424,7 +1405,7 @@ def schedule_or_propose_meeting(
             },
             "user_email": {
                 "type": "string",
-                "description": "The email address of the current user (from which to retrieve configured mailboxes)"
+                "description": "The email address of the current user (to retrieve their service_id)"
             }
         },
         "required": ["sender_email", "user_email"]
@@ -1434,12 +1415,13 @@ def search_email_attachments(sender_email: str, user_email: str) -> str:
     """
     Search for email attachments from a specific sender.
     
-    This tool searches through the user's configured email accounts to find
-    all attachments received from a specific sender email address.
+    This tool searches through the user's email attachments to find
+    all attachments received from a specific sender email address,
+    filtered by the user's service_id for security.
     
     Args:
         sender_email: The email address of the sender to search for
-        user_email: The current user's email address (to get their configured mailboxes)
+        user_email: The current user's email address (to get their service_id)
         
     Returns:
         Markdown formatted string with:
@@ -1447,7 +1429,7 @@ def search_email_attachments(sender_email: str, user_email: str) -> str:
         - Message if emails found but no attachments
         - Bullet list with clickable download links if attachments found
     """
-    from automations.chatbot.db.db import get_attachments_by_sender_email, get_user_context
+    from automations.chatbot.db.db import get_attachments_by_sender_email, get_service_id_by_email
     from automations.chatbot.services.documents_service import format_attachments_response
     
     print(f"🔍 [SEARCH_ATTACHMENTS] Searching attachments from {sender_email} for user {user_email}")
@@ -1459,44 +1441,17 @@ def search_email_attachments(sender_email: str, user_email: str) -> str:
     if not user_email or not user_email.strip():
         return "Errore: Non è stato possibile identificare il tuo account email."
     
-    # Step 1: Get user's configured email addresses
-    try:
-        supabase = get_supabase_client()
-        
-        # Get the user's subscription_id from their email
-        user_response = supabase.table("subscription_services").select(
-            "subscription_id"
-        ).eq("email", user_email.lower().strip()).execute()
-        
-        if not user_response.data:
-            return f"Errore: Non trovo un account configurato per {user_email}."
-        
-        subscription_id = user_response.data[0].get("subscription_id")
-        
-        # Get all configured emails for this subscription
-        services_response = supabase.table("subscription_services").select(
-            "email"
-        ).eq("subscription_id", subscription_id).eq("activated", True).execute()
-        
-        if not services_response.data:
-            return "Errore: Non hai caselle email configurate."
-        
-        user_configured_emails = [s.get("email") for s in services_response.data if s.get("email")]
-        
-        if not user_configured_emails:
-            return "Errore: Non hai caselle email attive."
-        
-        print(f"✅ [SEARCH_ATTACHMENTS] Found {len(user_configured_emails)} configured emails for user")
-        
-    except Exception as e:
-        print(f"❌ [SEARCH_ATTACHMENTS] Error getting user context: {str(e)}")
-        return "Errore nel recupero delle tue caselle email configurate."
+    # Step 1: Get user's service_id from db.py
+    service_id = get_service_id_by_email(user_email.strip())
     
-    # Step 2: Search for attachments from the sender
+    if not service_id:
+        return f"Errore: Non trovo un account configurato per {user_email}."
+    
+    # Step 2: Search for attachments from the sender using service_id
     try:
         db_result = get_attachments_by_sender_email(
             target_sender_email=sender_email.strip(),
-            user_configured_emails=user_configured_emails
+            service_id=service_id
         )
         
         # Step 3: Format the response using the service
