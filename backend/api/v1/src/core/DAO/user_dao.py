@@ -261,11 +261,9 @@ class UserDAO:
         return response.session
     
     def send_password_reset(self, email: str):
-            response = self.supabase_auth.auth.reset_password_for_email(
+            self.supabase_auth.auth.reset_password_for_email(
                 email,
             )
-            if response:
-                return True
 
     def logout(self):
         return self.supabase_auth.auth.sign_out()

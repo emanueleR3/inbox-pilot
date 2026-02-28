@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from supabase import create_client, Client 
 from threading import Lock
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 load_dotenv()
 
@@ -152,4 +152,157 @@ def get_user_context(user_id: str) -> Optional[Dict[str, Any]]:
         
     except Exception as e:
         print(f"❌ [DB] Error retrieving user context for {user_id}: {str(e)}")
+        return None
+
+
+def get_colleagues_by_subscription(user_email: str, search_terms: List[str]) -> Dict[str, Any]:
+    """
+    Retrieve colleagues from the same subscription (company) by searching their name or email.
+    
+    This function finds the user's subscription_id and then searches for colleagues
+    within the same subscription, matching by name or email (case-insensitive).
+    
+    Args:
+        user_email: The email of the current user to find their subscription
+        search_terms: List of names or emails to search for
+        
+    Returns:
+        Dictionary with keys:
+        - 'exact_matches': List of uniquely identified colleagues
+        - 'ambiguous_matches': Dict mapping search term to list of possible matches
+        - 'not_found': List of search terms with no matches
+        - 'error': Error message if any (None otherwise)
+        
+        Each colleague dict contains: name, email, calendar_provider, 
+        hashed_access_token, business_hours
+    """
+    result = {
+        "exact_matches": [],
+        "ambiguous_matches": {},
+        "not_found": [],
+        "error": None
+    }
+    
+    if not search_terms:
+        return result
+    
+    try:
+        supabase = get_supabase_client()
+        
+        # Step 1: Find the subscription_id for the current user
+        user_response = supabase.table("subscription_services").select(
+            "subscription_id"
+        ).eq("email", user_email.lower()).execute()
+        
+        if not user_response.data:
+            result["error"] = f"No subscription found for email: {user_email}"
+            print(f"❌ [DB] {result['error']}")
+            return result
+        
+        subscription_id = user_response.data[0].get("subscription_id")
+        
+        if not subscription_id:
+            result["error"] = f"User {user_email} has no associated subscription_id"
+            print(f"❌ [DB] {result['error']}")
+            return result
+        
+        # Step 2: Get all colleagues in the same subscription
+        colleagues_response = supabase.table("subscription_services").select(
+            "name, email, calendar_provider, hashed_access_token, business_hours"
+        ).eq("subscription_id", subscription_id).eq("activated", True).execute()
+        
+        if not colleagues_response.data:
+            # No colleagues found at all
+            result["not_found"] = search_terms.copy()
+            return result
+        
+        all_colleagues = colleagues_response.data
+        
+        # Step 3: For each search term, find matching colleagues
+        # Track which colleagues have been matched to avoid duplicates in exact_matches
+        matched_emails = set()
+        
+        for term in search_terms:
+            term_lower = term.lower().strip()
+            matches = []
+            
+            for colleague in all_colleagues:
+                colleague_name = (colleague.get("name") or "").lower()
+                colleague_email = (colleague.get("email") or "").lower()
+                
+                # Skip the requesting user themselves
+                if colleague_email == user_email.lower():
+                    continue
+                
+                # Check if term matches name or email (case-insensitive partial match)
+                name_match = term_lower in colleague_name
+                email_match = term_lower in colleague_email or colleague_email == term_lower
+                
+                if name_match or email_match:
+                    matches.append({
+                        "name": colleague.get("name"),
+                        "email": colleague.get("email"),
+                        "calendar_provider": colleague.get("calendar_provider"),
+                        "hashed_access_token": colleague.get("hashed_access_token"),
+                        "business_hours": colleague.get("business_hours")
+                    })
+            
+            # Classify the result
+            if len(matches) == 0:
+                result["not_found"].append(term)
+            elif len(matches) == 1:
+                # Unique match - add only if not already in exact_matches
+                if matches[0]["email"] not in matched_emails:
+                    result["exact_matches"].append(matches[0])
+                    matched_emails.add(matches[0]["email"])
+            else:
+                # Ambiguous - multiple matches for this search term
+                result["ambiguous_matches"][term] = [m["email"] for m in matches]
+        
+        print(f"✅ [DB] Colleagues search completed: {len(result['exact_matches'])} exact, "
+              f"{len(result['ambiguous_matches'])} ambiguous, {len(result['not_found'])} not found")
+        
+        return result
+        
+    except Exception as e:
+        result["error"] = f"Error searching colleagues: {str(e)}"
+        print(f"❌ [DB] {result['error']}")
+        return result
+
+
+def get_user_calendar_info(user_email: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve calendar-related information for a specific user.
+    
+    Args:
+        user_email: The email address of the user
+        
+    Returns:
+        Dictionary with calendar info (name, email, calendar_provider, 
+        hashed_access_token, business_hours) or None if not found
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table("subscription_services").select(
+            "name, email, calendar_provider, hashed_access_token, business_hours"
+        ).eq("email", user_email.lower()).eq("activated", True).execute()
+        
+        if not response.data:
+            print(f"❌ [DB] No calendar info found for {user_email}")
+            return None
+        
+        user_data = response.data[0]
+        print(f"✅ [DB] Calendar info retrieved for {user_email}")
+        
+        return {
+            "name": user_data.get("name"),
+            "email": user_data.get("email"),
+            "calendar_provider": user_data.get("calendar_provider"),
+            "hashed_access_token": user_data.get("hashed_access_token"),
+            "business_hours": user_data.get("business_hours")
+        }
+        
+    except Exception as e:
+        print(f"❌ [DB] Error retrieving calendar info for {user_email}: {str(e)}")
         return None
