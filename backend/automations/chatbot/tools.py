@@ -1406,3 +1406,107 @@ def schedule_or_propose_meeting(
         f"{slots_formatted}{more_msg}{errors_warning}\n\n"
         f"Chiedi all'utente quale preferisce, poi richiama questo tool con quel preferred_datetime per creare l'evento."
     )
+
+
+@tool(
+    name_or_callable="search_email_attachments",
+    description=(
+        "Search and retrieve attached documents and files sent by a specific email address. "
+        "Use this tool when the user asks to find attachments, documents, files, or any material "
+        "received from a particular sender or person. Returns a formatted list with download links."
+    ),
+    args_schema={
+        "type": "object",
+        "properties": {
+            "sender_email": {
+                "type": "string",
+                "description": "The email address of the sender to search attachments from"
+            },
+            "user_email": {
+                "type": "string",
+                "description": "The email address of the current user (from which to retrieve configured mailboxes)"
+            }
+        },
+        "required": ["sender_email", "user_email"]
+    }
+)
+def search_email_attachments(sender_email: str, user_email: str) -> str:
+    """
+    Search for email attachments from a specific sender.
+    
+    This tool searches through the user's configured email accounts to find
+    all attachments received from a specific sender email address.
+    
+    Args:
+        sender_email: The email address of the sender to search for
+        user_email: The current user's email address (to get their configured mailboxes)
+        
+    Returns:
+        Markdown formatted string with:
+        - Message if no emails found from sender
+        - Message if emails found but no attachments
+        - Bullet list with clickable download links if attachments found
+    """
+    from automations.chatbot.db.db import get_attachments_by_sender_email, get_user_context
+    from automations.chatbot.services.documents_service import format_attachments_response
+    
+    print(f"🔍 [SEARCH_ATTACHMENTS] Searching attachments from {sender_email} for user {user_email}")
+    
+    # Validate input
+    if not sender_email or not sender_email.strip():
+        return "Errore: Devi specificare l'indirizzo email del mittente da cercare."
+    
+    if not user_email or not user_email.strip():
+        return "Errore: Non è stato possibile identificare il tuo account email."
+    
+    # Step 1: Get user's configured email addresses
+    try:
+        supabase = get_supabase_client()
+        
+        # Get the user's subscription_id from their email
+        user_response = supabase.table("subscription_services").select(
+            "subscription_id"
+        ).eq("email", user_email.lower().strip()).execute()
+        
+        if not user_response.data:
+            return f"Errore: Non trovo un account configurato per {user_email}."
+        
+        subscription_id = user_response.data[0].get("subscription_id")
+        
+        # Get all configured emails for this subscription
+        services_response = supabase.table("subscription_services").select(
+            "email"
+        ).eq("subscription_id", subscription_id).eq("activated", True).execute()
+        
+        if not services_response.data:
+            return "Errore: Non hai caselle email configurate."
+        
+        user_configured_emails = [s.get("email") for s in services_response.data if s.get("email")]
+        
+        if not user_configured_emails:
+            return "Errore: Non hai caselle email attive."
+        
+        print(f"✅ [SEARCH_ATTACHMENTS] Found {len(user_configured_emails)} configured emails for user")
+        
+    except Exception as e:
+        print(f"❌ [SEARCH_ATTACHMENTS] Error getting user context: {str(e)}")
+        return "Errore nel recupero delle tue caselle email configurate."
+    
+    # Step 2: Search for attachments from the sender
+    try:
+        db_result = get_attachments_by_sender_email(
+            target_sender_email=sender_email.strip(),
+            user_configured_emails=user_configured_emails
+        )
+        
+        # Step 3: Format the response using the service
+        formatted_response = format_attachments_response(
+            db_result=db_result,
+            target_sender_email=sender_email.strip()
+        )
+        
+        return formatted_response
+        
+    except Exception as e:
+        print(f"❌ [SEARCH_ATTACHMENTS] Error searching attachments: {str(e)}")
+        return f"Errore nella ricerca degli allegati: {str(e)}"

@@ -306,3 +306,87 @@ def get_user_calendar_info(user_email: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"❌ [DB] Error retrieving calendar info for {user_email}: {str(e)}")
         return None
+
+
+def get_attachments_by_sender_email(target_sender_email: str, user_configured_emails: List[str]) -> Dict[str, Any]:
+    """
+    Retrieve attachments from emails sent by a specific sender.
+    
+    This function performs a join between the threads and email_attachments tables
+    to find all attachments from a specific sender, restricted to the user's configured mailboxes.
+    
+    Args:
+        target_sender_email: The email address of the sender to search for
+        user_configured_emails: List of the user's configured email addresses (for security filtering)
+        
+    Returns:
+        Dictionary with:
+        - 'status': 'no_emails' | 'no_attachments' | 'success'
+        - 'data': List of attachment dictionaries (empty if no results)
+        
+        Each attachment dict contains: attachment_id, file_name, file_path, created_at
+    """
+    result = {
+        "status": "no_emails",
+        "data": []
+    }
+    
+    if not target_sender_email or not user_configured_emails:
+        print(f"❌ [DB] Invalid parameters: target_sender_email={target_sender_email}, user_configured_emails={user_configured_emails}")
+        return result
+    
+    try:
+        supabase = get_supabase_client()
+        
+        # Normalize emails for case-insensitive comparison
+        target_email_lower = target_sender_email.lower().strip()
+        configured_emails_lower = [e.lower().strip() for e in user_configured_emails]
+        
+        # Step 1: Query threads table to find threads from this sender
+        # Filter by sender_email (or last_sender_email) and ensure box_email is in user's configured emails
+        threads_response = supabase.table("threads").select(
+            "thread_id"
+        ).or_(
+            f"sender_email.ilike.{target_email_lower},last_sender_email.ilike.{target_email_lower}"
+        ).in_("box_email", configured_emails_lower).execute()
+        
+        if not threads_response.data:
+            # No threads found from this sender
+            print(f"ℹ️ [DB] No threads found from sender: {target_sender_email}")
+            result["status"] = "no_emails"
+            return result
+        
+        # Extract thread_ids
+        thread_ids = [row["thread_id"] for row in threads_response.data]
+        print(f"✅ [DB] Found {len(thread_ids)} threads from sender: {target_sender_email}")
+        
+        # Step 2: Query email_attachments table for these thread_ids
+        attachments_response = supabase.table("email_attachments").select(
+            "attachment_id, file_name, file_path, created_at"
+        ).in_("thread_id", thread_ids).order("created_at", desc=True).execute()
+        
+        if not attachments_response.data:
+            # Threads exist but no attachments
+            print(f"ℹ️ [DB] No attachments found for threads from sender: {target_sender_email}")
+            result["status"] = "no_attachments"
+            return result
+        
+        # Step 3: Return successful result with attachments
+        result["status"] = "success"
+        result["data"] = [
+            {
+                "attachment_id": att.get("attachment_id"),
+                "file_name": att.get("file_name"),
+                "file_path": att.get("file_path"),
+                "created_at": att.get("created_at")
+            }
+            for att in attachments_response.data
+        ]
+        
+        print(f"✅ [DB] Retrieved {len(result['data'])} attachments from sender: {target_sender_email}")
+        return result
+        
+    except Exception as e:
+        print(f"❌ [DB] Error retrieving attachments for sender {target_sender_email}: {str(e)}")
+        result["status"] = "no_emails"
+        return result
