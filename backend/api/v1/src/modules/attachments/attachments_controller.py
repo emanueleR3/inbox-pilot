@@ -19,35 +19,44 @@ class AttachmentsController:
         offset: int = 0
     ) -> dict:
         """
-        Recupera la lista degli attachments per un service_id.
+        Recupera la lista degli attachments per un service_id raggruppati per receiver.
         
         Returns:
-            dict con lista attachments e info paginazione
+            dict con lista attachments raggruppati per receiver, formati unici e info paginazione
         """
         if not service_id:
             raise MissingFieldException(["service_id"])
 
         try:
-            attachments = self.attachments_dao.get_attachments_by_service_id(
+            result = self.attachments_dao.get_attachments_grouped_by_receiver(
                 service_id=service_id,
                 limit=limit,
                 offset=offset
             )
-            total_count = self.attachments_dao.get_attachments_count_by_service_id(service_id)
             
-            # Formatta gli attachments con info thread
-            formatted_attachments = []
-            for att in attachments:
-                formatted_attachments.append(self._format_attachment_with_thread(att))
+            # Formatta ogni gruppo con le info thread
+            formatted_groups = []
+            for group in result["grouped_by_receiver"]:
+                formatted_attachments = []
+                for att in group["attachments"]:
+                    formatted_attachments.append(self._format_attachment_with_thread(att))
+                
+                formatted_groups.append({
+                    "receiver": group["receiver"],
+                    "attachments": formatted_attachments,
+                    "count": group["count"]
+                })
             
             return {
-                "attachments": formatted_attachments,
-                "total": total_count,
+                "grouped_by_receiver": formatted_groups,
+                "unique_formats": result["unique_formats"],
+                "total_receivers": result["total_receivers"],
+                "total_attachments": result["total_attachments"],
                 "limit": limit,
                 "offset": offset
             }
         except Exception as e:
-            raise DatabaseException(operation=f"recupero attachments: {str(e)}")
+            raise DatabaseException(operation=f"recupero attachments raggruppati: {str(e)}")
 
     def _format_attachment_with_thread(self, attachment: dict) -> dict:
         """
@@ -137,3 +146,51 @@ class AttachmentsController:
             raise
         except Exception as e:
             raise DatabaseException(operation=f"recupero file attachment: {str(e)}")
+
+    def get_attachments_by_receiver(
+        self,
+        service_id: str,
+        receiver: str,
+        limit: int = 50,
+        offset: int = 0
+    ) -> dict:
+        """
+        Recupera gli attachments per un receiver specifico.
+        
+        Args:
+            service_id: ID del subscription service
+            receiver: Email del receiver
+            limit: Numero massimo di risultati
+            offset: Offset per paginazione
+            
+        Returns:
+            dict con attachments del receiver, formati unici e info paginazione
+        """
+        if not service_id:
+            raise MissingFieldException(["service_id"])
+        if not receiver:
+            raise MissingFieldException(["receiver"])
+
+        try:
+            result = self.attachments_dao.get_attachments_by_receiver(
+                service_id=service_id,
+                receiver=receiver,
+                limit=limit,
+                offset=offset
+            )
+            
+            # Formatta gli attachments con info thread
+            formatted_attachments = []
+            for att in result["attachments"]:
+                formatted_attachments.append(self._format_attachment_with_thread(att))
+            
+            return {
+                "receiver": receiver,
+                "attachments": formatted_attachments,
+                "unique_formats": result["unique_formats"],
+                "total": result["total"],
+                "limit": limit,
+                "offset": offset
+            }
+        except Exception as e:
+            raise DatabaseException(operation=f"recupero attachments per receiver: {str(e)}")
