@@ -29,7 +29,7 @@ register_exception_handlers(app)
 # CORS (puoi restringerlo in produzione) - must be added before routers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://corretto.pro", "http://localhost:3000"],  
+    allow_origins=["https://corretto.pro", "http://localhost:3000", "https://staging.corretto.pro"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
