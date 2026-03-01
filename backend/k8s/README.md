@@ -37,43 +37,35 @@ kubectl create secret docker-registry ghcr-secret \
 
 Assicurati che il file `.env` nella root del progetto contenga tutte le variabili necessarie.
 
-## Struttura
+## Struttura (Kustomize)
+
+Questa directory usa Kustomize per separare **base** e **ambienti** (staging/production).
 
 ```
 k8s/
-├── namespace.yaml           # Namespace corretto
-├── secrets.yaml             # Secrets (da .env)
-├── shared/
-│   └── attachments-pvc.yaml # PVC condiviso per attachments
-├── rabbitmq/
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   └── pvc.yaml
-├── redis/
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   └── pvc.yaml
-├── api/
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   └── hpa.yaml             # Autoscaling
-├── automations/
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   └── hpa.yaml
-├── senders/
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   └── hpa.yaml
-├── listeners/
-│   ├── deployment.yaml
-│   └── service.yaml
-├── refreshers/
-│   └── deployment.yaml
-├── broker-worker/
-│   ├── deployment.yaml
-│   └── hpa.yaml
-└── *.sh                     # Script di gestione
+├── base/                       # Manifests condivisi (no namespace hardcoded)
+│   ├── kustomization.yaml
+│   ├── api/...
+│   ├── automations/...
+│   ├── broker-worker/...
+│   ├── listeners/...
+│   ├── qdrant/...
+│   ├── rabbitmq/...
+│   ├── redis/...
+│   ├── refreshers/...
+│   ├── senders/...
+│   └── shared/...
+├── overlays/
+│   ├── production/             # Namespace corretto, hostnames prod
+│   │   ├── kustomization.yaml
+│   │   └── namespace.yaml
+│   └── staging/                # Namespace corretto-staging, hostnames staging
+│       ├── kustomization.yaml
+│       ├── namespace.yaml
+│       ├── resource-quota.yaml
+│       ├── network-policy.yaml
+│       └── patches/...
+└── *.sh                         # Script di gestione (usa overlays)
 ```
 
 ## Script Disponibili
@@ -81,7 +73,8 @@ k8s/
 ### Deploy completo
 ```bash
 chmod +x k8s/*.sh
-./k8s/deploy.sh
+./k8s/deploy.sh production
+./k8s/deploy.sh staging
 ```
 
 ### Visualizza stato
@@ -91,11 +84,13 @@ chmod +x k8s/*.sh
 
 ### Aggiorna servizi
 ```bash
-# Aggiorna tutti
-./k8s/update.sh
+# Applica tutti i manifests di un ambiente
+./k8s/update.sh production
+./k8s/update.sh staging
 
-# Aggiorna singolo servizio
-./k8s/update.sh api
+# Applica + restart di un singolo deployment
+./k8s/update.sh production api
+./k8s/update.sh staging api
 ```
 
 ### Visualizza logs

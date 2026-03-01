@@ -5,7 +5,22 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NAMESPACE="corretto"
+ENVIRONMENT="${1:-production}"
+
+case "$ENVIRONMENT" in
+    production)
+        NAMESPACE="corretto"
+        KUSTOMIZE_DIR="$SCRIPT_DIR/overlays/production"
+        ;;
+    staging)
+        NAMESPACE="corretto-staging"
+        KUSTOMIZE_DIR="$SCRIPT_DIR/overlays/staging"
+        ;;
+    *)
+        echo "Usage: $0 [production|staging]"
+        exit 1
+        ;;
+esac
 
 # Colori per output
 RED='\033[0;31m'
@@ -46,13 +61,15 @@ fi
 echo ""
 echo "=========================================="
 echo "🚀 Deploying Corretto to Kubernetes (k3s)"
+echo "Environment: $ENVIRONMENT"
 echo "=========================================="
 echo ""
 
-# 1. Crea namespace
-log_info "Creazione namespace..."
-kubectl apply -f "$SCRIPT_DIR/namespace.yaml"
-log_success "Namespace creato"
+# 1. Crea namespace (via overlay)
+log_info "Creazione namespace ($NAMESPACE)..."
+kubectl apply -k "$KUSTOMIZE_DIR" --server-side=false --dry-run=client >/dev/null 2>&1 || true
+kubectl apply -f "$KUSTOMIZE_DIR/namespace.yaml"
+log_success "Namespace pronto"
 
 # 2. Verifica/crea secret per GHCR
 if ! kubectl get secret ghcr-secret -n $NAMESPACE &> /dev/null; then
@@ -77,26 +94,21 @@ fi
 
 # 3. Crea secrets dal file .env
 log_info "Creazione secrets dal file .env..."
-if [ -f "$SCRIPT_DIR/../.env" ]; then
+ENV_FILE="/home/deploy/corretto/.env"
+if [ -f "$ENV_FILE" ]; then
     # Rimuovi secret esistente se presente
     kubectl delete secret corretto-secrets -n $NAMESPACE --ignore-not-found
     
     # Crea nuovo secret dal file .env
     kubectl create secret generic corretto-secrets \
-        --from-env-file="/home/deploy/corretto/.env" \
+        --from-env-file="$ENV_FILE" \
         -n $NAMESPACE
     
     log_success "Secrets creati dal file .env"
 else
-    log_warning "File .env non trovato in /home/deploy/corretto"
-    log_info "Puoi creare i secrets manualmente con:"
+    log_warning "File .env non trovato in $ENV_FILE"
+    log_info "Crea i secrets manualmente con:"
     echo "  kubectl create secret generic corretto-secrets --from-env-file=.env -n $NAMESPACE"
-    
-    # Applica il template secrets.yaml se esiste
-    if [ -f "$SCRIPT_DIR/secrets.yaml" ]; then
-        log_info "Applico template secrets.yaml..."
-        kubectl apply -f "$SCRIPT_DIR/secrets.yaml"
-    fi
 fi
 
 # 4. Crea secret per Google Service Account (se esiste il file)
@@ -111,66 +123,18 @@ else
     log_warning "File service-account-key.json non trovato, skippo..."
 fi
 
-# 5. Applica PVC condivisi
-log_info "Creazione Persistent Volume Claims..."
-kubectl apply -f "$SCRIPT_DIR/shared/"
-log_success "PVCs creati"
+# 5. Deploy completo via Kustomize overlay
+log_info "Applico overlay Kustomize ($KUSTOMIZE_DIR)..."
+kubectl apply -k "$KUSTOMIZE_DIR"
+log_success "Overlay applicato"
 
-# 6. Deploy RabbitMQ
-log_info "Deploy RabbitMQ..."
-kubectl apply -f "$SCRIPT_DIR/rabbitmq/"
-log_success "RabbitMQ deployato"
-
-log_info "Attesa avvio RabbitMQ..."
-kubectl wait --for=condition=ready pod -l app=rabbitmq -n $NAMESPACE --timeout=180s || {
-    log_warning "RabbitMQ non pronto entro il timeout, continuo comunque..."
-}
-
-# 7. Deploy Qdrant
-log_info "Deploy Qdrant..."
-kubectl apply -f "$SCRIPT_DIR/qdrant/"
-log_success "Qdrant deployato"
-
-log_info "Attesa avvio Qdrant..."
-kubectl wait --for=condition=ready pod -l app=qdrant -n $NAMESPACE --timeout=180s || {
-    log_warning "Qdrant non pronto entro il timeout, continuo comunque..."
-}
-
-# 8. Deploy Redis
-log_info "Deploy Redis..."
-kubectl apply -f "$SCRIPT_DIR/redis/"
-log_success "Redis deployato"
-
-log_info "Attesa avvio Redis..."
-kubectl wait --for=condition=ready pod -l app=redis -n $NAMESPACE --timeout=180s || {
-    log_warning "Redis non pronto entro il timeout, continuo comunque..."
-}
-
-# 9. Deploy servizi base
-log_info "Deploy Senders..."
-kubectl apply -f "$SCRIPT_DIR/senders/"
-log_success "Senders deployato"
-
-# 9. Deploy altri servizi
-log_info "Deploy API..."
-kubectl apply -f "$SCRIPT_DIR/api/"
-log_success "API deployato"
-
-log_info "Deploy Automations..."
-kubectl apply -f "$SCRIPT_DIR/automations/"
-log_success "Automations deployato"
-
-log_info "Deploy Listeners..."
-kubectl apply -f "$SCRIPT_DIR/listeners/"
-log_success "Listeners deployato"
-
-log_info "Deploy Refreshers..."
-kubectl apply -f "$SCRIPT_DIR/refreshers/"
-log_success "Refreshers deployato"
-
-log_info "Deploy Broker Worker..."
-kubectl apply -f "$SCRIPT_DIR/broker-worker/"
-log_success "Broker Worker deployato"
+# 6. Attendi rollout dei deployment principali
+log_info "Attesa rollout deployments..."
+for deploy in api automations broker-worker listeners refreshers senders redis rabbitmq qdrant; do
+    kubectl rollout status deployment/$deploy -n $NAMESPACE --timeout=180s || {
+        log_warning "$deploy non pronto entro il timeout, continuo comunque..."
+    }
+done
 
 echo ""
 echo "=========================================="

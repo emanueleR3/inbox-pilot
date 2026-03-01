@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: automations
+  labels:
+    app.kubernetes.io/name: automations
+    app.kubernetes.io/part-of: corretto
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: automations
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: automations
+        app.kubernetes.io/part-of: corretto
+    spec:
+      containers:
+        - name: automations
+          image: ghcr.io/correttoai/backend/automations:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8010
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: corretto-secrets
+          env:
+            - name: QDRANT_URL
+              value: http://qdrant:6333
+            - name: SCRAPINGS_DIR
+              value: /app/scrapings
+            - name: SCRAPINGS_DB_DIR
+              value: /home/deploy/corretto/data/scrapings
+          volumeMounts:
+            - name: attachments
+              mountPath: /app/attachments
+            - name: scrapings
+              mountPath: /app/scrapings
+            - name: logs
+              mountPath: /app/logs
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          # readinessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: 8010
+          #   initialDelaySeconds: 10
+          #   periodSeconds: 5
+          #   timeoutSeconds: 3
+          #   failureThreshold: 3
+          # livenessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: 8010
+          #   initialDelaySeconds: 15
+          #   periodSeconds: 10
+          #   timeoutSeconds: 5
+          #   failureThreshold: 3
+      volumes:
+        - name: attachments
+          hostPath:
+            path: /home/deploy/corretto/data/attachments
+            type: DirectoryOrCreate
+        - name: scrapings
+          hostPath:
+            path: /home/deploy/corretto/data/scrapings
+            type: DirectoryOrCreate
+        - name: logs
+          hostPath:
+            path: /home/deploy/corretto/logs
+            type: DirectoryOrCreate
+      imagePullSecrets:
+        - name: ghcr-secret
+
