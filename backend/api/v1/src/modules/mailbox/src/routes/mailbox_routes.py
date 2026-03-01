@@ -239,8 +239,8 @@ def get_thread_conversation(thread_id: str):
         },
     }
 )
-def get_failed_outbound_emails(subscription_service_id: str):
-    return controller.get_failed_outbound_emails(subscription_service_id)
+def get_failed_outbound_emails(service_id: str):
+    return controller.get_failed_outbound_emails(service_id)
 
 @router.get(
     "/threads/by-category",

@@ -5,7 +5,7 @@ from typing import Optional, List
 class MetricMetadata(BaseModel):
     date_from: Optional[str] = None
     date_to: Optional[str] = None
-    subscription_id: Optional[str] = None
+    service_id: Optional[str] = None
 
 
 class OverviewMetrics(BaseModel):

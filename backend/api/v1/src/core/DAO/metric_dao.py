@@ -25,28 +25,28 @@ class MetricDAO:
     def __init__(self):
         self.supabase = get_supabase_client()
 
-    def _get_service_emails(self, subscription_service_id: str) -> List[str]:
+    def _get_service_emails(self, service_id: str) -> List[str]:
         rows = (
             self.supabase.table("subscription_services")
             .select("email")
-            .eq("subscription_ser_id", subscription_service_id)
+            .eq("subscription_ser_id", service_id)
             .execute()
             .data
         ) or []
         return [r["email"] for r in rows if r.get("email")]
 
-    def _get_service_ids(self, subscription_service_id: str) -> List[str]:
+    def _get_service_ids(self, service_id: str) -> List[str]:
         rows = (
             self.supabase.table("subscription_services")
             .select("service_id")
-            .eq("subscription_ser_id", subscription_service_id)
+            .eq("subscription_ser_id", service_id)
             .execute()
             .data
         ) or []
         return [r["service_id"] for r in rows if r.get("service_id")]
 
-    async def get_overview_metrics(self, subscription_service_id: str, date_from: str, date_to: str) -> OverviewMetrics:
-        emails = self._get_service_emails(subscription_service_id)
+    async def get_overview_metrics(self, service_id: str, date_from: str, date_to: str) -> OverviewMetrics:
+        emails = self._get_service_emails(service_id)
 
         if not emails:
             return OverviewMetrics(
@@ -55,7 +55,7 @@ class MetricDAO:
                 deflection_rate_pct=0,
                 avg_response_time_seconds=0,
                 alert_attivi=0,
-                metadata=MetricMetadata(subscription_service_id=subscription_service_id, date_from=date_from, date_to=date_to)
+                metadata=MetricMetadata(service_id=service_id, date_from=date_from, date_to=date_to)
             )
 
         threads = self.supabase.table("threads") \
@@ -88,11 +88,11 @@ class MetricDAO:
             deflection_rate_pct=round((ai_only / total * 100) if total else 0, 2),
             avg_response_time_seconds=round(avg_resp, 2),
             alert_attivi=alerts,
-            metadata=MetricMetadata(subscription_service_id=subscription_service_id, date_from=date_from, date_to=date_to)
+            metadata=MetricMetadata(service_id=service_id, date_from=date_from, date_to=date_to)
         )
 
-    async def get_automation_metrics(self, subscription_service_id: str, date_from: str, date_to: str) -> AutomationMetrics:
-        emails = self._get_service_emails(subscription_service_id)
+    async def get_automation_metrics(self, service_id: str, date_from: str, date_to: str) -> AutomationMetrics:
+        emails = self._get_service_emails(service_id)
 
         threads = self.supabase.table("threads") \
             .select("human_response", "started_at", "category") \
@@ -136,11 +136,11 @@ class MetricDAO:
             ai_vs_human=ai_vs_human,
             deflection_trend=deflection_trend,
             deflection_by_category=deflection_by_category,
-            metadata=MetricMetadata(subscription_service_id=subscription_service_id, date_from=date_from, date_to=date_to)
+            metadata=MetricMetadata(service_id=service_id, date_from=date_from, date_to=date_to)
         )
 
-    async def get_ai_quality_metrics(self, subscription_service_id: str, date_from: str, date_to: str) -> AiQualityMetrics:
-        service_ids = self._get_service_ids(subscription_service_id)
+    async def get_ai_quality_metrics(self, service_id: str, date_from: str, date_to: str) -> AiQualityMetrics:
+        service_ids = self._get_service_ids(service_id)
 
         rows = self.supabase.table("emails") \
             .select("outcome") \
@@ -166,11 +166,11 @@ class MetricDAO:
             success_rate_pct=round((success / total * 100) if total else 0, 2),
             pct_negative_feedback=0,
             avg_score_by_outcome=[],
-            metadata=MetricMetadata(subscription_service_id=subscription_service_id, date_from=date_from, date_to=date_to)
+            metadata=MetricMetadata(service_id=service_id, date_from=date_from, date_to=date_to)
         )
 
-    async def get_risk_metrics(self, subscription_service_id: str, date_from: str, date_to: str) -> RiskMetrics:
-        service_ids = self._get_service_ids(subscription_service_id)
+    async def get_risk_metrics(self, service_id: str, date_from: str, date_to: str) -> RiskMetrics:
+        service_ids = self._get_service_ids(service_id)
 
         rows = self.supabase.table("emails") \
             .select("thread_id", "priority_score", "datetime") \
@@ -194,14 +194,14 @@ class MetricDAO:
             ticket_critici_list=critical,
             priority_alerts=critical,
             avg_time_to_first_ai_seconds=0,
-            metadata=MetricMetadata(subscription_service_id=subscription_service_id, date_from=date_from, date_to=date_to)
+            metadata=MetricMetadata(service_id=service_id, date_from=date_from, date_to=date_to)
         )
 
-    async def get_usage_metrics(self, subscription_service_id: str, date_from: str, date_to: str) -> UsageMetrics:
+    async def get_usage_metrics(self, service_id: str, date_from: str, date_to: str) -> UsageMetrics:
         services = (
             self.supabase.table("subscription_services")
             .select("service_id", "email")
-            .eq("subscription_service_id", subscription_service_id)
+            .eq("service_id", service_id)
             .execute()
             .data
         ) or []
@@ -248,11 +248,11 @@ class MetricDAO:
                 ThreadsByCategoryItem(category=c, count=n) for c, n in by_category.items()
             ],
             attachments=AttachmentStats(count=len(attachments)),
-            metadata=MetricMetadata(subscription_service_id=subscription_service_id, date_from=date_from, date_to=date_to)
+            metadata=MetricMetadata(service_id=service_id, date_from=date_from, date_to=date_to)
         )
 
-    async def get_event_metrics(self, subscription_service_id: str, date_from: str, date_to: str) -> EventMetrics:
-        service_ids = self._get_service_ids(subscription_service_id)
+    async def get_event_metrics(self, service_id: str, date_from: str, date_to: str) -> EventMetrics:
+        service_ids = self._get_service_ids(service_id)
 
         events = self.supabase.table("scheduled_events") \
             .select("event_type", "created_by", "created_at") \
@@ -283,6 +283,6 @@ class MetricDAO:
             trend=[
                 EventTrendItem(day=d, count=c) for d, c in trend.items()
             ],
-            metadata=MetricMetadata(subscription_service_id=subscription_service_id, date_from=date_from, date_to=date_to)
+            metadata=MetricMetadata(service_id=service_id, date_from=date_from, date_to=date_to)
         )
 

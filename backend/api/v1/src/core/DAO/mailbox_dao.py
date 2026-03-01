@@ -144,13 +144,13 @@ class MailboxDAO:
             message_count=len(messages)
         )
 
-    def fetch_failed_outbound_emails(self, subscription_service_id: str) -> List[FailedOutboundEmail]:
+    def fetch_failed_outbound_emails(self, service_id: str) -> List[FailedOutboundEmail]:
 
         rows = (
             self.supabase
             .table("failed_outbound_emails_view")
             .select("*")
-            .eq("subscription_service_id", subscription_service_id)
+            .eq("service_id", service_id)
             .order("datetime", desc=True)
             .execute()
             .data
