@@ -29,7 +29,7 @@ class MetricDAO:
         rows = (
             self.supabase.table("subscription_services")
             .select("email")
-            .eq("subscription_ser_id", service_id)
+            .eq("service_id", service_id)
             .execute()
             .data
         ) or []
@@ -39,7 +39,7 @@ class MetricDAO:
         rows = (
             self.supabase.table("subscription_services")
             .select("service_id")
-            .eq("subscription_ser_id", service_id)
+            .eq("service_id", service_id)
             .execute()
             .data
         ) or []
