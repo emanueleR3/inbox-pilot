@@ -205,7 +205,7 @@ def get_thread_conversation(thread_id: str):
 
 
 @router.get(
-    "/emails/outbound/failed",
+    "/emails/outbound/failed/{subscription_service_id}",
     status_code=status.HTTP_200_OK,
     summary="Email outbound fallite",
     description=(
@@ -239,8 +239,8 @@ def get_thread_conversation(thread_id: str):
         },
     }
 )
-def get_failed_outbound_emails():
-    return controller.get_failed_outbound_emails()
+def get_failed_outbound_emails(subscription_service_id: str):
+    return controller.get_failed_outbound_emails(subscription_service_id)
 
 @router.get(
     "/threads/by-category",

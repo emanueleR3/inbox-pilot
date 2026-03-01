@@ -49,9 +49,9 @@ class MailboxController:
 
         return thread
 
-    def get_failed_outbound_emails(self):
+    def get_failed_outbound_emails(self, subscription_service_id: str):
         try:
-            return self.mailbox_dao.fetch_failed_outbound_emails()
+            return self.mailbox_dao.fetch_failed_outbound_emails(subscription_service_id)
         except Exception as e:
             raise DatabaseException(str(e))
 
