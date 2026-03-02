@@ -25,10 +25,10 @@ jobs:
       - name: Set environment variables
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "NAMESPACE=production" >> $GITHUB_ENV
+            echo "NAMESPACE=corretto" >> $GITHUB_ENV
             echo "IMAGE_PREFIX=prod"    >> $GITHUB_ENV
           else
-            echo "NAMESPACE=staging"   >> $GITHUB_ENV
+            echo "NAMESPACE=corretto-staging"   >> $GITHUB_ENV
             echo "IMAGE_PREFIX=staging" >> $GITHUB_ENV
           fi
 
