@@ -70,13 +70,14 @@ class UserController:
         
     def create_new_sub(self, payload: dict):
         user = payload.get("user")
+        jwt = payload.get("jwt")
         subscription_data = payload.get("subscription")
 
-        if not all([user, subscription_data]):
-            raise MissingFieldException(fields=["user", "subscription"])
-        
+        if not all([user, jwt, subscription_data]):
+            raise MissingFieldException(fields=["user", "jwt", "subscription"])
+
         try:
-            return self.user_dao.create_new_sub(user, subscription_data)
+            return self.user_dao.create_new_sub(user, subscription_data, jwt=jwt)
         except AuthApiError as e:
             if "Subs already created" in str(e):
                 raise ResourceAlreadyExistsException(resource="Sottoscrizione")

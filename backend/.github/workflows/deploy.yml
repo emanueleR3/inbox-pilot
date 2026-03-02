@@ -1,8 +1,8 @@
-name: CI/CD Deploy to k3s
+name: CI/CD Deploy
 
 on:
   push:
-    branches: [ main, backend ]
+    branches: [ dev, main ]
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -22,6 +22,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set environment variables
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "NAMESPACE=production" >> $GITHUB_ENV
+            echo "IMAGE_PREFIX=prod"    >> $GITHUB_ENV
+          else
+            echo "NAMESPACE=staging"   >> $GITHUB_ENV
+            echo "IMAGE_PREFIX=staging" >> $GITHUB_ENV
+          fi
+
       - name: Detect changed modules
         id: changes
         run: |
@@ -30,10 +40,10 @@ jobs:
           else
             CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
           fi
-          
+
           echo "Changed files:"
           echo "$CHANGED_FILES"
-          
+
           for module in api broker listeners refreshers automations senders; do
             if echo "$CHANGED_FILES" | grep -q "^${module}/"; then
               echo "${module}_changed=true" >> $GITHUB_OUTPUT
@@ -57,75 +67,69 @@ jobs:
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      # --- BUILD & PUSH IMMAGINI ---
+      # --- BUILD & PUSH IMAGES ---
 
       - name: Build and push Docker image (API)
         if: steps.changes.outputs.api_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          SHA_TAG=${{ github.sha }}
+          IMAGE_TAG="${IMAGE_PREFIX}-${{ github.sha }}"
           API_IMAGE=ghcr.io/${REPO_LOWER}/api
-          docker build --no-cache -t ${API_IMAGE}:latest -t ${API_IMAGE}:${SHA_TAG} api
-          docker push ${API_IMAGE}:latest
-          docker push ${API_IMAGE}:${SHA_TAG}
+          docker build --no-cache -t ${API_IMAGE}:${IMAGE_TAG} api
+          docker push ${API_IMAGE}:${IMAGE_TAG}
 
       - name: Build and push Docker image (broker)
         if: steps.changes.outputs.broker_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          SHA_TAG=${{ github.sha }}
+          IMAGE_TAG="${IMAGE_PREFIX}-${{ github.sha }}"
           BROKER_IMAGE=ghcr.io/${REPO_LOWER}/broker
-          docker build --no-cache -t ${BROKER_IMAGE}:latest -t ${BROKER_IMAGE}:${SHA_TAG} -f broker/worker/Dockerfile broker
-          docker push ${BROKER_IMAGE}:latest
-          docker push ${BROKER_IMAGE}:${SHA_TAG}
+          docker build --no-cache -t ${BROKER_IMAGE}:${IMAGE_TAG} -f broker/worker/Dockerfile broker
+          docker push ${BROKER_IMAGE}:${IMAGE_TAG}
 
       - name: Build and push Docker image (listeners)
         if: steps.changes.outputs.listeners_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          SHA_TAG=${{ github.sha }}
+          IMAGE_TAG="${IMAGE_PREFIX}-${{ github.sha }}"
           LISTENERS_IMAGE=ghcr.io/${REPO_LOWER}/listeners
-          docker build --no-cache -t ${LISTENERS_IMAGE}:latest -t ${LISTENERS_IMAGE}:${SHA_TAG} listeners
-          docker push ${LISTENERS_IMAGE}:latest
-          docker push ${LISTENERS_IMAGE}:${SHA_TAG}
+          docker build --no-cache -t ${LISTENERS_IMAGE}:${IMAGE_TAG} listeners
+          docker push ${LISTENERS_IMAGE}:${IMAGE_TAG}
 
       - name: Build and push Docker image (refreshers)
         if: steps.changes.outputs.refreshers_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          SHA_TAG=${{ github.sha }}
+          IMAGE_TAG="${IMAGE_PREFIX}-${{ github.sha }}"
           REFRESHERS_IMAGE=ghcr.io/${REPO_LOWER}/refreshers
-          docker build --no-cache -t ${REFRESHERS_IMAGE}:latest -t ${REFRESHERS_IMAGE}:${SHA_TAG} refreshers
-          docker push ${REFRESHERS_IMAGE}:latest
-          docker push ${REFRESHERS_IMAGE}:${SHA_TAG}
+          docker build --no-cache -t ${REFRESHERS_IMAGE}:${IMAGE_TAG} refreshers
+          docker push ${REFRESHERS_IMAGE}:${IMAGE_TAG}
 
       - name: Build and push Docker image (automations)
         if: steps.changes.outputs.automations_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          SHA_TAG=${{ github.sha }}
+          IMAGE_TAG="${IMAGE_PREFIX}-${{ github.sha }}"
           AUTOMATIONS_IMAGE=ghcr.io/${REPO_LOWER}/automations
-          docker build --no-cache -t ${AUTOMATIONS_IMAGE}:latest -t ${AUTOMATIONS_IMAGE}:${SHA_TAG} automations
-          docker push ${AUTOMATIONS_IMAGE}:latest
-          docker push ${AUTOMATIONS_IMAGE}:${SHA_TAG}
+          docker build --no-cache -t ${AUTOMATIONS_IMAGE}:${IMAGE_TAG} automations
+          docker push ${AUTOMATIONS_IMAGE}:${IMAGE_TAG}
 
       - name: Build and push Docker image (senders)
         if: steps.changes.outputs.senders_changed == 'true'
         run: |
           set -e
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          SHA_TAG=${{ github.sha }}
+          IMAGE_TAG="${IMAGE_PREFIX}-${{ github.sha }}"
           SENDERS_IMAGE=ghcr.io/${REPO_LOWER}/senders
-          docker build --no-cache -t ${SENDERS_IMAGE}:latest -t ${SENDERS_IMAGE}:${SHA_TAG} senders
-          docker push ${SENDERS_IMAGE}:latest
-          docker push ${SENDERS_IMAGE}:${SHA_TAG}
+          docker build --no-cache -t ${SENDERS_IMAGE}:${IMAGE_TAG} senders
+          docker push ${SENDERS_IMAGE}:${IMAGE_TAG}
 
-      # --- NIENTE PIÙ SSH + DOCKER COMPOSE ---
+      # --- DEPLOY TO KUBERNETES ---
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
@@ -141,25 +145,26 @@ jobs:
         run: |
           set -e
 
-          NAMESPACE=corretto
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          SHA_TAG=${{ github.sha }}
+          IMAGE_TAG="${IMAGE_PREFIX}-${{ github.sha }}"
+
+          echo "Deploying to namespace: $NAMESPACE (image prefix: $IMAGE_PREFIX)"
 
           apply_and_wait() {
             local deploy_name="$1"
-            echo "Waiting rollout for $deploy_name..."
+            echo "Waiting rollout for $deploy_name in namespace $NAMESPACE..."
             kubectl -n "$NAMESPACE" rollout status "deployment/${deploy_name}" --timeout=300s
           }
 
           apply_k8s_dir_if_exists() {
             local dir="$1"
             if [ -d "$dir" ]; then
-              echo "Applying manifests: $dir"
-              kubectl apply -f "$dir"
+              echo "Applying manifests: $dir (namespace: $NAMESPACE)"
+              kubectl apply -f "$dir" -n "$NAMESPACE"
             fi
           }
 
-          # Apply other K8s manifests if they changed (services, storage, etc.)
+          # Apply K8s manifests if they changed
           if [ "${{ steps.changes.outputs.k8s_changed }}" = "true" ]; then
             if [ -n "${{ steps.changes.outputs.k8s_dirs }}" ]; then
               echo "K8s manifests changed, applying: ${{ steps.changes.outputs.k8s_dirs }}"
@@ -176,9 +181,8 @@ jobs:
           # API
           if [ "${{ steps.changes.outputs.api_changed }}" = "true" ]; then
             echo "Updating API..."
-            # First apply manifests (env, mounts, strategy, etc.), then set image to the immutable SHA.
             apply_k8s_dir_if_exists "k8s/api/"
-            kubectl -n "$NAMESPACE" set image deployment/api api=ghcr.io/${REPO_LOWER}/api:${SHA_TAG}
+            kubectl -n "$NAMESPACE" set image deployment/api api=ghcr.io/${REPO_LOWER}/api:${IMAGE_TAG}
             apply_and_wait "api"
           else
             echo "API unchanged, skipping"
@@ -188,7 +192,7 @@ jobs:
           if [ "${{ steps.changes.outputs.broker_changed }}" = "true" ]; then
             echo "Updating broker-worker..."
             apply_k8s_dir_if_exists "k8s/broker-worker/"
-            kubectl -n "$NAMESPACE" set image deployment/broker-worker broker-worker=ghcr.io/${REPO_LOWER}/broker:${SHA_TAG}
+            kubectl -n "$NAMESPACE" set image deployment/broker-worker broker-worker=ghcr.io/${REPO_LOWER}/broker:${IMAGE_TAG}
             apply_and_wait "broker-worker"
           else
             echo "Broker unchanged, skipping"
@@ -198,7 +202,7 @@ jobs:
           if [ "${{ steps.changes.outputs.listeners_changed }}" = "true" ]; then
             echo "Updating listeners..."
             apply_k8s_dir_if_exists "k8s/listeners/"
-            kubectl -n "$NAMESPACE" set image deployment/listeners listeners=ghcr.io/${REPO_LOWER}/listeners:${SHA_TAG}
+            kubectl -n "$NAMESPACE" set image deployment/listeners listeners=ghcr.io/${REPO_LOWER}/listeners:${IMAGE_TAG}
             apply_and_wait "listeners"
           else
             echo "Listeners unchanged, skipping"
@@ -208,7 +212,7 @@ jobs:
           if [ "${{ steps.changes.outputs.refreshers_changed }}" = "true" ]; then
             echo "Updating refreshers..."
             apply_k8s_dir_if_exists "k8s/refreshers/"
-            kubectl -n "$NAMESPACE" set image deployment/refreshers refreshers=ghcr.io/${REPO_LOWER}/refreshers:${SHA_TAG}
+            kubectl -n "$NAMESPACE" set image deployment/refreshers refreshers=ghcr.io/${REPO_LOWER}/refreshers:${IMAGE_TAG}
             apply_and_wait "refreshers"
           else
             echo "Refreshers unchanged, skipping"
@@ -218,7 +222,7 @@ jobs:
           if [ "${{ steps.changes.outputs.automations_changed }}" = "true" ]; then
             echo "Updating automations..."
             apply_k8s_dir_if_exists "k8s/automations/"
-            kubectl -n "$NAMESPACE" set image deployment/automations automations=ghcr.io/${REPO_LOWER}/automations:${SHA_TAG}
+            kubectl -n "$NAMESPACE" set image deployment/automations automations=ghcr.io/${REPO_LOWER}/automations:${IMAGE_TAG}
             apply_and_wait "automations"
           else
             echo "Automations unchanged, skipping"
@@ -228,11 +232,11 @@ jobs:
           if [ "${{ steps.changes.outputs.senders_changed }}" = "true" ]; then
             echo "Updating senders..."
             apply_k8s_dir_if_exists "k8s/senders/"
-            kubectl -n "$NAMESPACE" set image deployment/senders senders=ghcr.io/${REPO_LOWER}/senders:${SHA_TAG}
+            kubectl -n "$NAMESPACE" set image deployment/senders senders=ghcr.io/${REPO_LOWER}/senders:${IMAGE_TAG}
             apply_and_wait "senders"
           else
             echo "Senders unchanged, skipping"
           fi
 
-          echo "Current rollouts:"
-          kubectl -n $NAMESPACE get deploy
+          echo "Current rollouts in namespace $NAMESPACE:"
+          kubectl -n "$NAMESPACE" get deploy

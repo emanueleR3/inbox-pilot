@@ -8,8 +8,26 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NAMESPACE="corretto"
-SERVICE=$1
+ENVIRONMENT="${1:-production}"
+SERVICE=$2
+
+case "$ENVIRONMENT" in
+    production)
+        NAMESPACE="corretto"
+        KUSTOMIZE_DIR="$SCRIPT_DIR/overlays/production"
+        ;;
+    staging)
+        NAMESPACE="corretto-staging"
+        KUSTOMIZE_DIR="$SCRIPT_DIR/overlays/staging"
+        ;;
+    *)
+        echo "Usage: $0 [production|staging] [deployment-name]"
+        echo "Examples:"
+        echo "  $0 staging            # apply all staging manifests"
+        echo "  $0 production api     # apply + restart api (prod)"
+        exit 1
+        ;;
+esac
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -18,27 +36,16 @@ NC='\033[0m'
 update_service() {
     local svc=$1
     echo -e "${BLUE}🔄 Aggiornamento $svc...${NC}"
-    
-    if [ -d "$SCRIPT_DIR/$svc" ]; then
-        kubectl apply -f "$SCRIPT_DIR/$svc/"
-        kubectl rollout restart deployment/$svc -n $NAMESPACE 2>/dev/null || true
-        echo -e "${GREEN}✅ $svc aggiornato${NC}"
-    else
-        echo "⚠️  Directory $svc non trovata"
-    fi
+
+    kubectl rollout restart deployment/$svc -n $NAMESPACE 2>/dev/null || true
+    echo -e "${GREEN}✅ $svc riavviato${NC}"
 }
 
+echo -e "${BLUE}📦 Applicazione overlay Kustomize ($ENVIRONMENT)...${NC}"
+kubectl apply -k "$KUSTOMIZE_DIR"
+
 if [ -n "$SERVICE" ]; then
-    # Aggiorna singolo servizio
     update_service "$SERVICE"
-else
-    # Aggiorna tutti i servizi
-    echo "🔄 Aggiornamento di tutti i servizi..."
-    echo ""
-    
-    for dir in api automations senders listeners refreshers broker-worker redis; do
-        update_service "$dir"
-    done
 fi
 
 echo ""

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: senders
+  labels:
+    app.kubernetes.io/name: senders
+    app.kubernetes.io/part-of: corretto
+spec:
+  selector:
+    app.kubernetes.io/name: senders
+  ports:
+    - name: http
+      port: 8020
+      targetPort: 8020
+      protocol: TCP
+  type: ClusterIP

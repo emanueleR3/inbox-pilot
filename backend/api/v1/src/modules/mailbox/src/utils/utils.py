@@ -1,4 +1,5 @@
-from typing import Optional, Dict
+import re
+from typing import Optional, Dict, List
 from datetime import datetime
 from src.handler_exception import (
     InvalidFieldException,
@@ -125,5 +126,39 @@ def _parse_datetime(value: Optional[str], field: str) -> Optional[datetime]:
         raise InvalidFieldException(
             field=field,
             reason="formato data/ora non valido"
+        )
+    
+def validate_send_email_fields(payload: dict) -> None:
+        required_fields = ["provider", "email", "to", "subject", "body"]
+        missing_fields = [field for field in required_fields if not payload.get(field)]
+        
+        if missing_fields:
+            raise MissingFieldException(fields=missing_fields)
+
+        to = payload.get("to")
+        if not isinstance(to, list) or len(to) == 0:
+            raise InvalidFieldException(
+                field="to",
+                reason="deve essere una lista non vuota di indirizzi email"
+            )
+
+def validate_email_addresses(addresses: List[str], field_name: str) -> None:
+    """Valida una lista di indirizzi email."""
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        
+    for addr in addresses:
+        if not re.match(email_pattern, addr):
+            raise InvalidFieldException(
+                field=field_name,
+                reason=f"indirizzo email non valido: {addr}"
+            )
+
+def validate_email_address(address: str, field_name: str) -> None:
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        
+    if not re.match(email_pattern, address):
+        raise InvalidFieldException(
+            field=field_name,
+            reason=f"indirizzo email non valido: {address}"
         )
 

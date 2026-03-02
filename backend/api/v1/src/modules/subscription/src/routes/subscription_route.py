@@ -3,7 +3,7 @@ from src.core.dependecy import get_current_user
 from src.modules.subscription.src.controllers.subscription_controller import SubscriptionController
 
 router = APIRouter(
-    #dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user)],
     tags=["Subscription"],
 )
 controller = SubscriptionController()

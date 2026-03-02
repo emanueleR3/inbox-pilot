@@ -1,12 +1,17 @@
 """FastAPI routes for web scraping operations."""
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi.params import Depends
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
+from src.core.dependecy import get_current_user
 from src.modules.scraper.src.controllers.scraper_controller import ScraperController
 
-router = APIRouter(tags=["scraper"])
+router = APIRouter(
+    dependencies=[Depends(get_current_user)],
+    tags=["scraper"]
+)
 controller = ScraperController()
 
 

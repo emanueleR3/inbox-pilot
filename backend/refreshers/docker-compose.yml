@@ -11,6 +11,7 @@ services:
       # Fallbacks if not defined in env file
       - REFRESH_INTERVAL_MINUTES_TOKENS=15
       - REFRESH_INTERVAL_HOURS_SUBSCRIPTIONS=3
+      - REFRESH_INTERVAL_HOURS_WATCH=24
     # networks:
     #   - backend
 

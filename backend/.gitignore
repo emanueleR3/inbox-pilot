@@ -11,18 +11,16 @@ venv
 .DS_Store
 .idea
 .vscode
+.agents
 
 *.conf
 
 *.log
 logs
 
-<<<<<<< Updated upstream
 qdrant_storage/
 chunks.jsonl
 qdrant_batches.jsonl
 output.txt
 chunks_clean.jsonl
-=======
 k8s/k3s.yaml
->>>>>>> Stashed changes

@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # API
+  - api/deployment.yaml
+  - api/service.yaml
+  - api/hpa.yaml
+  - api/ingress.yaml
+  # Automations
+  - automations/deployment.yaml
+  - automations/service.yaml
+  - automations/hpa.yaml
+  # Broker Worker
+  - broker-worker/deployment.yaml
+  - broker-worker/hpa.yaml
+  # Listeners
+  - listeners/deployment.yaml
+  - listeners/service.yaml
+  - listeners/ingress.yaml
+  # Refreshers
+  - refreshers/deployment.yaml
+  # Senders
+  - senders/deployment.yaml
+  - senders/service.yaml
+  - senders/hpa.yaml
+  # Redis
+  - redis/deployment.yaml
+  - redis/service.yaml
+  - redis/pvc.yaml
+  # RabbitMQ
+  - rabbitmq/deployment.yaml
+  - rabbitmq/service.yaml
+  - rabbitmq/pvc.yaml
+  # Qdrant
+  - qdrant/deployment.yaml
+  - qdrant/service.yaml
+  - qdrant/pvc.yaml
+  # Shared
+  - shared/cluster-issuer.yaml
+  - shared/attachments-pvc.yaml
+  - shared/scrapings-pvc.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: corretto
+    includeSelectors: false

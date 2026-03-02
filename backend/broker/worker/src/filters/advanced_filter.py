@@ -38,14 +38,6 @@ class AdvancedEmailFilter:
                 print(f"🚫 [FILTER] Skipping notification email from system sender: {sender_email}")
                 return None
 
-            # Check if email is from user
-            email_data["summarizer_only"] = False
-            if sender_email.lower() == email_data.get("user_email").lower():
-                email_data["action"] = "send_to_summarizer"
-                email_data["summarizer_only"] = True
-                email_data["needs_ai"] = email_data.get("reply_to_id").lower() != "no"
-                return email_data
-            
             # Check for duplicate message_id first
             message_id = email_data.get("message_id")
             box_email = email_data.get("user_email")
@@ -54,7 +46,28 @@ class AdvancedEmailFilter:
                 print(f"🚫 [FILTER] Duplicate message detected - message_id {message_id} already processed")
                 return None
             
-            # Apply the first filter: new conversation from sent messages
+            # Check if email is from user (OUTBOUND - from sender perspective)
+            if sender_email.lower() == email_data.get("user_email").lower():
+                reply_to_id = email_data.get("reply_to_id", "").lower()
+                
+                if reply_to_id == "no":
+                    # New conversation from user - create thread and save to DB
+                    thread_result = await self._create_new_thread_from_sent(email_data)
+                    if thread_result:
+                        print(f"✅ [FILTER] Created new thread for user-initiated OUTBOUND conversation")
+                        return {"action": "thread_created", "thread": thread_result, "needs_ai": False}
+                    else:
+                        print(f"❌ [FILTER] Failed to create new thread for OUTBOUND")
+                        return None
+                else:
+                    # User replying to existing thread - send to summarizer
+                    print(f"💬 [FILTER] User OUTBOUND reply to existing thread - will be handled by summarizer")
+                    email_data["action"] = "send_to_summarizer"
+                    email_data["summarizer_only"] = True
+                    email_data["needs_ai"] = False
+                    return email_data
+            
+            # Apply the first filter: new conversation from sent messages (external perspective)
             if await self._is_new_conversation_from_user(email_data):
                 thread_result = await self._create_new_thread_from_sent(email_data)
                 if thread_result:

@@ -1,7 +1,12 @@
 from langchain.tools import tool
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from automations.chatbot.services import email_service
-from automations.chatbot.db.db import get_supabase_client
+from automations.chatbot.db.db import get_supabase_client, get_colleagues_by_subscription, get_user_calendar_info
+from automations.chatbot.services.calendar_service import (
+    find_common_free_slots,
+    check_slot_availability,
+    schedule_calendar_event
+)
 from automations.ec_system.utils.utils import decrypt
 import os
 import httpx
@@ -127,34 +132,22 @@ def _update_tokens_in_db(email: str, access_token: str, expires_in: int, refresh
     Returns:
         bool: True if update successful
     """
+    from automations.chatbot.db.db import update_tokens_in_db
+    
     try:
-        supabase = get_supabase_client()
-        
-        # Calculate new expiry time
-        new_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-        new_expiry_iso = new_expiry.isoformat()
-        
-        # Encrypt tokens
+        # Encrypt tokens before storing
         encrypted_access_token = _encrypt_token(access_token)
+        encrypted_refresh_token = _encrypt_token(refresh_token) if refresh_token else None
         
-        update_data = {
-            "hashed_access_token": encrypted_access_token,
-            "expiry_token": new_expiry_iso
-        }
+        # Call db.py function with encrypted tokens
+        success = update_tokens_in_db(
+            email=email,
+            access_token=encrypted_access_token,
+            expires_in=expires_in,
+            refresh_token=encrypted_refresh_token
+        )
         
-        # Update refresh token if provided (Microsoft may rotate it)
-        if refresh_token:
-            encrypted_refresh_token = _encrypt_token(refresh_token)
-            update_data["hashed_refresh_token"] = encrypted_refresh_token
-        
-        response = supabase.table("subscription_services").update(update_data).eq("email", email.lower()).execute()
-        
-        if response.data:
-            print(f"✅ [TOKEN REFRESH] Tokens updated for {email}, expires at {new_expiry_iso}")
-            return True
-        else:
-            print(f"❌ [TOKEN REFRESH] Failed to update tokens for {email}")
-            return False
+        return success
             
     except Exception as e:
         print(f"❌ [TOKEN REFRESH] Error updating tokens for {email}: {str(e)}")
@@ -163,17 +156,16 @@ def _update_tokens_in_db(email: str, access_token: str, expires_in: int, refresh
 
 def _get_access_token_for_email(email: str) -> Optional[str]:
     """Retrieve and decrypt access token for a given email address. Refreshes if expired."""
+    from automations.chatbot.db.db import get_token_info_for_email
+    
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("subscription_services").select(
-            "hashed_access_token, hashed_refresh_token, expiry_token, email_provider"
-        ).eq("email", email.lower()).execute()
+        # Get token info from db.py
+        user_data = get_token_info_for_email(email)
         
-        if not response.data:
+        if not user_data:
             print(f"No credentials found for email {email}")
             return None
         
-        user_data = response.data[0]
         provider = user_data.get("email_provider", "").lower()
         
         # Check if token is expired or expiring soon (within 5 minutes)
@@ -266,23 +258,17 @@ def _get_imap_smtp_credentials(email: str) -> Optional[dict]:
     
     Returns None if no IMAP/SMTP configuration is found.
     """
+    from automations.chatbot.db.db import get_imap_smtp_credentials as db_get_imap_smtp_credentials
+    
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("subscription_services").select(
-            "email, imap_server, imap_port, smtp_server, smtp_port, hashed_password"
-        ).eq("email", email.lower()).execute()
+        # Get credentials from db.py
+        user_data = db_get_imap_smtp_credentials(email)
         
-        if not response.data:
+        if not user_data:
             print(f"No IMAP/SMTP credentials found for email {email}")
             return None
         
-        user_data = response.data[0]
         print(f"Found user data for {email}: imap_server={user_data.get('imap_server')}, smtp_server={user_data.get('smtp_server')}, has_password={bool(user_data.get('hashed_password'))}")
-        
-        # Check if IMAP/SMTP is configured
-        if not user_data.get("imap_server") or not user_data.get("smtp_server"):
-            print(f"IMAP/SMTP not configured for email {email}")
-            return None
         
         # Decrypt the password
         decrypted_password = ""
@@ -1125,3 +1111,357 @@ def delete_emails(
     
     return f"Error: Unsupported provider '{provider}'. Use 'google', 'microsoft', or 'imap'."
 
+
+@tool(
+    name_or_callable="schedule_or_propose_meeting",
+    description="""Schedule a meeting or propose available time slots for a meeting. This tool handles both single-person and multi-person meeting scheduling.
+
+USE CASES:
+1. Schedule a meeting for just the user (no colleagues)
+2. Schedule a meeting with colleagues from the same company
+3. Propose available time slots when no specific time is provided
+
+WORKFLOW:
+1. If colleagues are specified by NAME and multiple matches are found (ambiguous), the tool returns immediately asking for clarification
+2. If colleagues are specified but not found, the tool returns an error
+3. If all participants are identified:
+   - Without preferred_datetime: Returns a list of free slots in common
+   - With preferred_datetime: Checks availability and creates the event if everyone is free, otherwise proposes alternatives
+
+IMPORTANT:
+- The sender_email must be a configured email in the system with calendar access
+- Colleagues are searched within the same company (subscription) only
+- Business hours of all participants are respected (common availability window)
+- The tool searches up to days_ahead days into the future (default: 10)
+
+Returns: A message with either the proposed time slots, a confirmation of the created event, or an error/clarification request.""",
+    args_schema=(
+        {
+            "type": "object",
+            "properties": {
+                "sender_email": {
+                    "type": "string",
+                    "description": "Email address of the meeting organizer. Must be configured in the system with calendar access."
+                },
+                "event_title": {
+                    "type": "string",
+                    "description": "Title/subject of the meeting event."
+                },
+                "duration_minutes": {
+                    "type": "integer",
+                    "description": "Duration of the meeting in minutes (e.g., 30, 60, 90).",
+                    "default": 60
+                },
+                "colleagues_names_or_emails": {
+                    "type": ["array", "null"],
+                    "items": {"type": "string"},
+                    "description": "Optional list of colleague names or emails to include in the meeting. Names are searched within the same company. Leave empty for personal events."
+                },
+                "preferred_datetime": {
+                    "type": ["string", "null"],
+                    "description": "Optional ISO format datetime for the preferred meeting time (e.g., '2024-03-15T10:00:00'). If provided and available, the event will be created. If not available, alternatives will be proposed."
+                },
+                "days_ahead": {
+                    "type": "integer",
+                    "description": "Number of days to search ahead for available slots. Default: 10",
+                    "default": 10
+                },
+                "event_description": {
+                    "type": ["string", "null"],
+                    "description": "Optional description/notes for the meeting."
+                },
+                "event_location": {
+                    "type": ["string", "null"],
+                    "description": "Optional location for the meeting (e.g., 'Conference Room A', 'Google Meet')."
+                }
+            },
+            "required": ["sender_email", "event_title", "duration_minutes"]
+        }
+    )
+)
+def schedule_or_propose_meeting(
+    sender_email: str,
+    event_title: str,
+    duration_minutes: int = 60,
+    colleagues_names_or_emails: Optional[List[str]] = None,
+    preferred_datetime: Optional[str] = None,
+    days_ahead: int = 10,
+    event_description: Optional[str] = None,
+    event_location: Optional[str] = None
+) -> str:
+    """
+    Schedule a meeting or propose available time slots based on calendar availability.
+    """
+    print(f"🗓️ [MEETING] Starting schedule_or_propose_meeting for {sender_email}")
+    print(f"   Title: {event_title}, Duration: {duration_minutes}min")
+    print(f"   Colleagues: {colleagues_names_or_emails}")
+    print(f"   Preferred: {preferred_datetime}, Days ahead: {days_ahead}")
+    
+    # Step 1: Get organizer's calendar info
+    organizer_info = get_user_calendar_info(sender_email)
+    if not organizer_info:
+        return f"Errore: Non è stato possibile trovare le informazioni del calendario per {sender_email}. Assicurati che l'email sia configurata nel sistema con accesso al calendario."
+    
+    if not organizer_info.get("hashed_access_token"):
+        return f"Errore: L'utente {sender_email} non ha un token di accesso al calendario configurato."
+    
+    if not organizer_info.get("calendar_provider"):
+        return f"Errore: L'utente {sender_email} non ha un provider calendario configurato (google/microsoft)."
+    
+    # Build participants list starting with organizer
+    participants = [organizer_info]
+    attendee_emails = []
+    
+    # Step 2: If colleagues are specified, resolve them
+    if colleagues_names_or_emails:
+        print(f"🔍 [MEETING] Searching for colleagues: {colleagues_names_or_emails}")
+        
+        colleagues_result = get_colleagues_by_subscription(sender_email, colleagues_names_or_emails)
+        
+        # Check for errors
+        if colleagues_result.get("error"):
+            return f"Errore nella ricerca dei colleghi: {colleagues_result['error']}"
+        
+        # Check for ambiguous matches (STOP immediately)
+        ambiguous = colleagues_result.get("ambiguous_matches", {})
+        if ambiguous:
+            ambiguous_msgs = []
+            for term, emails in ambiguous.items():
+                emails_list = ", ".join(emails)
+                ambiguous_msgs.append(f"'{term}' corrisponde a più colleghi: [{emails_list}]")
+            
+            return (
+                f"⚠️ Ambiguità trovata! Non posso procedere perché alcuni nomi corrispondono a più persone:\n"
+                f"{chr(10).join(ambiguous_msgs)}\n\n"
+                f"Per favore, chiedi all'utente di specificare l'email esatta del collega desiderato."
+            )
+        
+        # Check for not found terms
+        not_found = colleagues_result.get("not_found", [])
+        if not_found:
+            not_found_list = ", ".join(not_found)
+            return (
+                f"⚠️ Non trovato! Non sono riuscito a trovare i seguenti colleghi nella stessa azienda:\n"
+                f"[{not_found_list}]\n\n"
+                f"Verifica che i nomi o le email siano corretti, oppure che i colleghi siano configurati nel sistema."
+            )
+        
+        # Add exact matches to participants
+        exact_matches = colleagues_result.get("exact_matches", [])
+        for colleague in exact_matches:
+            if colleague.get("email") and colleague.get("email") != sender_email:
+                participants.append(colleague)
+                attendee_emails.append(colleague.get("email"))
+        
+        print(f"✅ [MEETING] Found {len(exact_matches)} colleagues")
+    
+    # Step 3: If preferred_datetime is provided, check availability and create event
+    if preferred_datetime:
+        print(f"📅 [MEETING] Checking availability for preferred time: {preferred_datetime}")
+        
+        availability = check_slot_availability(
+            participants=participants,
+            slot_datetime=preferred_datetime,
+            duration_minutes=duration_minutes
+        )
+        
+        # Check for errors
+        if availability.get("error"):
+            return f"Errore nel controllo disponibilità: {availability['error']}"
+        
+        # Warn about calendar errors but continue
+        calendar_errors = availability.get("calendar_errors", [])
+        if calendar_errors:
+            errors_list = ", ".join(calendar_errors)
+            print(f"⚠️ [MEETING] Could not access calendars for: {errors_list}")
+        
+        # If slot is available, create the event
+        if availability.get("available"):
+            print(f"✅ [MEETING] Slot available, creating event...")
+            
+            event_result = schedule_calendar_event(
+                organizer=organizer_info,
+                title=event_title,
+                start_datetime=preferred_datetime,
+                duration_minutes=duration_minutes,
+                attendees=attendee_emails if attendee_emails else None,
+                description=event_description,
+                location=event_location
+            )
+            
+            if event_result.get("success"):
+                attendees_msg = f" con {', '.join(attendee_emails)}" if attendee_emails else ""
+                return (
+                    f"✅ Evento creato con successo!\n"
+                    f"📅 Titolo: {event_title}\n"
+                    f"🕐 Quando: {preferred_datetime}\n"
+                    f"⏱️ Durata: {duration_minutes} minuti{attendees_msg}\n"
+                    f"🆔 ID evento: {event_result.get('event_id')}"
+                )
+            else:
+                return f"Errore nella creazione dell'evento: {event_result.get('error', 'Errore sconosciuto')}"
+        
+        # Slot not available - find alternatives
+        conflicts = availability.get("conflicts", [])
+        conflicts_msg = f" (Conflitti: {', '.join(conflicts)})" if conflicts else ""
+        
+        print(f"⚠️ [MEETING] Slot not available{conflicts_msg}, finding alternatives...")
+        
+        # Find alternative slots
+        free_result = find_common_free_slots(
+            participants=participants,
+            duration_minutes=duration_minutes,
+            days_ahead=days_ahead,
+            preferred_datetime=None  # Search all available days
+        )
+        
+        if free_result.get("error"):
+            return f"L'orario richiesto ({preferred_datetime}) non è disponibile{conflicts_msg}. Errore nella ricerca alternative: {free_result['error']}"
+        
+        free_slots = free_result.get("free_slots", [])
+        if not free_slots:
+            return (
+                f"⚠️ L'orario richiesto ({preferred_datetime}) non è disponibile{conflicts_msg}.\n"
+                f"Purtroppo non ho trovato slot liberi comuni nei prossimi {days_ahead} giorni.\n"
+                f"Prova ad estendere il periodo di ricerca o a ridurre la durata della riunione."
+            )
+        
+        # Format alternative slots (show max 5)
+        slots_display = free_slots[:5]
+        slots_formatted = "\n".join([f"  • {slot}" for slot in slots_display])
+        more_msg = f"\n  ...e altri {len(free_slots) - 5} slot disponibili" if len(free_slots) > 5 else ""
+        
+        return (
+            f"⚠️ L'orario richiesto ({preferred_datetime}) non è disponibile{conflicts_msg}.\n\n"
+            f"Ecco alcuni slot alternativi disponibili per tutti i partecipanti:\n"
+            f"{slots_formatted}{more_msg}\n\n"
+            f"Chiedi all'utente quale preferisce, poi richiama questo tool con quel preferred_datetime."
+        )
+    
+    # Step 4: No preferred datetime - just propose available slots
+    print(f"🔍 [MEETING] No preferred time, finding available slots...")
+    
+    free_result = find_common_free_slots(
+        participants=participants,
+        duration_minutes=duration_minutes,
+        days_ahead=days_ahead
+    )
+    
+    if free_result.get("error"):
+        return f"Errore nella ricerca degli slot disponibili: {free_result['error']}"
+    
+    # Warn about calendar errors
+    calendar_errors = free_result.get("calendar_errors", [])
+    errors_warning = ""
+    if calendar_errors:
+        errors_list = ", ".join(calendar_errors)
+        errors_warning = f"\n⚠️ Nota: Non sono riuscito ad accedere ai calendari di: {errors_list}\n"
+    
+    free_slots = free_result.get("free_slots", [])
+    if not free_slots:
+        participants_msg = ""
+        if len(participants) > 1:
+            participant_names = [p.get("name") or p.get("email") for p in participants]
+            participants_msg = f" per {', '.join(participant_names)}"
+        
+        return (
+            f"Non ho trovato slot liberi comuni{participants_msg} nei prossimi {days_ahead} giorni.{errors_warning}\n"
+            f"Prova ad:\n"
+            f"  • Estendere il periodo di ricerca (days_ahead più alto)\n"
+            f"  • Ridurre la durata della riunione\n"
+            f"  • Verificare che gli orari di lavoro siano configurati correttamente"
+        )
+    
+    # Format available slots (show max 8)
+    slots_display = free_slots[:8]
+    slots_formatted = "\n".join([f"  • {slot}" for slot in slots_display])
+    more_msg = f"\n  ...e altri {len(free_slots) - 8} slot disponibili" if len(free_slots) > 8 else ""
+    
+    participants_msg = ""
+    if len(participants) > 1:
+        participant_names = [p.get("name") or p.get("email") for p in participants[1:]]  # Skip organizer
+        participants_msg = f" con {', '.join(participant_names)}"
+    
+    return (
+        f"📅 Ecco gli slot disponibili{participants_msg} nei prossimi {days_ahead} giorni:\n\n"
+        f"{slots_formatted}{more_msg}{errors_warning}\n\n"
+        f"Chiedi all'utente quale preferisce, poi richiama questo tool con quel preferred_datetime per creare l'evento."
+    )
+
+
+@tool(
+    name_or_callable="search_email_attachments",
+    description=(
+        "Search and retrieve attached documents and files sent by a specific email address. "
+        "Use this tool when the user asks to find attachments, documents, files, or any material "
+        "received from a particular sender or person. Returns a formatted list with download links."
+    ),
+    args_schema={
+        "type": "object",
+        "properties": {
+            "sender_email": {
+                "type": "string",
+                "description": "The email address of the sender to search attachments from"
+            },
+            "user_email": {
+                "type": "string",
+                "description": "The email address of the current user (to retrieve their service_id)"
+            }
+        },
+        "required": ["sender_email", "user_email"]
+    }
+)
+def search_email_attachments(sender_email: str, user_email: str) -> str:
+    """
+    Search for email attachments from a specific sender.
+    
+    This tool searches through the user's email attachments to find
+    all attachments received from a specific sender email address,
+    filtered by the user's service_id for security.
+    
+    Args:
+        sender_email: The email address of the sender to search for
+        user_email: The current user's email address (to get their service_id)
+        
+    Returns:
+        Markdown formatted string with:
+        - Message if no emails found from sender
+        - Message if emails found but no attachments
+        - Bullet list with clickable download links if attachments found
+    """
+    from automations.chatbot.db.db import get_attachments_by_sender_email, get_service_id_by_email
+    from automations.chatbot.services.documents_service import format_attachments_response
+    
+    print(f"🔍 [SEARCH_ATTACHMENTS] Searching attachments from {sender_email} for user {user_email}")
+    
+    # Validate input
+    if not sender_email or not sender_email.strip():
+        return "Errore: Devi specificare l'indirizzo email del mittente da cercare."
+    
+    if not user_email or not user_email.strip():
+        return "Errore: Non è stato possibile identificare il tuo account email."
+    
+    # Step 1: Get user's service_id from db.py
+    service_id = get_service_id_by_email(user_email.strip())
+    
+    if not service_id:
+        return f"Errore: Non trovo un account configurato per {user_email}."
+    
+    # Step 2: Search for attachments from the sender using service_id
+    try:
+        db_result = get_attachments_by_sender_email(
+            target_sender_email=sender_email.strip(),
+            service_id=service_id
+        )
+        
+        # Step 3: Format the response using the service
+        formatted_response = format_attachments_response(
+            db_result=db_result,
+            target_sender_email=sender_email.strip()
+        )
+        
+        return formatted_response
+        
+    except Exception as e:
+        print(f"❌ [SEARCH_ATTACHMENTS] Error searching attachments: {str(e)}")
+        return f"Errore nella ricerca degli allegati: {str(e)}"

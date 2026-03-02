@@ -2,8 +2,10 @@ from src.core.DAO.mailbox_dao import MailboxDAO
 from src.handler_exception import (
     MissingFieldException,
     NotFoundException,
-    DatabaseException
+    DatabaseException,
+    InvalidFieldException
 )
+from src.modules.mailbox.src.utils.utils import validate_email_address, validate_email_addresses, validate_send_email_fields
 
 
 class MailboxController:
@@ -27,9 +29,9 @@ class MailboxController:
         except Exception as e:
             raise DatabaseException(str(e))
 
-    def get_human_review_threads(self, limit: int, offset: int):
+    def get_human_review_threads(self, email: str, limit: int, offset: int):
         try:
-            return self.mailbox_dao.fetch_human_review_threads(limit, offset)
+            return self.mailbox_dao.fetch_human_review_threads(email, limit, offset)
         except Exception as e:
             raise DatabaseException(str(e))
 
@@ -61,3 +63,60 @@ class MailboxController:
             return self.mailbox_dao.fetch_threads_by_category(category, subcategory)
         except Exception as e:
             raise DatabaseException(str(e))
+
+    async def send_email(self, payload: dict):
+
+        validate_send_email_fields(payload)
+
+        provider = payload.get("provider", "").lower()
+        email = payload.get("email")
+        to = payload.get("to", [])
+        subject = payload.get("subject")
+        body = payload.get("body")
+        cc = payload.get("cc")
+        bcc = payload.get("bcc")
+        reply_to = payload.get("reply_to")
+        is_html = payload.get("is_html", False)
+
+        # Valida provider
+        if provider not in ["google", "microsoft"]:
+            raise InvalidFieldException(
+                field="provider",
+                reason="deve essere 'google' o 'microsoft'"
+            )
+
+        # Valida email addresses
+        validate_email_addresses(to, "to")
+        if cc:
+            validate_email_addresses(cc, "cc")
+        if bcc:
+            validate_email_addresses(bcc, "bcc")
+        if reply_to:
+            validate_email_address(reply_to, "reply_to")
+
+        attachments = payload.get("attachments")
+
+        if provider == "google":
+            return await self.mailbox_dao.send_google_email(
+                email=email,
+                to=to,
+                subject=subject,
+                body=body,
+                cc=cc,
+                bcc=bcc,
+                reply_to=reply_to,
+                attachments=attachments,
+                is_html=is_html
+            )
+        else:
+            return await self.mailbox_dao.send_microsoft_email(
+                email=email,
+                to=to,
+                subject=subject,
+                body=body,
+                cc=cc,
+                bcc=bcc,
+                reply_to=reply_to,
+                attachments=attachments,
+                is_html=is_html
+            )

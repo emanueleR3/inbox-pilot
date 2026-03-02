@@ -38,6 +38,7 @@ class OAuthLoginRequest(BaseModel):
     subscription_id: str
     services: str  # "all" (mail+calendar), "calendar" (solo calendar), "mail" (solo mail)
     email: Optional[str] = None  # Email opzionale per services="calendar"
+    service_id: str  # ID del service esistente da aggiornare (OBBLIGATORIO - da create-new-service)
 
 
 async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, request: Request):
@@ -48,12 +49,13 @@ async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, requ
         subscription_id = oauth_request.subscription_id
         services = oauth_request.services
         email = oauth_request.email
-        logger.info(f"Starting OAuth login for provider: {provider_name}, subscription_id: {subscription_id}, services: {services}, email: {email}")
+        service_id = oauth_request.service_id
+        logger.info(f"Starting OAuth login for provider: {provider_name}, subscription_id: {subscription_id}, services: {services}, email: {email}, service_id: {service_id}")
         
         if provider_name.lower() == "google":
-            return await _google_login(subscription_id, services, email, request)
+            return await _google_login(subscription_id, services, email, service_id, request)
         elif provider_name.lower() == "microsoft":
-            return await _microsoft_login(subscription_id, services, email, request)
+            return await _microsoft_login(subscription_id, services, email, service_id, request)
         else:
             raise BadRequestException(detail=f"Provider non supportato: {provider_name}")
             
@@ -64,17 +66,18 @@ async def oauth_login(provider_name: str, oauth_request: OAuthLoginRequest, requ
         raise OAuthException(provider=provider_name, reason=str(e))
 
 
-async def _google_login(subscription_id: str, services: str, email: str, request: Request):
+async def _google_login(subscription_id: str, services: str, email: str, service_id: str, request: Request):
     """
-    Gestisce il login Google con subscription_id, services e email.
+    Gestisce il login Google con subscription_id, services, email e service_id.
     """
     flow = create_google_flow(services)
     
-    # Crea uno stato personalizzato che include subscription_id, services e email
+    # Crea uno stato personalizzato che include subscription_id, services, email e service_id
     custom_state = {
         "subscription_id": subscription_id,
         "services": services,
         "email": email,  # Può essere None
+        "service_id": service_id,  # ID del service esistente da aggiornare
         "timestamp": str(int(time.time()))
     }
     encoded_state = base64.urlsafe_b64encode(json.dumps(custom_state).encode()).decode()
@@ -95,15 +98,16 @@ async def _google_login(subscription_id: str, services: str, email: str, request
         "message": "Google OAuth URL generated successfully"
     })
 
-async def _microsoft_login(subscription_id: str, services: str, email: str, request: Request):
+async def _microsoft_login(subscription_id: str, services: str, email: str, service_id: str, request: Request):
     """
-    Gestisce il login Microsoft con subscription_id, services e email.
+    Gestisce il login Microsoft con subscription_id, services, email e service_id.
     """
-    # Crea uno stato personalizzato che include subscription_id, services e email (come Google)
+    # Crea uno stato personalizzato che include subscription_id, services, email e service_id (come Google)
     custom_state = {
         "subscription_id": subscription_id,
         "services": services,
         "email": email,  # Può essere None
+        "service_id": service_id,  # ID del service esistente da aggiornare
         "timestamp": str(int(time.time()))
     }
     encoded_state = base64.urlsafe_b64encode(json.dumps(custom_state).encode()).decode()
@@ -128,10 +132,11 @@ async def google_callback(request: Request):
     try:
         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
         
-        # Prova a recuperare subscription_id, services e email dallo stato OAuth
+        # Prova a recuperare subscription_id, services, email e service_id dallo stato OAuth
         subscription_id = None
         services = None
         payload_email = None
+        service_id = None
         state = request.query_params.get("state")
         
         if state:
@@ -140,7 +145,8 @@ async def google_callback(request: Request):
                 subscription_id = decoded_state.get("subscription_id")
                 services = decoded_state.get("services")
                 payload_email = decoded_state.get("email")  # Email dal payload
-                logger.info(f"Retrieved from OAuth state - subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}")
+                service_id = decoded_state.get("service_id")  # ID del service esistente da aggiornare
+                logger.info(f"Retrieved from OAuth state - subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}, service_id: {service_id}")
             except Exception as e:
                 logger.warning(f"Could not decode OAuth state: {e}")
         
@@ -156,7 +162,7 @@ async def google_callback(request: Request):
             logger.error("Missing subscription_id from state, query params and cookies")
             raise SubscriptionIdRequiredException()
         
-        logger.info(f"Using subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}")
+        logger.info(f"Using subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}, service_id: {service_id}")
         
         flow = create_google_flow(services)
         
@@ -230,24 +236,26 @@ async def google_callback(request: Request):
         try:
             # Ora utilizziamo i parametri aggiornati del DAO
             if services == "calendar":
-                logger.info(f"Saving Google credentials for calendar-only access (email: {db_email})")
+                logger.info(f"Saving Google credentials for calendar-only access (email: {db_email}, service_id: {service_id})")
                 result = subscription_service_dao.save_google_credentials(
                     email=db_email,  # Usa l'email dal payload per calendar-only
                     subscription_id=subscription_id, 
                     access_token=access_token, 
                     refresh_token=refresh_token, 
                     expiry=expiry, 
-                    history_id=history_id  # Sarà None per calendar-only
+                    history_id=history_id,  # Sarà None per calendar-only
+                    service_id=service_id  # ID del service esistente da aggiornare
                 )
             else:
-                logger.info(f"Saving Google credentials for full access (email: {db_email})")
+                logger.info(f"Saving Google credentials for full access (email: {db_email}, service_id: {service_id})")
                 result = subscription_service_dao.save_google_credentials(
                     email=db_email,  # Usa l'email dell'account autenticato per full access
                     subscription_id=subscription_id, 
                     access_token=access_token, 
                     refresh_token=refresh_token, 
                     expiry=expiry, 
-                    history_id=history_id  # Conterrà il valore reale per full access
+                    history_id=history_id,  # Conterrà il valore reale per full access
+                    service_id=service_id  # ID del service esistente da aggiornare
                 )
             if result is False:
                 logger.error("Errore nel salvataggio delle credenziali Google nel database")
@@ -428,10 +436,11 @@ async def microsoft_callback(request: Request):
     Gestisce il callback dopo il login Microsoft.
     """
     try:
-        # Prova a recuperare subscription_id, services e email dallo stato OAuth (come Google)
+        # Prova a recuperare subscription_id, services, email e service_id dallo stato OAuth (come Google)
         subscription_id = None
         services = None
         payload_email = None
+        service_id = None
         state = request.query_params.get("state")
         
         if state:
@@ -440,7 +449,8 @@ async def microsoft_callback(request: Request):
                 subscription_id = decoded_state.get("subscription_id")
                 services = decoded_state.get("services")
                 payload_email = decoded_state.get("email")  # Email dal payload
-                logger.info(f"Retrieved from Microsoft OAuth state - subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}")
+                service_id = decoded_state.get("service_id")  # ID del service esistente da aggiornare
+                logger.info(f"Retrieved from Microsoft OAuth state - subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}, service_id: {service_id}")
             except Exception as e:
                 logger.warning(f"Could not decode Microsoft OAuth state: {e}")
         
@@ -458,7 +468,7 @@ async def microsoft_callback(request: Request):
             raise SubscriptionIdRequiredException()
         
         logger.info(f"Microsoft callback URL: {request.url}")
-        logger.info(f"Using subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}")
+        logger.info(f"Using subscription_id: {subscription_id}, services: {services}, payload_email: {payload_email}, service_id: {service_id}")
         
         # Controlla se c'è un errore da Microsoft
         error = request.query_params.get("error")
@@ -534,7 +544,7 @@ async def microsoft_callback(request: Request):
         # Salva nel database usando il subscription_id dalla richiesta
         # Ora utilizziamo i parametri aggiornati del DAO per gestire entrambe le subscription
         if services == "calendar":
-            logger.info(f"Saving Microsoft credentials for calendar-only access (email: {email})")
+            logger.info(f"Saving Microsoft credentials for calendar-only access (email: {email}, service_id: {service_id})")
             result = subscription_service_dao.save_microsoft_credentials(
                 email=db_email, 
                 subscription_id=subscription_id,
@@ -544,10 +554,11 @@ async def microsoft_callback(request: Request):
                 microsoft_subscription_id_inbound=None,  # Nessuna subscription per calendar-only
                 microsoft_subscription_id_outbound=None,  # Nessuna subscription per calendar-only
                 microsoft_expiration_datetime_inbound=None,
-                microsoft_expiration_datetime_outbound=None
+                microsoft_expiration_datetime_outbound=None,
+                service_id=service_id  # ID del service esistente da aggiornare
             )
         else:
-            logger.info(f"Saving Microsoft credentials for full access (email: {email})")
+            logger.info(f"Saving Microsoft credentials for full access (email: {email}, service_id: {service_id})")
             # Per full access, subscription è una lista con inbound e outbound
             inbound_sub = None
             outbound_sub = None
@@ -569,7 +580,8 @@ async def microsoft_callback(request: Request):
                 microsoft_subscription_id_inbound=inbound_sub.get("id") if inbound_sub else None,
                 microsoft_subscription_id_outbound=outbound_sub.get("id") if outbound_sub else None,
                 microsoft_expiration_datetime_inbound=inbound_sub.get("expirationDateTime") if inbound_sub else None,
-                microsoft_expiration_datetime_outbound=outbound_sub.get("expirationDateTime") if outbound_sub else None
+                microsoft_expiration_datetime_outbound=outbound_sub.get("expirationDateTime") if outbound_sub else None,
+                service_id=service_id  # ID del service esistente da aggiornare
             )
 
         if result is False:

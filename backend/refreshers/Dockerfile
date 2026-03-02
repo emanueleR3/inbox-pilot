@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all refresher sources
 COPY google_token_refresher/ ./google_token_refresher/
+COPY google_watch_refresher/ ./google_watch_refresher/
 COPY microsoft_token_refresher/ ./microsoft_token_refresher/
 COPY microsoft_subscription_refresher/ ./microsoft_subscription_refresher/
 

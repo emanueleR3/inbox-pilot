@@ -19,6 +19,8 @@ from automations.chatbot.tools import (
     delete_emails,
     forward_email,
     reply_to_email,
+    schedule_or_propose_meeting,
+    search_email_attachments,
 )
 from automations.chatbot.db.db import get_user_context
 from automations.chatbot.prompts import JERRY_AGENT_PROMPT, build_enriched_prompt
@@ -144,6 +146,8 @@ def create_chatbot_agent(state: GraphState):
         delete_emails,
         forward_email,
         reply_to_email,
+        schedule_or_propose_meeting,
+        search_email_attachments,
     ]
     
     agent = create_agent(

@@ -1,0 +1,40 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-namespace
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from within the staging namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/environment: staging
+    # Allow traffic from the ingress controller (kube-system)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+  egress:
+    # Allow traffic within staging namespace
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/environment: staging
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow external traffic (APIs, databases, etc.) but not to prod pod network
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.42.0.0/16  # Default k3s pod CIDR - blocks cross-namespace pod access

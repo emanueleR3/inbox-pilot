@@ -1,9 +1,13 @@
 # app/routes/metrics_routes.py
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Depends, Path
 from typing import Optional
+from src.core.dependecy import get_current_user
 from src.modules.metric.src.controllers.metric_controller import MetricsController
 
-router = APIRouter(tags=["Metrics"])
+router = APIRouter(
+    dependencies=[Depends(get_current_user)],
+    tags=["Metrics"]
+)
 controller = MetricsController()
 
 @router.get(

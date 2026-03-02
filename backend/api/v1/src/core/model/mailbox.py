@@ -51,3 +51,33 @@ class FailedOutboundEmail(BaseModel):
     outcome: str
     body: Optional[str] = None
 
+
+# =============================================================================
+# REQUEST/RESPONSE MODELS PER INVIO EMAIL
+# =============================================================================
+
+class EmailAttachment(BaseModel):
+    """Rappresenta un allegato email."""
+    filename: str
+    content: str  # Base64 encoded
+    content_type: str = "application/octet-stream"
+
+
+class SendEmailRequest(BaseModel):
+    """Modello per la richiesta di invio email."""
+    to: List[str]  # Lista di destinatari
+    subject: str
+    body: str
+    cc: Optional[List[str]] = None
+    bcc: Optional[List[str]] = None
+    reply_to: Optional[str] = None
+    attachments: Optional[List[EmailAttachment]] = None
+    is_html: bool = False  # Se True, body è HTML
+
+
+class SendEmailResponse(BaseModel):
+    """Risposta per l'invio email."""
+    success: bool
+    message_id: Optional[str] = None
+    message: str
+

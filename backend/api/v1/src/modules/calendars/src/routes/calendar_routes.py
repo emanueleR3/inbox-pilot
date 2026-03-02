@@ -1,8 +1,12 @@
 from fastapi import APIRouter, Body, status
 from typing import Dict, Any
+
+from fastapi.params import Depends
+from src.core.dependecy import get_current_user
 from src.modules.calendars.src.controllers.calendar_controller import CalendarController
 
 router = APIRouter(
+    dependencies=[Depends(get_current_user)],
     tags=["Calendars"]
 )
 
@@ -208,3 +212,320 @@ async def get_events(
     )
 ):
     return await controller.get_calendar_events(request_data)
+
+@router.post(
+    "/events/create",
+    status_code=status.HTTP_201_CREATED,
+    summary="Crea evento di calendario",
+    description="""
+    Crea un nuovo evento su Google Calendar o Microsoft Outlook.
+    
+    **Provider supportati:**
+    - `google`: Google Calendar API
+    - `microsoft`: Microsoft Graph API (Outlook)
+    
+    **Campi obbligatori:**
+    - `provider`: Provider calendario ("google" o "microsoft")
+    - `email`: Email dell'account autenticato
+    - `title`: Titolo dell'evento
+    - `start`: Data/ora inizio (ISO 8601)
+    - `end`: Data/ora fine (ISO 8601)
+    
+    **Campi opzionali:**
+    - `description`: Descrizione dell'evento
+    - `location`: Luogo dell'evento
+    - `attendees`: Lista email dei partecipanti
+    - `is_all_day`: Se True, evento per l'intera giornata
+    - `calendar_id`: ID del calendario (default: "primary")
+    - `timezone`: Timezone dell'evento (default: "Europe/Rome")
+    - `reminders`: Lista di minuti per i promemoria (solo Google)
+    """,
+    responses={
+        201: {
+            "description": "Evento creato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "event_id": "abc123xyz",
+                        "message": "Evento creato con successo",
+                        "event": {
+                            "id": "abc123xyz",
+                            "title": "Riunione di progetto",
+                            "description": "Discussione milestone Q1",
+                            "start": "2025-01-20T10:00:00+01:00",
+                            "end": "2025-01-20T11:00:00+01:00",
+                            "location": "Sala riunioni A",
+                            "is_all_day": False,
+                            "status": "confirmed"
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "summary": "Campi obbligatori mancanti",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Campi obbligatori mancanti: title, start, end"
+                            }
+                        },
+                        "invalid_dates": {
+                            "summary": "Date non valide",
+                            "value": {
+                                "error": True,
+                                "status_code": 400,
+                                "detail": "Campo 'start/end' non valido: la data di inizio deve essere precedente alla data di fine"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Token non valido o scaduto",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 401,
+                        "detail": "Token Google non valido"
+                    }
+                }
+            }
+        },
+        502: {
+            "description": "Errore di comunicazione con il servizio esterno",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 502,
+                        "detail": "Errore servizio Gmail: Status code 403: Forbidden"
+                    }
+                }
+            }
+        }
+    }
+)
+async def create_event(
+    request_data: Dict[str, Any] = Body(
+        ...,
+        example={
+            "provider": "google",
+            "email": "user@example.it",
+            "title": "Riunione di progetto",
+            "description": "Discussione milestone Q1",
+            "start": "2025-01-20T10:00:00+01:00",
+            "end": "2025-01-20T11:00:00+01:00",
+            "location": "Sala riunioni A",
+            "attendees": ["collega@example.com"],
+            "is_all_day": False,
+            "calendar_id": "primary",
+            "timezone": "Europe/Rome",
+            "reminders": [30, 10]
+        }
+    )
+):
+    return await controller.create_calendar_event(request_data)
+
+
+# =============================================================================
+# MODIFICA EVENTO
+# =============================================================================
+
+@router.patch(
+    "/events/{event_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Modifica evento di calendario",
+    description="""
+    Modifica un evento esistente su Google Calendar o Microsoft Outlook.
+    
+    **Provider supportati:**
+    - `google`: Google Calendar API
+    - `microsoft`: Microsoft Graph API (Outlook)
+    
+    **Campi obbligatori:**
+    - `provider`: Provider calendario ("google" o "microsoft")
+    - `email`: Email dell'account autenticato
+    - `event_id`: ID dell'evento da modificare (nel path)
+    
+    **Campi opzionali (solo quelli da modificare):**
+    - `title`: Nuovo titolo
+    - `description`: Nuova descrizione
+    - `start`: Nuova data/ora inizio (ISO 8601)
+    - `end`: Nuova data/ora fine (ISO 8601)
+    - `location`: Nuovo luogo
+    - `attendees`: Nuova lista partecipanti
+    - `is_all_day`: Evento giornata intera
+    - `calendar_id`: ID del calendario (default: "primary")
+    - `timezone`: Timezone dell'evento
+    """,
+    responses={
+        200: {
+            "description": "Evento aggiornato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "event_id": "abc123xyz",
+                        "message": "Evento aggiornato con successo",
+                        "event": {
+                            "id": "abc123xyz",
+                            "title": "Riunione di progetto - UPDATED",
+                            "description": "Discussione milestone Q1 e Q2",
+                            "start": "2025-01-20T14:00:00+01:00",
+                            "end": "2025-01-20T15:30:00+01:00",
+                            "location": "Sala riunioni B",
+                            "is_all_day": False,
+                            "status": "confirmed"
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 400,
+                        "detail": "Campi obbligatori mancanti: provider, email"
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Evento non trovato",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 404,
+                        "detail": "Evento 'abc123xyz' non trovato"
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Token non valido o scaduto",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 401,
+                        "detail": "Token Microsoft non valido"
+                    }
+                }
+            }
+        }
+    }
+)
+async def update_event(
+    event_id: str,
+    request_data: Dict[str, Any] = Body(
+        ...,
+        example={
+            "provider": "google",
+            "email": "user@example.it",
+            "title": "Riunione di progetto - UPDATED",
+            "description": "Discussione milestone Q1 e Q2",
+            "start": "2025-01-20T14:00:00+01:00",
+            "end": "2025-01-20T15:30:00+01:00",
+            "location": "Sala riunioni B"
+        }
+    )
+):
+    request_data["event_id"] = event_id
+    return await controller.update_calendar_event(request_data)
+
+@router.delete(
+    "/events/{event_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Elimina evento di calendario",
+    description="""
+    Elimina un evento esistente da Google Calendar o Microsoft Outlook.
+    
+    **Provider supportati:**
+    - `google`: Google Calendar API
+    - `microsoft`: Microsoft Graph API (Outlook)
+    
+    **Campi obbligatori:**
+    - `provider`: Provider calendario ("google" o "microsoft")
+    - `email`: Email dell'account autenticato
+    - `event_id`: ID dell'evento da eliminare (nel path)
+    
+    **Campi opzionali:**
+    - `calendar_id`: ID del calendario (default: "primary")
+    """,
+    responses={
+        200: {
+            "description": "Evento eliminato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "event_id": "abc123xyz",
+                        "message": "Evento eliminato con successo"
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 400,
+                        "detail": "Campi obbligatori mancanti: provider, email"
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Evento non trovato",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 404,
+                        "detail": "Evento 'abc123xyz' non trovato"
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Token non valido o scaduto",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": True,
+                        "status_code": 401,
+                        "detail": "Token Google non valido"
+                    }
+                }
+            }
+        }
+    }
+)
+async def delete_event(
+    event_id: str,
+    request_data: Dict[str, Any] = Body(
+        ...,
+        example={
+            "provider": "google",
+            "email": "user@example.it",
+            "calendar_id": "primary"
+        }
+    )
+):
+    request_data["event_id"] = event_id
+    return await controller.delete_calendar_event(request_data)

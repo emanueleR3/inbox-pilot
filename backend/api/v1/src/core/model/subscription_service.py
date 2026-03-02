@@ -64,7 +64,10 @@ class SubscriptionServiceCrate(BaseModel):
         return {"value": value}
 
 class SubscriptionServiceRead(BaseModel):
-    email: str
+    email: Optional[str] = None
+    name: Optional[str] = None 
+    service_id: Optional[str] = None
+    subscription_id: Optional[str] = None
     email_provider: Optional[str] = None
     calendar_provider: Optional[str] = None
     calendar_names: Optional[List[str]] = None

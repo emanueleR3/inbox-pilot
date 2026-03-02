@@ -49,3 +49,4 @@ class SubscriptionReadWithConfig(BaseModel):
     website: Optional[str] = None
     industry: Optional[str] = None
     is_configurated: bool
+    services: Optional[list[dict]] = None

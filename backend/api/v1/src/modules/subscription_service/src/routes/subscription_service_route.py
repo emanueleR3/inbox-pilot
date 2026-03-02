@@ -6,10 +6,115 @@ from src.modules.subscription_service.src.controllers.subscription_service_contr
 from src.modules.subscription_service.src.utils.utils import forward_post, forward_get
 
 router = APIRouter(
-    #dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user)],
     tags=["Subscription Service"],
 )
 controller = SubscriptionServiceController()
+
+
+@router.post(
+    "/create-new-service",
+    summary="Crea un nuovo subscription service",
+    description="""
+    Crea un nuovo record nella tabella `subscription_services`.
+
+    Input:
+    - `subscription_id`
+    - `name`
+
+    Note importanti:
+    - In DB `subscription_services.email` è `NOT NULL` e `UNIQUE`.
+    - Questo endpoint (così com'è) prende in input solo `subscription_id` e `name`.
+    - Se l'email non viene valorizzata lato backend, l'INSERT verrà rifiutato dal vincolo DB.
+
+    Suggerimento operativo:
+    - Per una versione “production-ready”, tipicamente si abilita l'autenticazione e si ricava l'email dal token
+      con `Depends(get_current_user)` (vedi parametro commentato sotto).
+    """,
+    responses={
+        200: {
+            "description": "Record creato con successo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "service": {
+                            "service_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                            "email": "user@example.it",
+                            "subscription_id": "9a9a9a9a-1111-2222-3333-444444444444",
+                            "email_provider": "google",
+                            "calendar_provider": "google",                           "name": "Nome Attività",
+                            "config_completed": False,
+                            "activated": False,
+                            "draft": True,
+                            "name": "Nome Attività",
+                        }
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Richiesta non valida",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_fields": {
+                            "summary": "Campi mancanti",
+                            "value": {"detail": "Campi obbligatori mancanti: subscription_id, name"},
+                        }
+                    }
+                }
+            },
+        },
+        401: {"description": "Non autenticato"},
+        409: {"description": "Conflitto (record già esistente)"},
+        500: {
+            "description": "Errore interno del server",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "db_constraint": {
+                            "summary": "Vincolo DB (email NOT NULL/UNIQUE)",
+                            "value": {"detail": "Errore database durante: creazione subscription_service"},
+                        }
+                    }
+                }
+            },
+        },
+    },
+)
+def create_subscription_service(
+    payload: dict = Body(
+        ...,
+        example={
+            "subscription_id": "9a9a9a9a-1111-2222-3333-444444444444",
+            "name": "Nome Attività",
+        },
+        description="Dati per creare un nuovo subscription service",
+    ),
+):
+
+    subscription_id = payload.get("subscription_id")
+    name = payload.get("name")
+
+    created_service = controller.create_minimal_service(
+        subscription_id=subscription_id,
+        name=name,
+    )
+
+    service = {
+        "service_id": created_service.get("service_id"),
+        "email": created_service.get("email"),
+        "subscription_id": created_service.get("subscription_id"),
+        "email_provider": created_service.get("email_provider"),
+        "calendar_provider": created_service.get("calendar_provider"),
+        "name": created_service.get("name"),
+        "config_completed": created_service.get("config_completed"),
+        "activated": created_service.get("activated"),
+        "draft": created_service.get("draft"),
+    }
+
+    return {"success": True, "service": service}
 
 
 @router.post(
@@ -902,11 +1007,16 @@ def update_information(
             "content": {
                 "application/json": {
                     "examples": {
+                        "no_services": {
+                            "summary": "Subscription valida ma senza servizi collegati",
+                            "value": []
+                        },
                         "multiple_services": {
                             "summary": "Subscription con più servizi (Google e Microsoft)",
                             "value": [
                                 {
                                     "email": "user@gmail.com",
+                                    "name": "User name",
                                     "email_provider": "google",
                                     "calendar_provider": "google",
                                     "calendar_names": None,
@@ -933,6 +1043,7 @@ def update_information(
                                 },
                                 {
                                     "email": "user@outlook.com",
+                                    "name": "User name",
                                     "email_provider": "microsoft",
                                     "calendar_provider": "microsoft",
                                     "calendar_names": None,
@@ -964,6 +1075,7 @@ def update_information(
                             "value": [
                                 {
                                     "email": "user@custommail.com",
+                                    "name": "User name",
                                     "email_provider": "imap",
                                     "calendar_provider": None,
                                     "calendar_names": None,
@@ -1003,10 +1115,10 @@ def update_information(
             }
         },
         404: {
-            "description": "Nessun servizio associato trovato per la subscription_id specificata",
+            "description": "Sottoscrizione non trovata",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Nessun servizio trovato per subscription_id=xxx"}
+                    "example": {"detail": "Sottoscrizione con ID xxx non trovata"}
                 }
             }
         },

@@ -178,7 +178,7 @@ def add_new_user(
         },
         description="Email e password per la registrazione del nuovo utente.",
     ),
-    #current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user)
 ):
     result = controller.add_new_user(payload)
     return {"message": "Registrazione completata", "result": result}
@@ -196,22 +196,41 @@ def add_new_user(
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Registrazione completata",
-                        "result": {
-                            "user": {
-                                "session of the user"
-                            },
-                            "subscription": {
-                                "name": "TechVision Srl",
-                                "vat_number": "IT12345678901",
-                                "city": "Milano",
-                                "address": "Via Roma 42",
-                                "active": True,
-                                "current_period_end": "2025-12-31T23:59:59Z",
-                                "plan": "premium",
-                                "industry": "Tecnologia",
+                            "message": "Registrazione completata",
+                            "result": {
+                                "id": "35e26201-6c9f-4933-806e-315cefe20b73",
+                                "email": "dev1@example.com",
+                                "subscriptions": [
+                                    {
+                                        "subscription_id": "b81fdc42-59f5-4d7c-bf60-95e02bfd06fc",
+                                        "name": "Emanuele Srl",
+                                        "vat_number": "1234567890",
+                                        "city": "Lecce",
+                                        "address": "Via Enrico Fermi",
+                                        "active": True,
+                                        "current_period_end": "2026-01-22T16:36:59.451000Z",
+                                        "plan": "personal",
+                                        "website": "https://keplero.ai",
+                                        "industry": "Informatica",
+                                        "is_configurated": True
+                                    },
+                                    {
+                                        "subscription_id": "4abd29ef-8e47-4714-947e-6a472661433d",
+                                        "name": "Acme Inc",
+                                        "vat_number": "1\\234567890",
+                                        "city": "Milan",
+                                        "address": "Via Roma 1",
+                                        "active": True,
+                                        "current_period_end": "2026-03-16T21:45:03.050000Z",
+                                        "plan": "trial",
+                                        "website": None,
+                                        "industry": None,
+                                        "is_configurated": False
+                                    }
+                                ],
+                                "jwt": "jwt_token",
+                                "sub_selected": 1
                             }
-                        }
                     }
                 }
             }
@@ -252,13 +271,9 @@ def create_new_sub(
         example={
             "user": {
                 "id": "userid",
-                "email": "email",
-                "subscriptions": [
-                    "...."
-                ],
-                "jwt": "jwt_token",
-                "sub_selected": "0"
+                "email": "user@example.com"
             },
+            "jwt": "jwt_token",
             "subscription": {
                 "name": "Palestra Torino123",
                 "vat_number": "IT123456789",
@@ -270,8 +285,9 @@ def create_new_sub(
                 "industry": "Fitness"
             }
         },
-        description="Email e password per la registrazione del nuovo utente.",
-    )
+        description="Crea e collega una nuova subscription a un account già esistente (user + jwt).",
+    ),
+    current_user=Depends(get_current_user)
 ):
     result = controller.create_new_sub(payload)
     return {"message": "Registrazione completata", "result": result}
@@ -294,7 +310,7 @@ def create_new_sub(
         500: {"description": "Errore interno del server"}
     }
 )
-def get_users_by_subscription(subscription_id: str):
+def get_users_by_subscription(subscription_id: str, current_user=Depends(get_current_user)):
     return controller.get_users_by_subscription(subscription_id)
 
 @router.post(
@@ -306,6 +322,7 @@ def get_users_by_subscription(subscription_id: str):
     - Richiede email e password validi
     - Verifica le credenziali contro Supabase Auth
     - Restituisce un token di sessione in caso di successo
+    - Per ogni subscription ritorna anche i `subscription_services` associati nel campo `services`
     """,
     responses={
         200: {
@@ -329,7 +346,20 @@ def get_users_by_subscription(subscription_id: str):
                                     "plan": "personal",
                                     "website": "www.namesrl.com",
                                     "industry": "Tecnologia",
-                                    "is_configurated": "true"
+                                    "is_configurated": "true",
+                                    "services": [
+                                        {
+                                            "service_id": "b6b3405a-e42f-42e3-9b29-0d5419481aba",
+                                            "email": "user@example.com",
+                                            "subscription_id": "sub_id12345",
+                                            "email_provider": "google",
+                                            "calendar_provider": "google",
+                                            "config_completed": False,
+                                            "activated": False,
+                                            "draft": True,
+                                            "name": "Nome Attività"
+                                        }
+                                    ]
                                 }
                             ],
                             "jwt": "jwt_token",
@@ -431,7 +461,7 @@ def reset_password(
         ...,
         example={"email": "user@example.com"},
         description="Email dell'utente che richiede il reset della password.",
-    )
+    ),
 ):
     return controller.reset_password(payload)
 
@@ -532,5 +562,5 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
         500: {"description": "Errore interno del server"}
     }
 )
-async def get_subscription_by_id(subscription_id: str):
+async def get_subscription_by_id(subscription_id: str, current_user=Depends(get_current_user)):
     return controller.get_subscription_by_id(subscription_id)

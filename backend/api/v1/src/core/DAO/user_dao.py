@@ -1,5 +1,4 @@
 from fastapi import HTTPException, status
-from fastapi import HTTPException, status
 from supabase_auth.errors import AuthApiError
 from src.core.model.user import UserRead, UserReadSub, UserReadSubs
 from src.core.model.subscription import SubscriptionRead, SubscriptionReadWithConfig
@@ -80,6 +79,21 @@ class UserDAO:
             for c in (config_response.data or [])
         }
 
+        services_response = (
+            self.supabase
+            .table("subscription_services")
+            .select("service_id, email, subscription_id, email_provider, calendar_provider, config_completed, activated, draft, name")
+            .in_("subscription_id", subscription_ids)
+            .execute()
+        )
+
+        services_map: dict[str, list[dict]] = {}
+        for row in (services_response.data or []):
+            sub_id = row.get("subscription_id")
+            if not sub_id:
+                continue
+            services_map.setdefault(sub_id, []).append(row)
+
         subscriptions = [
             SubscriptionReadWithConfig(
                 subscription_id=sub["subscription_id"],
@@ -93,6 +107,7 @@ class UserDAO:
                 website=sub.get("website"),
                 industry=sub.get("industry"),
                 is_configurated=config_map.get(sub["subscription_id"], False), # TODO: monitorare se funziona sempre
+                services=services_map.get(sub["subscription_id"], []),
 
             )
             for sub in subs_response.data
@@ -165,33 +180,34 @@ class UserDAO:
 
         return response
 
-    def create_new_sub(self, user: dict, subscription_data: dict) -> UserReadSubs:
-        # Estrai i campi dal dict utente
+    def create_new_sub(self, user: dict, subscription_data: dict, jwt: str | None = None) -> UserReadSubs:
         user_id = user.get("id")
         user_email = user.get("email")
-        user_subscriptions = user.get("subscriptions", [])
-        user_jwt = user.get("jwt")
-        user_sub_selected = user.get("sub_selected")
+        jwt = jwt or user.get("jwt")
 
-        # Crea una nuova subscription
-        subscription = SubscriptionDAO().create_subscription(subscription_data)
+        if not user_id or not user_email:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User id/email mancanti")
 
-        # Collega l’utente alla subscription
-        self.link_user_subscription(user_id, subscription.subscription_id)
+        if not jwt:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="JWT mancante")
 
-        # Aggiungi la nuova subscription all’elenco
-        user_subscriptions.append(subscription)
+        self.supabase_auth.rpc(
+            "create_subscription_for_user",
+            {
+                "p_user_id": user_id,
+                "p_subscription": subscription_data,
+            }
+        ).execute()
 
-        # Recupera l’indice dell’ultima subscription
-        last_index = len(user_subscriptions) - 1
+        subscriptions = self.get_subscriptions_by_user(user_id)
+        sub_selected = max(len(subscriptions) - 1, 0)
 
-        # Ritorna il nuovo oggetto UserReadSubs
         return UserReadSubs(
             id=user_id,
             email=user_email,
-            subscriptions=user_subscriptions,
-            jwt=user_jwt,
-            sub_selected=last_index  # 🔥 deve essere un int, non un oggetto
+            subscriptions=subscriptions,
+            jwt=jwt,
+            sub_selected=sub_selected,
         )
 
 
@@ -243,6 +259,11 @@ class UserDAO:
             "options": {"redirect_to":  "https://corretto.pro/dashboard"}
         })
         return response.session
+    
+    def send_password_reset(self, email: str):
+            self.supabase_auth.auth.reset_password_for_email(
+                email,
+            )
 
     def logout(self):
         return self.supabase_auth.auth.sign_out()

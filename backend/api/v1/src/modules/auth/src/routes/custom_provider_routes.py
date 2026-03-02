@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, Body
 from src.core.dependecy import get_current_user
 from src.modules.auth.src.controllers.custom_provider_controller import CustomProviderController
 
-router = APIRouter(tags=["Auth Custom Provider"])
+router = APIRouter(
+    dependencies=[Depends(get_current_user)],
+    tags=["Auth Custom Provider"])
 
 @router.post(
     "/custom-provider/login",
@@ -10,6 +12,9 @@ router = APIRouter(tags=["Auth Custom Provider"])
     description="""
     Permette il login utilizzando un provider email personalizzato (IMAP/SMTP).
     Richiede le credenziali e le configurazioni del server di posta.
+    
+    IMPORTANTE: service_id è OBBLIGATORIO. Devi prima chiamare POST /create-new-service 
+    per ottenere un service_id, poi passarlo in questa richiesta.
     """,
     responses={
         200: {
@@ -54,6 +59,11 @@ router = APIRouter(tags=["Auth Custom Provider"])
             "content": {
                 "application/json": {
                     "examples": {
+                        "missing_service_id": {
+                            "value": {
+                                "detail": "service_id è obbligatorio. Devi prima creare un service con POST /create-new-service"
+                            }
+                        },
                         "missing_fields": {
                             "value": {
                                 "detail": "Campi obbligatori mancanti: server_imap, server_smtp, email, password"
@@ -84,17 +94,23 @@ async def custom_login_route(
     payload: dict = Body(
         ...,
         example={
+            "service_id": "service_id_12345",
+            "subscription_id": "sub_12345",
             "server_imap": "imap.example.com",
             "server_smtp": "smtp.example.com",
             "imap_port": 993,
             "smtp_port": 465,
             "email": "user@example.com",
             "password": "secure_password",
-            "subscription_id": "sub_12345",
             "calendar_provider": "google"
         },
-        description="Credenziali e configurazione del server di posta personalizzato"
+        description="Credenziali e configurazione del server di posta personalizzato. IMPORTANTE: service_id è OBBLIGATORIO - ottienilo prima con POST /create-new-service"
     )
 ):
+    # Validazione service_id obbligatorio
+    if not payload.get("service_id"):
+        from src.handler_exception import BadRequestException
+        raise BadRequestException(detail="service_id è obbligatorio.")
+    
     res = CustomProviderController.custom_provider_login(payload)
     return {"status": "success", "message": "Credenziali custom provider salvate con successo", "data": res}
