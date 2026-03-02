@@ -1577,11 +1577,23 @@ class LLMClient:
             print(f"⚠️ Unknown calendar provider: {calendar_provider}, using default Europe/Rome")
             user_timezone = "Europe/Rome"
         
-        # Time range - default is next 7 days
-        now = datetime.now()
+        # Time range - default is next 7 working days
+        # Use timezone-aware now to avoid treating the UTC server clock as local time
+        from zoneinfo import ZoneInfo as _ZoneInfo
+        _tz = _ZoneInfo(user_timezone)
+        now = datetime.now(tz=_tz)
         weekly_start_time = now
-        weekly_end_time = now + timedelta(days=7)
-        
+
+        # Compute end of the 7th working day from now (inclusive of today if it's a working day)
+        _d = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        _working_count = 0
+        while _working_count < 7:
+            if str(_d.weekday()) in business_hours:
+                _working_count += 1
+            if _working_count < 7:
+                _d += timedelta(days=1)
+        weekly_end_time = _d.replace(hour=23, minute=59, second=59, microsecond=0)
+
         # Track if we're searching for a specific favorite_day
         searching_favorite_day = False
         favorite_day_unavailable = False
@@ -1589,8 +1601,8 @@ class LLMClient:
         if favorite_day:
             try:
                 fav_date = datetime.strptime(favorite_day, "%Y-%m-%d")
-                start_time = fav_date.replace(hour=0, minute=0, second=0, microsecond=0)
-                end_time = fav_date.replace(hour=23, minute=59, second=59, microsecond=0)
+                start_time = fav_date.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=_tz)
+                end_time = fav_date.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=_tz)
                 if start_time < now:
                     start_time = now
                 searching_favorite_day = True
