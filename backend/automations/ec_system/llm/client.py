@@ -967,6 +967,7 @@ class LLMClient:
         event_type: str,
         created_by: str,
         email_id: Optional[str] = None,
+        thread_id: Optional[str] = None,
         language: str = "ITA",
         favorite_day: Optional[str] = None
     ) -> SchedulerResponse:
@@ -1117,6 +1118,7 @@ class LLMClient:
                             event_type=event_type,
                             created_by=created_by,
                             email_id=email_id,
+                            thread_id=thread_id,
                             attendees=appointment_info.get('attendees'),
                             place=appointment_info.get('place'),
                             additional_notes=appointment_info.get('additional_notes') + "\n\nScheduled via Corretto AI Assistant." if appointment_info.get('additional_notes') else "Scheduled via Corretto AI Assistant."
@@ -1506,7 +1508,8 @@ class LLMClient:
                             new_duration=appointment_info.get('duration') or 60,
                             new_attendees=appointment_info.get('attendees'),
                             new_place=appointment_info.get('place'),
-                            additional_notes=appointment_info.get('additional_notes')
+                            additional_notes=appointment_info.get('additional_notes'),
+                            thread_id=thread_id
                         )
                         scheduled = reschedule_result.get('scheduled', False)
                         overlap = reschedule_result.get('overlap', False)
@@ -1673,6 +1676,7 @@ class LLMClient:
         event_type: str,
         created_by: str,
         email_id: Optional[str] = None,
+        thread_id: Optional[str] = None,
         attendees: list = None,
         place: str = None,
         additional_notes: str = None
@@ -1825,7 +1829,8 @@ class LLMClient:
             "event_type": event_type,
             "event_code": event_code,
             "created_by": created_by,
-            "provider_event_id": provider_event_id  # Save the provider's event ID
+            "provider_event_id": provider_event_id,  # Save the provider's event ID
+            "thread_id": thread_id
         }
         
         # Insert into scheduled_events table
@@ -1858,7 +1863,8 @@ class LLMClient:
         new_duration, 
         new_attendees, 
         new_place, 
-        additional_notes
+        additional_notes,
+        thread_id: Optional[str] = None
     ):
         """
         Tool function to reschedule an appointment.
@@ -1878,7 +1884,7 @@ class LLMClient:
         print(f"🛠️ [TOOL] reschedule_appointment called for event_code: {event_code}")
 
         # Import required functions
-        from db_client import get_scheduled_event_by_code, get_calendar_service_data, update_scheduled_event_provider_id
+        from db_client import get_scheduled_event_by_code, get_calendar_service_data, update_scheduled_event_provider_id, update_scheduled_event_thread_id
 
         # Find event by event_code
         event = get_scheduled_event_by_code(event_code)
@@ -2019,6 +2025,10 @@ class LLMClient:
             update_success = update_scheduled_event_provider_id(event_code, updated_provider_event_id)
             if not update_success:
                 print(f"⚠️ Failed to update provider_event_id in database, but event was rescheduled")
+        
+        # Update thread_id in database if provided
+        if thread_id:
+            update_scheduled_event_thread_id(event_code, thread_id)
         
         # Return event details for ICS generation
         return {
