@@ -1595,24 +1595,23 @@ class LLMClient:
         weekly_end_time = _d.replace(hour=23, minute=59, second=59, microsecond=0)
 
         # Track if we're searching for a specific favorite_day
-        searching_favorite_day = False
+        searching_favorite_day = bool(favorite_day)
         favorite_day_unavailable = False
-        
+
+        # Always search the full 7 working-day window.
+        # When favorite_day is provided we use it only to set favorite_day_unavailable
+        # (so the writer can tell the user that specific day was unavailable), but we
+        # always return the full weekly slot list so the user gets meaningful options.
+        start_time = weekly_start_time
+        end_time = weekly_end_time
+
         if favorite_day:
             try:
-                fav_date = datetime.strptime(favorite_day, "%Y-%m-%d")
-                start_time = fav_date.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=_tz)
-                end_time = fav_date.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=_tz)
-                if start_time < now:
-                    start_time = now
-                searching_favorite_day = True
+                # Validate format only
+                datetime.strptime(favorite_day, "%Y-%m-%d")
             except ValueError:
                 print(f"❌ Invalid favourite_day format: {favorite_day}")
-                start_time = weekly_start_time
-                end_time = weekly_end_time
-        else:
-            start_time = weekly_start_time
-            end_time = weekly_end_time
+                searching_favorite_day = False
         
         # Helper function to get busy slots
         def get_busy_slots(s_time, e_time):
@@ -1624,7 +1623,7 @@ class LLMClient:
                 print(f"❌ Unknown calendar provider: {calendar_provider}")
                 return []
         
-        # Get busy slots for the selected time range
+        # Get busy slots for the full week
         busy_slots = get_busy_slots(start_time, end_time)
         
         # DEBUG FULL STATE
@@ -1643,7 +1642,7 @@ class LLMClient:
         print(f"not_available_dates: {not_available_dates}")
         print("=================================================\n")
         
-        # Calculate free slots with user's timezone
+        # Calculate free slots for the full week
         free_slots = utils.calculate_free_slots(
             start_time,
             end_time,
@@ -1654,27 +1653,16 @@ class LLMClient:
             user_timezone=user_timezone
         )
         
-        print(f"✅ Found {len(free_slots)} free slots for {'favorite day ' + favorite_day if searching_favorite_day else 'next 7 days'}.")
-        
-        # If favorite_day was specified but no slots found, fallback to weekly slots
-        if searching_favorite_day and len(free_slots) == 0:
-            print(f"⚠️ No slots available for favorite day {favorite_day}, falling back to weekly slots...")
-            favorite_day_unavailable = True
-            
-            # Get busy slots for the full week
-            busy_slots = get_busy_slots(weekly_start_time, weekly_end_time)
-            
-            # Calculate free slots for the full week
-            free_slots = utils.calculate_free_slots(
-                weekly_start_time,
-                weekly_end_time,
-                busy_slots,
-                business_hours,
-                appointment_duration,
-                not_available_dates,
-                user_timezone=user_timezone
-            )
-            print(f"✅ Found {len(free_slots)} free slots for next 7 days (fallback).")
+        print(f"✅ Found {len(free_slots)} free slots for next 7 working days.")
+
+        # Determine favorite_day_unavailable: True only if no slots exist on the requested day
+        if searching_favorite_day and favorite_day:
+            fav_slots = [s for s in free_slots if s.startswith(favorite_day)]
+            if len(fav_slots) == 0:
+                favorite_day_unavailable = True
+                print(f"⚠️ No slots available on favorite day {favorite_day} — favorite_day_unavailable=True.")
+            else:
+                print(f"ℹ️ {len(fav_slots)} slot(s) available on favorite day {favorite_day}.")
         
         return {"slots": free_slots, "favorite_day_unavailable": favorite_day_unavailable}
 
