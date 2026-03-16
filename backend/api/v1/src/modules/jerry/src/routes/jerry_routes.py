@@ -1,5 +1,7 @@
 """FastAPI routes for Jerry chatbot - proxies to automations service."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -12,6 +14,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
     tags=["jerry"])
 controller = JerryController()
+logger = logging.getLogger(__name__)
 
 
 class CreateThreadRequest(BaseModel):
@@ -104,11 +107,39 @@ async def send_message(request: SendMessageRequest):
     Returns:
         Dictionary with thread_id and response
     """
-    return await controller.send_message(
-        request.user_id,
-        request.message,
-        request.thread_id
-    )
+    try:
+        return await controller.send_message(
+            request.user_id,
+            request.message,
+            request.thread_id
+        )
+    except HTTPException as exc:
+        if exc.status_code >= 500:
+            logger.exception(
+                "Jerry /message failed with HTTPException",
+                extra={
+                    "route": "/jerry/message",
+                    "status_code": exc.status_code,
+                    "user_id": request.user_id,
+                    "thread_id": request.thread_id,
+                    "message_length": len(request.message or "")
+                }
+            )
+        raise
+    except Exception:
+        logger.exception(
+            "Jerry /message failed with unexpected error",
+            extra={
+                "route": "/jerry/message",
+                "user_id": request.user_id,
+                "thread_id": request.thread_id,
+                "message_length": len(request.message or "")
+            }
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error"
+        )
 
 
 @router.post(
