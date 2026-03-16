@@ -1,6 +1,7 @@
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 import os, dotenv
+import logging
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Annotated
@@ -29,6 +30,7 @@ https://chatgpt.com/share/69248492-957c-800f-946c-f9039e4783f3
 '''
 
 dotenv.load_dotenv()
+logger = logging.getLogger(__name__)
 
 # Configure LangSmith tracing
 os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "true")
@@ -155,18 +157,49 @@ def create_chatbot_agent(state: GraphState):
     
     return agent
 
-checkpointer_cm = PostgresSaver.from_conn_string(DB_URI)
-checkpointer = checkpointer_cm.__enter__()
-checkpointer.setup()
 
-builder = StateGraph(GraphState)
+checkpointer_cm = None
+checkpointer = None
+graph = None
 
-builder.add_node("chatbot", create_chatbot_agent)
 
-builder.add_edge(START, "chatbot")
-builder.add_edge("chatbot", END)
+def _build_graph_with_checkpointer():
+    """Build graph and checkpointer runtime objects."""
+    global checkpointer_cm, checkpointer, graph
 
-graph = builder.compile(checkpointer=checkpointer)
+    checkpointer_cm = PostgresSaver.from_conn_string(DB_URI)
+    checkpointer = checkpointer_cm.__enter__()
+    checkpointer.setup()
+
+    builder = StateGraph(GraphState)
+    builder.add_node("chatbot", create_chatbot_agent)
+    builder.add_edge(START, "chatbot")
+    builder.add_edge("chatbot", END)
+
+    graph = builder.compile(checkpointer=checkpointer)
+
+
+def reset_runtime() -> None:
+    """Reset checkpointer and graph runtime after connection-level failures."""
+    global checkpointer_cm, checkpointer
+
+    old_cm = checkpointer_cm
+    old_checkpointer = checkpointer
+
+    try:
+        if old_cm is not None:
+            old_cm.__exit__(None, None, None)
+    except Exception as exc:
+        logger.warning("[JERRY] Failed closing previous checkpointer context: %s", exc)
+
+    checkpointer_cm = None
+    checkpointer = None
+
+    _build_graph_with_checkpointer()
+    logger.info("[JERRY] Runtime reset completed")
+
+
+_build_graph_with_checkpointer()
 
 
 
