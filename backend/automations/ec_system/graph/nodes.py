@@ -1589,6 +1589,7 @@ def scheduler_node(state):
         extracted_info = state.get("extracted_info", {})
         service_id = user_config.get("service_id")
         email_id = state.get("email_id")  # Email UUID for scheduled_events
+        thread_id = extracted_info.get("thread_id")  # Thread ID for scheduled_events
         created_by = extracted_info.get("from", "unknown")
         event_type = "APPOINTMENT"  # Default event type
         
@@ -1652,6 +1653,7 @@ def scheduler_node(state):
             event_type=event_type,
             created_by=created_by,
             email_id=email_id,
+            thread_id=thread_id,
             language=language,
             favorite_day=favorite_day
         )
