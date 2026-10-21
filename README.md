@@ -27,42 +27,7 @@ On top of that, the dashboard included **Jerry**, a chat assistant that could se
 
 ## Architecture
 
-![Original architecture sketch](docs/architecture.png)
-
-*The image above is the first design sketch (October 2025). The system that was actually built differs from it: it ran on k3s instead of Docker Swarm, and the MCP server and Teams integration never shipped. The diagram below reflects the final code.*
-
-```mermaid
-flowchart LR
-    subgraph providers [Mail providers]
-        GM[Gmail]
-        MS[Outlook / Microsoft Graph]
-        IM[IMAP / SMTP]
-    end
-
-    GM -- Pub/Sub push --> L[listeners]
-    MS -- webhook --> L
-    IM -- polling --> L
-
-    L -- emails_queue --> MQ[(RabbitMQ)]
-    MQ --> W[broker worker<br/>filter, threading, attachments]
-    W --> DB[(Supabase<br/>Postgres + Auth)]
-    W -- process-email --> A[automations<br/>LangGraph email agent]
-
-    A <--> VS[(Qdrant<br/>knowledge base)]
-    A <--> LLM[OpenAI]
-    A -- send or draft --> S[senders]
-    S --> GM
-    S --> MS
-    S --> IM
-
-    FE[Next.js dashboard] -- REST + SSE --> API[api<br/>FastAPI gateway]
-    API --> DB
-    API -- Jerry chat, quiz --> A
-    API --> R[(Redis)]
-
-    RF[refreshers] -. renew OAuth tokens<br/>and push subscriptions .-> GM
-    RF -.-> MS
-```
+The backend was a set of small services around a single RabbitMQ queue. Listeners received new mail from Gmail (Pub/Sub push), Outlook (Microsoft Graph webhooks) or IMAP (polling) and normalised it into one message format. A broker worker filtered it, rebuilt the thread, stored it in Supabase and handed it to the AI agent. The agent's reply went out through a dedicated sender service, either sent or saved as a draft. The dashboard only talked to a FastAPI gateway.
 
 ### Backend services (`backend/`)
 
@@ -78,22 +43,15 @@ flowchart LR
 
 ### The email agent
 
-The most interesting part of the project is the LangGraph graph in [`backend/automations/ec_system/graph`](backend/automations/ec_system/graph). It has 25 core nodes plus 32 sub-category handlers:
+The most interesting part of the project is the LangGraph graph in [`backend/automations/ec_system/graph`](backend/automations/ec_system/graph): 25 core nodes plus 32 sub-category handlers. This is the full response workflow as the team designed it in draw.io:
 
-```mermaid
-flowchart TD
-    N[new_mail] --> C[config_loader] --> M[moderation] --> LD[language_detector]
-    LD --> F[ai_filter] --> G[guardrail<br/>scam and prompt injection] --> SU[summarizer] --> CL[classifier]
-    CL -. must see attachments .-> AX[attachment_extractor] --> AS[attachment_summarizer] --> RO
-    CL --> RO[router] --> EV[evaluator<br/>sub-category and priority] --> PC[priority_controller]
-    PC --> SR[subcategory_router] --> H[32 handle_* nodes] --> TE[tasks_extractor]
-    TE --> IR[info_reader] --> EX[extractor_company_info<br/>RAG on Qdrant] --> TM[task_merger]
-    TE --> AR[appointment_router] --> RD[reader] --> SC[scheduler / rescheduler / cancellation] --> TM
-    TM --> WR[writer] <--> RV[reviewer<br/>up to 3 rounds, threshold 0.9]
-    RV --> OUT[send, draft or escalate]
-```
+[![Email agent response workflow](docs/email-agent-workflow.drawio.svg)](docs/email-agent-workflow.drawio.svg)
 
-Every step uses structured outputs (Pydantic models in [`models/llm_responses.py`](backend/automations/ec_system/models/llm_responses.py)). The graph stops early when an email is dangerous, when classification confidence is low or when priority is high. Prompts are in Italian and English, the two languages the product supported.
+*Click the image to open it at full size. The SVG embeds the editable diagram, so you can also open it in [diagrams.net](https://app.diagrams.net) or with the draw.io extension for VS Code. A couple of branches marked as closed in the diagram (quotes and document generation) were deliberately left disabled.*
+
+In short: moderation → language detection → AI filter → guardrail (scams, prompt injection) → summary → classification (with optional attachment reading) → sub-category and priority → task extraction. Two branches can then run in parallel: one answers questions from the company knowledge base, the other books, moves or cancels appointments. Their results are merged, and a writer/reviewer loop drafts the reply.
+
+Every step uses structured outputs (Pydantic models in [`models/llm_responses.py`](backend/automations/ec_system/models/llm_responses.py)). The graph stops early when an email is dangerous or when classification confidence is low. High-priority emails still go through the graph, but the reply is saved as a draft and the owner is alerted. Prompts are in Italian and English, the two languages the product supported.
 
 ### Jerry and onboarding
 
@@ -121,7 +79,8 @@ A Next.js 15 (App Router) dashboard with a landing page, sign-up/login, a setup 
 │   └── .env.example      Every environment variable the services expected
 ├── frontend/             Next.js dashboard
 └── docs/
-    ├── architecture.png  First architecture sketch
+    ├── email-agent-workflow.drawio.svg   Full response workflow (editable in draw.io)
+    ├── architecture.png  First architecture sketch (October 2025, superseded)
     └── openapi.json      OpenAPI spec of the api service
 ```
 
