@@ -29,10 +29,6 @@ from langchain_core.runnables import RunnableConfig
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-'''
-https://chatgpt.com/share/69248492-957c-800f-946c-f9039e4783f3
-'''
-
 dotenv.load_dotenv()
 logger = logging.getLogger(__name__)
 
