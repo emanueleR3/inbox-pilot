@@ -1636,11 +1636,20 @@ def scheduler_node(state):
         }
         
         # Extract favorite_day from appointment_date if available (only date part, not time)
-        # This avoids LLM miscalculating relative dates like "lunedì prossimo"
+        # This avoids LLM miscalculating relative dates like "lunedì prossimo".
+        # Only treat a date as an explicit preference when it is strictly in the future
+        # (tomorrow or later). When the reader defaults to today with T--:--, it means
+        # "no specific preference" — treating it as favorite_day would cause
+        # favorite_day_unavailable=True at end-of-day even though no day was requested.
         favorite_day = None
         if appointment_date and isinstance(appointment_date, str) and 'T' in appointment_date:
-            favorite_day = appointment_date.split('T')[0]  # Extract YYYY-MM-DD
-            print(f"📅 [SCHEDULER] Pre-extracted favorite_day from reader: {favorite_day}")
+            extracted_date = appointment_date.split('T')[0]  # Extract YYYY-MM-DD
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            if extracted_date > today_str:
+                favorite_day = extracted_date
+                print(f"📅 [SCHEDULER] Pre-extracted favorite_day from reader: {favorite_day}")
+            else:
+                print(f"📅 [SCHEDULER] Extracted date is today ({extracted_date}), treating as no preference (favorite_day=None)")
         
         # Call LLM scheduler with tool functions
         scheduler_response = llm_client.schedule_appointment(
@@ -1781,11 +1790,17 @@ def rescheduler_node(state):
         }
         
         # Extract favorite_day from new_date if available (only date part, not time)
-        # This avoids LLM miscalculating relative dates like "lunedì prossimo"
+        # This avoids LLM miscalculating relative dates like "lunedì prossimo".
+        # Only treat a date as explicit preference if strictly after today.
         favorite_day = None
         if new_date and isinstance(new_date, str) and 'T' in new_date:
-            favorite_day = new_date.split('T')[0]  # Extract YYYY-MM-DD
-            print(f"📅 [RESCHEDULER] Pre-extracted favorite_day from reader: {favorite_day}")
+            extracted_date = new_date.split('T')[0]  # Extract YYYY-MM-DD
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            if extracted_date > today_str:
+                favorite_day = extracted_date
+                print(f"📅 [RESCHEDULER] Pre-extracted favorite_day from reader: {favorite_day}")
+            else:
+                print(f"📅 [RESCHEDULER] Extracted date is today ({extracted_date}), treating as no preference (favorite_day=None)")
         
         # Call LLM rescheduler with tool functions
         rescheduler_response = llm_client.reschedule_appointment(
