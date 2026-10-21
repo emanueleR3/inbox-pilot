@@ -967,6 +967,7 @@ class LLMClient:
         event_type: str,
         created_by: str,
         email_id: Optional[str] = None,
+        thread_id: Optional[str] = None,
         language: str = "ITA",
         favorite_day: Optional[str] = None
     ) -> SchedulerResponse:
@@ -1117,6 +1118,7 @@ class LLMClient:
                             event_type=event_type,
                             created_by=created_by,
                             email_id=email_id,
+                            thread_id=thread_id,
                             attendees=appointment_info.get('attendees'),
                             place=appointment_info.get('place'),
                             additional_notes=appointment_info.get('additional_notes') + "\n\nScheduled via Corretto AI Assistant." if appointment_info.get('additional_notes') else "Scheduled via Corretto AI Assistant."
@@ -1506,7 +1508,8 @@ class LLMClient:
                             new_duration=appointment_info.get('duration') or 60,
                             new_attendees=appointment_info.get('attendees'),
                             new_place=appointment_info.get('place'),
-                            additional_notes=appointment_info.get('additional_notes')
+                            additional_notes=appointment_info.get('additional_notes'),
+                            thread_id=thread_id
                         )
                         scheduled = reschedule_result.get('scheduled', False)
                         overlap = reschedule_result.get('overlap', False)
@@ -1574,30 +1577,41 @@ class LLMClient:
             print(f"⚠️ Unknown calendar provider: {calendar_provider}, using default Europe/Rome")
             user_timezone = "Europe/Rome"
         
-        # Time range - default is next 7 days
-        now = datetime.now()
+        # Time range - default is next 7 working days
+        # Use timezone-aware now to avoid treating the UTC server clock as local time
+        from zoneinfo import ZoneInfo as _ZoneInfo
+        _tz = _ZoneInfo(user_timezone)
+        now = datetime.now(tz=_tz)
         weekly_start_time = now
-        weekly_end_time = now + timedelta(days=7)
-        
+
+        # Compute end of the 7th working day from now (inclusive of today if it's a working day)
+        _d = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        _working_count = 0
+        while _working_count < 7:
+            if str(_d.weekday()) in business_hours:
+                _working_count += 1
+            if _working_count < 7:
+                _d += timedelta(days=1)
+        weekly_end_time = _d.replace(hour=23, minute=59, second=59, microsecond=0)
+
         # Track if we're searching for a specific favorite_day
-        searching_favorite_day = False
+        searching_favorite_day = bool(favorite_day)
         favorite_day_unavailable = False
-        
+
+        # Always search the full 7 working-day window.
+        # When favorite_day is provided we use it only to set favorite_day_unavailable
+        # (so the writer can tell the user that specific day was unavailable), but we
+        # always return the full weekly slot list so the user gets meaningful options.
+        start_time = weekly_start_time
+        end_time = weekly_end_time
+
         if favorite_day:
             try:
-                fav_date = datetime.strptime(favorite_day, "%Y-%m-%d")
-                start_time = fav_date.replace(hour=0, minute=0, second=0, microsecond=0)
-                end_time = fav_date.replace(hour=23, minute=59, second=59, microsecond=0)
-                if start_time < now:
-                    start_time = now
-                searching_favorite_day = True
+                # Validate format only
+                datetime.strptime(favorite_day, "%Y-%m-%d")
             except ValueError:
                 print(f"❌ Invalid favourite_day format: {favorite_day}")
-                start_time = weekly_start_time
-                end_time = weekly_end_time
-        else:
-            start_time = weekly_start_time
-            end_time = weekly_end_time
+                searching_favorite_day = False
         
         # Helper function to get busy slots
         def get_busy_slots(s_time, e_time):
@@ -1609,7 +1623,7 @@ class LLMClient:
                 print(f"❌ Unknown calendar provider: {calendar_provider}")
                 return []
         
-        # Get busy slots for the selected time range
+        # Get busy slots for the full week
         busy_slots = get_busy_slots(start_time, end_time)
         
         # DEBUG FULL STATE
@@ -1628,7 +1642,7 @@ class LLMClient:
         print(f"not_available_dates: {not_available_dates}")
         print("=================================================\n")
         
-        # Calculate free slots with user's timezone
+        # Calculate free slots for the full week
         free_slots = utils.calculate_free_slots(
             start_time,
             end_time,
@@ -1639,27 +1653,16 @@ class LLMClient:
             user_timezone=user_timezone
         )
         
-        print(f"✅ Found {len(free_slots)} free slots for {'favorite day ' + favorite_day if searching_favorite_day else 'next 7 days'}.")
-        
-        # If favorite_day was specified but no slots found, fallback to weekly slots
-        if searching_favorite_day and len(free_slots) == 0:
-            print(f"⚠️ No slots available for favorite day {favorite_day}, falling back to weekly slots...")
-            favorite_day_unavailable = True
-            
-            # Get busy slots for the full week
-            busy_slots = get_busy_slots(weekly_start_time, weekly_end_time)
-            
-            # Calculate free slots for the full week
-            free_slots = utils.calculate_free_slots(
-                weekly_start_time,
-                weekly_end_time,
-                busy_slots,
-                business_hours,
-                appointment_duration,
-                not_available_dates,
-                user_timezone=user_timezone
-            )
-            print(f"✅ Found {len(free_slots)} free slots for next 7 days (fallback).")
+        print(f"✅ Found {len(free_slots)} free slots for next 7 working days.")
+
+        # Determine favorite_day_unavailable: True only if no slots exist on the requested day
+        if searching_favorite_day and favorite_day:
+            fav_slots = [s for s in free_slots if s.startswith(favorite_day)]
+            if len(fav_slots) == 0:
+                favorite_day_unavailable = True
+                print(f"⚠️ No slots available on favorite day {favorite_day} — favorite_day_unavailable=True.")
+            else:
+                print(f"ℹ️ {len(fav_slots)} slot(s) available on favorite day {favorite_day}.")
         
         return {"slots": free_slots, "favorite_day_unavailable": favorite_day_unavailable}
 
@@ -1673,6 +1676,7 @@ class LLMClient:
         event_type: str,
         created_by: str,
         email_id: Optional[str] = None,
+        thread_id: Optional[str] = None,
         attendees: list = None,
         place: str = None,
         additional_notes: str = None
@@ -1825,7 +1829,8 @@ class LLMClient:
             "event_type": event_type,
             "event_code": event_code,
             "created_by": created_by,
-            "provider_event_id": provider_event_id  # Save the provider's event ID
+            "provider_event_id": provider_event_id,  # Save the provider's event ID
+            "thread_id": thread_id
         }
         
         # Insert into scheduled_events table
@@ -1858,7 +1863,8 @@ class LLMClient:
         new_duration, 
         new_attendees, 
         new_place, 
-        additional_notes
+        additional_notes,
+        thread_id: Optional[str] = None
     ):
         """
         Tool function to reschedule an appointment.
@@ -1878,7 +1884,7 @@ class LLMClient:
         print(f"🛠️ [TOOL] reschedule_appointment called for event_code: {event_code}")
 
         # Import required functions
-        from db_client import get_scheduled_event_by_code, get_calendar_service_data, update_scheduled_event_provider_id
+        from db_client import get_scheduled_event_by_code, get_calendar_service_data, update_scheduled_event_provider_id, update_scheduled_event_thread_id
 
         # Find event by event_code
         event = get_scheduled_event_by_code(event_code)
@@ -2019,6 +2025,10 @@ class LLMClient:
             update_success = update_scheduled_event_provider_id(event_code, updated_provider_event_id)
             if not update_success:
                 print(f"⚠️ Failed to update provider_event_id in database, but event was rescheduled")
+        
+        # Update thread_id in database if provided
+        if thread_id:
+            update_scheduled_event_thread_id(event_code, thread_id)
         
         # Return event details for ICS generation
         return {

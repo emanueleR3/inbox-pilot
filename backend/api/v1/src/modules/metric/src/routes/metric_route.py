@@ -11,7 +11,7 @@ router = APIRouter(
 controller = MetricsController()
 
 @router.get(
-    "/overview/{subscription_id}",
+    "/overview/{service_id}",
     summary="KPI overview",
     description=(
         "Restituisce le metriche KPI principali del periodo: ticket totali, ticket automatizzati (gestiti solo da AI), "
@@ -32,7 +32,7 @@ controller = MetricsController()
                         "metadata": {
                             "date_from": "2025-11-13T00:28:39.810576",
                             "date_to": "2025-12-13T00:28:39.810576",
-                            "subscription_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
+                            "service_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
                         }
                     }
                 }
@@ -40,12 +40,12 @@ controller = MetricsController()
         }
     }
 )
-async def get_overview(subscription_id: str, date_from: str | None = None, date_to: str | None = None):
-    return await controller.get_overview_metrics(subscription_id, date_from, date_to)
+async def get_overview(service_id: str, date_from: str | None = None, date_to: str | None = None):
+    return await controller.get_overview_metrics(service_id, date_from, date_to)
 
 
 @router.get(
-    "/automation/{subscription_id}",
+    "/automation/{service_id}",
     summary="Automation metrics",
     description=(
         "Restituisce le metriche di automazione: breakdown AI vs umani (donut chart consigliato), deflection trend giornaliero (line chart), "
@@ -72,7 +72,7 @@ async def get_overview(subscription_id: str, date_from: str | None = None, date_
                         "metadata": {
                             "date_from": "2025-11-13T00:29:02.865547",
                             "date_to": "2025-12-13T00:29:02.865547",
-                            "subscription_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
+                            "service_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
                         }
                     }
                 }
@@ -80,12 +80,12 @@ async def get_overview(subscription_id: str, date_from: str | None = None, date_
         }
     }
 )
-async def get_automation(subscription_id: str, date_from: str | None = None, date_to: str | None = None):
-    return await controller.get_automation_metrics(subscription_id, date_from, date_to)
+async def get_automation(service_id: str, date_from: str | None = None, date_to: str | None = None):
+    return await controller.get_automation_metrics(service_id, date_from, date_to)
 
 
 @router.get(
-    "/ai-quality/{subscription_id}",
+    "/ai-quality/{service_id}",
     summary="AI quality metrics",
     description=(
         "Restituisce le metriche di qualità AI: distribuzione degli outcome (donut chart), success rate (KPI card), "
@@ -107,7 +107,7 @@ async def get_automation(subscription_id: str, date_from: str | None = None, dat
                         "metadata": {
                             "date_from": "2025-11-13T00:29:31.479973",
                             "date_to": "2025-12-13T00:29:31.479973",
-                            "subscription_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
+                            "service_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
                         }
                     }
                 }
@@ -115,12 +115,12 @@ async def get_automation(subscription_id: str, date_from: str | None = None, dat
         }
     }
 )
-async def get_ai_quality(subscription_id: str, date_from: str | None = None, date_to: str | None = None):
-    return await controller.get_ai_quality_metrics(subscription_id, date_from, date_to)
+async def get_ai_quality(service_id: str, date_from: str | None = None, date_to: str | None = None):
+    return await controller.get_ai_quality_metrics(service_id, date_from, date_to)
 
 
 @router.get(
-    "/risk/{subscription_id}",
+    "/risk/{service_id}",
     summary="Risk & alerting metrics",
     description=(
         "Restituisce le metriche di rischio: numero ticket critici (priority_score > 0.8), lista dettagliata ticket critici, "
@@ -143,7 +143,7 @@ async def get_ai_quality(subscription_id: str, date_from: str | None = None, dat
                         "metadata": {
                             "date_from": "2025-11-13T00:29:54.909899",
                             "date_to": "2025-12-13T00:29:54.909899",
-                            "subscription_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
+                            "service_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
                         }
                     }
                 }
@@ -151,12 +151,12 @@ async def get_ai_quality(subscription_id: str, date_from: str | None = None, dat
         }
     }
 )
-async def get_risk(subscription_id: str, date_from: str | None = None, date_to: str | None = None):
-    return await controller.get_risk_metrics(subscription_id, date_from, date_to)
+async def get_risk(service_id: str, date_from: str | None = None, date_to: str | None = None):
+    return await controller.get_risk_metrics(service_id, date_from, date_to)
 
 
 @router.get(
-    "/usage/{subscription_id}",
+    "/usage/{service_id}",
     summary="Usage & billing metrics",
     description=(
         "Restituisce le metriche di utilizzo: email processate (line chart), minuti totali processati, thread attivi, "
@@ -180,7 +180,7 @@ async def get_risk(subscription_id: str, date_from: str | None = None, date_to: 
                         "metadata": {
                             "date_from": "2025-11-13T00:30:16.164398",
                             "date_to": "2025-12-13T00:30:16.164398",
-                            "subscription_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
+                            "service_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
                         }
                     }
                 }
@@ -188,12 +188,12 @@ async def get_risk(subscription_id: str, date_from: str | None = None, date_to: 
         }
     }
 )
-async def get_usage(subscription_id: str, date_from: str | None = None, date_to: str | None = None):
-    return await controller.get_usage_metrics(subscription_id, date_from, date_to)
+async def get_usage(service_id: str, date_from: str | None = None, date_to: str | None = None):
+    return await controller.get_usage_metrics(service_id, date_from, date_to)
 
 
 @router.get(
-    "/events/{subscription_id}",
+    "/events/{service_id}",
     summary="Calendar / events metrics",
     description=(
         "Restituisce le metriche eventi calendario: totale eventi, eventi creati da AI vs umani (stacked bar), "
@@ -217,7 +217,7 @@ async def get_usage(subscription_id: str, date_from: str | None = None, date_to:
                         "metadata": {
                             "date_from": "2025-11-13T00:30:41.979829",
                             "date_to": "2025-12-13T00:30:41.979829",
-                            "subscription_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
+                            "service_id": "8e798771-1995-4a5e-acfe-76caf64c1989"
                         }
                     }
                 }
@@ -225,5 +225,5 @@ async def get_usage(subscription_id: str, date_from: str | None = None, date_to:
         }
     }
 )
-async def get_events(subscription_id: str, date_from: str | None = None, date_to: str | None = None):
-    return await controller.get_event_metrics(subscription_id, date_from, date_to)
+async def get_events(service_id: str, date_from: str | None = None, date_to: str | None = None):
+    return await controller.get_event_metrics(service_id, date_from, date_to)

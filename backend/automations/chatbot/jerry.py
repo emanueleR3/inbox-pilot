@@ -2,6 +2,7 @@ from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 import os, dotenv
 import threading
+import logging
 from contextlib import contextmanager
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import StateGraph, START, END
@@ -33,6 +34,7 @@ https://chatgpt.com/share/69248492-957c-800f-946c-f9039e4783f3
 '''
 
 dotenv.load_dotenv()
+logger = logging.getLogger(__name__)
 
 # Configure LangSmith tracing
 os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "true")
@@ -239,6 +241,12 @@ def graph_session():
 
     if last_error is not None:
         raise last_error
+
+
+def reset_runtime() -> None:
+    """Drop the pooled DB connections after connection-level failures."""
+    _reset_pool()
+    logger.info("[JERRY] Runtime reset completed")
 
 
 

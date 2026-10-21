@@ -1,6 +1,7 @@
 """Service layer for Jerry chatbot system - delegates to jerry.py core logic."""
 
 import sys
+import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from uuid import uuid4
@@ -17,6 +18,8 @@ from automations.chatbot.prompts import JERRY_AGENT_PROMPT, build_enriched_promp
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from langchain_core.tools import BaseTool
 
+logger = logging.getLogger(__name__)
+
 
 class JerryService:
     """Service to manage Jerry chatbot interactions - wraps jerry.py functionality."""
@@ -26,6 +29,12 @@ class JerryService:
         # Avoid holding a long-lived DB connection inside a global graph/checkpointer.
         # Graphs are compiled per-request via jerry.graph_session().
         self.agent_prompt = jerry.agent_prompt
+
+    @staticmethod
+    def _is_connection_closed_error(exc: Exception) -> bool:
+        """Detect common driver/runtime errors for dropped DB/checkpointer connections."""
+        message = str(exc).lower()
+        return "connection is closed" in message or "closed the connection" in message
     
     def _build_system_prompt_with_context(self, user_id: str) -> str:
         """
@@ -90,7 +99,18 @@ class JerryService:
             Dictionary with thread_id and response
         """
         # Delegate to jerry.py's handle_user_message function
-        result_thread_id, answer = jerry.handle_user_message(user_id, thread_id, message)
+        try:
+            result_thread_id, answer = jerry.handle_user_message(user_id, thread_id, message)
+        except Exception as exc:
+            if not self._is_connection_closed_error(exc):
+                raise
+
+            logger.warning(
+                "[JERRY_SERVICE] Detected closed connection while sending message. Resetting runtime and retrying once.",
+                exc_info=True,
+            )
+            jerry.reset_runtime()
+            result_thread_id, answer = jerry.handle_user_message(user_id, thread_id, message)
         
         return {
             "thread_id": result_thread_id,

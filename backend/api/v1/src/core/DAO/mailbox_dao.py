@@ -78,8 +78,8 @@ class MailboxDAO:
         rows = (
             self.supabase
             .table("inbox_human_review_view")
-            .eq("box_email", email)
             .select("*")
+            .eq("box_email", email)
             .order("last_message_at", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
@@ -144,12 +144,13 @@ class MailboxDAO:
             message_count=len(messages)
         )
 
-    def fetch_failed_outbound_emails(self) -> List[FailedOutboundEmail]:
+    def fetch_failed_outbound_emails(self, service_id: str) -> List[FailedOutboundEmail]:
 
         rows = (
             self.supabase
             .table("failed_outbound_emails_view")
             .select("*")
+            .eq("service_id", service_id)
             .order("datetime", desc=True)
             .execute()
             .data
